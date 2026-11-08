@@ -10,8 +10,10 @@ dealt-damage substats (PvP, boss, dungeon).
 
 - `DEF_REDUCTION_CAP`, `DEF_SCALE`, `STAT_NAMES`: the game's constants, and formula names
 - `LinearFormula`, `DamageGoal`, `Unsupported`: what's ranked, or why a skill can't be
+- `ActiveIgnore`: a set's ignore-DEF passive, as worn
 - `damage_goal`: a champion's skill and a target's DEF into a goal (the boundary)
-- `estimate_damage`, `ignored_by_sets`, `ignore_sources`, `defence_multiplier`: the model
+- `estimate_damage`, `ignored_by_sets`, `ignore_sources`, `applies`, `defence_multiplier`:
+  the model
 - `parse_formula`, `linearise`: formula text to a linear function of stats
 """
 
@@ -87,6 +89,15 @@ class Unsupported:
     reason: str
 
 
+@dataclass(frozen=True)
+class ActiveIgnore[T]:
+    """A set's ignore-DEF passive and how many times it's active: a count, or the solver's
+    expression for one."""
+
+    source: IgnoreDefence
+    times: T
+
+
 def damage_goal(skill: Skill, champion: Champion, enemy_defence: float) -> DamageGoal | Unsupported:
     """The goal for `skill`, if its damage depends only on the champion's own stats."""
     if not skill.hits:
@@ -132,34 +143,45 @@ def ignored_by_sets(
 ) -> float:
     """The DEF the worn sets' passives ignore for this skill."""
     pieces = Counter(a.set_id for a in artifacts)
-    sources = [
-        (source, times)
+    active = [
+        passive
         for set_id, count in pieces.items()
         if set_id in sets
-        for source, times in ignore_sources(sets[set_id], count)
-        if goal.aoe or not source.aoe_only
+        for passive in ignore_sources(sets[set_id], count)
+        if applies(goal, passive.source)
     ]
     per_skill: dict[int, float] = {}
 
-    for source, times in sources:
+    for passive in active:
+        source = passive.source
+
         if source.per_set:
-            per_skill[source.skill_id] = per_skill.get(source.skill_id, 0) + source.value * times
+            per_skill[source.skill_id] = (
+                per_skill.get(source.skill_id, 0) + source.value * passive.times
+            )
         else:
             per_skill[source.skill_id] = source.value  # the same passive twice counts once
 
     return sum(per_skill.values())
 
 
-def ignore_sources(artifact_set: ArtifactSet, count: int) -> list[tuple[IgnoreDefence, int]]:
-    """The set's ignore-DEF passives active with `count` pieces, and how many times each."""
+def ignore_sources(artifact_set: ArtifactSet, count: int) -> list[ActiveIgnore[int]]:
+    """The set's ignore-DEF passives active with `count` pieces."""
     match artifact_set:
         case FixedSet(pieces=pieces, ignore=ignore):
             times = count // pieces
-            return [(source, times) for source in ignore] if times else []
+            return [ActiveIgnore(source, times) for source in ignore] if times else []
 
         case VariableSet(ignore_at=ignore_at):
             reached = [pieces for pieces in ignore_at if pieces <= count]
-            return [(source, 1) for source in ignore_at[max(reached)]] if reached else []
+            return (
+                [ActiveIgnore(source, 1) for source in ignore_at[max(reached)]] if reached else []
+            )
+
+
+def applies(goal: DamageGoal, source: IgnoreDefence) -> bool:
+    """AoE-only passives help AoE skills only."""
+    return goal.aoe or not source.aoe_only
 
 
 def defence_multiplier(enemy_defence: float, ignored: float) -> float:

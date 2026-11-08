@@ -20,31 +20,22 @@ damage pieces of each slot, worn ones included), and 6★ damage-set amulets not
 first, as if worth `SURPLUS_FACTOR` of their value.
 
 - `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`, `SPEED_ROLLS`, `FACTION_WARS`, `SURPLUS_FACTOR`,
-  `CRIT_REWORK_RANK`:
-  the rules' numbers
+  `CRIT_REWORK_RANK`: the rules' numbers
 - `SWAP_MARGIN`: when a loose piece should replace a worn one
-- `Keep`, `Group`, `Placed`, `Swap`, `Plan`: the plan
+- `Keep`, `Group`, `Placed`, `Pairing`, `Place`, `Swap`, `Plan`: the plan
 - `plan_cleanup`: the workflow
-- `find_swaps` (`set_upgrades`, `worn_score`, `swap_gain`), `keep_reasons` (`could_rework_to_crit`),
-  `faction_wars_reserve`, `places_in_groups`,
-  `group_of`, `speed_rolls`: its steps
+- `find_swaps` (`set_upgrades`, `worn_score`), `faction_wars_reserve`,
+  `places_in_groups`, `keep_reasons` (`could_rework_to_crit`), `place_piece`: its steps
+- `kind_score`, `group_of`, `speed_rolls`: what they share
 """
 
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import StrEnum
 
-from optimiser.accessories import Assessed, Assessment, Where
+from optimiser.accessories.assess import Assessed, Assessment, Where
+from optimiser.accessories.roles import NO_SET, Kind, SetRole, group_quota, set_factor, set_role
 from optimiser.account import Slot, Stat
-from optimiser.roles import (
-    DEFAULT_ROLE,
-    NO_SET,
-    SET_ROLES,
-    Kind,
-    SetRole,
-    group_quota,
-    set_factor,
-)
 
 ACCESSORY_SPACE = 2200
 DEFAULT_TARGET_FREE = 100
@@ -89,13 +80,32 @@ class Placed:
 
 
 @dataclass(frozen=True)
-class Swap:
-    """Equip `better` (loose) on `champion_id`, in place of `worn`: same slot, main stat and
-    faction, and the same set (so the set bonus stays) unless `worn` has none. `then_sell`:
-    `worn`, once off, is among what the plan drops."""
+class Pairing:
+    """A loose piece that should replace one worn: same slot, main stat and faction."""
 
     better: Assessed
     worn: Assessed
+
+    def gain(self) -> float:
+        """What wearing the better piece gives over the worn one, as they are now."""
+        return worn_score(self.better) - worn_score(self.worn)
+
+
+@dataclass(frozen=True)
+class Place:
+    """A piece's place in its group (1 the best), and how many the group keeps."""
+
+    place: int
+    quota: int
+
+
+@dataclass(frozen=True)
+class Swap:
+    """Equip the pairing's `better` (loose) on `champion_id`, in place of its `worn`: the same
+    set too (so the set bonus stays) unless `worn` has none. `then_sell`: `worn`, once off, is
+    among what the plan drops."""
+
+    pairing: Pairing
     champion_id: int
     then_sell: bool
 
@@ -127,15 +137,15 @@ class Plan:
         return self.space - self.inventory + sold - len(self.to_claim)
 
     def dropped(self) -> set[int]:
-        swapped_off = {s.worn.artifact.id for s in self.swaps if s.then_sell}
+        swapped_off = {s.pairing.worn.artifact.id for s in self.swaps if s.then_sell}
         return {p.piece.artifact.id for p in (*self.to_sell, *self.leave_unclaimed)} | swapped_off
 
 
 def plan_cleanup(assessment: Assessment, protected: set[int], target_free: int) -> Plan:
     pieces = assessment.pieces
     pairs = find_swaps(pieces)
-    going_on = {better.artifact.id for better, _ in pairs}
-    coming_off = {worn.artifact.id for _, worn in pairs}
+    going_on = {pair.better.artifact.id for pair in pairs}
+    coming_off = {pair.worn.artifact.id for pair in pairs}
     loose = [
         p
         for p in pieces
@@ -146,16 +156,10 @@ def plan_cleanup(assessment: Assessment, protected: set[int], target_free: int) 
     places = places_in_groups(pieces)
 
     placed = [
-        Placed(
-            piece,
-            group_of(piece),
-            place,
-            quota,
-            piece.value * (SURPLUS_FACTOR if place > quota else 1),
-            keep_reasons(piece, assessment, protected, reserve),
+        place_piece(
+            piece, places[piece.artifact.id], keep_reasons(piece, assessment, protected, reserve)
         )
         for piece in loose
-        for place, quota in [places[piece.artifact.id]]
     ]
 
     capacity = ACCESSORY_SPACE - target_free
@@ -181,15 +185,21 @@ def plan_cleanup(assessment: Assessment, protected: set[int], target_free: int) 
         ),
         leave_unclaimed=dropped_from(Where.MAILBOX),
         swaps=tuple(
-            Swap(better, worn, worn.wearer or 0, worn.artifact.id in dropped)
-            for better, worn in pairs
+            Swap(pair, pair.worn.wearer or 0, pair.worn.artifact.id in dropped) for pair in pairs
         ),
         short=to_drop - len(dropping),
     )
 
 
-def find_swaps(pieces: tuple[Assessed, ...]) -> list[tuple[Assessed, Assessed]]:
-    """(better, worn) pairs, biggest gain first: in each group, the best inventory pieces
+def place_piece(piece: Assessed, place: Place, keep: tuple[Keep, ...]) -> Placed:
+    """Surplus pieces go first, as if worth `SURPLUS_FACTOR` of their value."""
+    surplus = place.place > place.quota
+    order_value = piece.value * (SURPLUS_FACTOR if surplus else 1)
+    return Placed(piece, group_of(piece), place.place, place.quota, order_value, keep)
+
+
+def find_swaps(pieces: tuple[Assessed, ...]) -> list[Pairing]:
+    """Pairs, biggest gain first: in each group, the best inventory pieces
     against the weakest worn by unlocked champions, while the loose one, as it is now, scores
     `SWAP_MARGIN` times as much. Then set-less pieces still worn give way to any set piece of
     their slot, main stat and faction whose stats are better at all (`set_upgrades`)."""
@@ -211,24 +221,24 @@ def find_swaps(pieces: tuple[Assessed, ...]) -> list[tuple[Assessed, Assessed]]:
         best_first = sorted(loose.get(group, ()), key=worn_score, reverse=True)
         weakest_first = sorted(wearing, key=worn_score)
         pairs += [
-            (better, current)
+            Pairing(better, current)
             for better, current in zip(best_first, weakest_first, strict=False)
             if worn_score(better) > worn_score(current) * SWAP_MARGIN
         ]
 
     pairs += set_upgrades(loose, worn, pairs)
-    return sorted(pairs, key=lambda pair: swap_gain(*pair), reverse=True)
+    return sorted(pairs, key=lambda pair: pair.gain(), reverse=True)
 
 
 def set_upgrades(
     loose: dict[Group, list[Assessed]],
     worn: dict[Group, list[Assessed]],
-    taken: list[tuple[Assessed, Assessed]],
-) -> list[tuple[Assessed, Assessed]]:
+    taken: list[Pairing],
+) -> list[Pairing]:
     """A set piece beats a set-less one whenever its stats are better: it may add or grow a
     set bonus, and costs nothing. Each set-less piece (weakest first) takes the best loose set
     piece of its slot, main stat and faction not already swapped in."""
-    used = {piece.artifact.id for pair in taken for piece in pair}
+    used = {piece.artifact.id for pair in taken for piece in (pair.better, pair.worn)}
     pairs = []
 
     def same_kind(group: Group) -> tuple:
@@ -256,7 +266,7 @@ def set_upgrades(
 
         better = max(candidates, key=lambda p: (worn_score(p), set_factor(p.artifact.set_id)))
         used |= {better.artifact.id, current.artifact.id}
-        pairs.append((better, current))
+        pairs.append(Pairing(better, current))
 
     return pairs
 
@@ -265,10 +275,6 @@ def worn_score(piece: Assessed) -> float:
     """What wearing it gives now: its stats as they are, not what rolling or a rework might
     make of it."""
     return piece.potential.now.best
-
-
-def swap_gain(better: Assessed, worn: Assessed) -> float:
-    return worn_score(better) - worn_score(worn)
 
 
 def keep_reasons(
@@ -294,7 +300,7 @@ def could_rework_to_crit(piece: Assessed) -> bool:
         artifact.slot is Slot.AMULET
         and artifact.rank == CRIT_REWORK_RANK
         and not artifact.reworked
-        and SET_ROLES.get(artifact.set_id, DEFAULT_ROLE) is SetRole.DAMAGE
+        and set_role(artifact.set_id) is SetRole.DAMAGE
     )
 
 
@@ -323,8 +329,8 @@ def kind_score(piece: Assessed, kind: Kind) -> float:
     return scores.support if kind is Kind.SUPPORT else scores.damage
 
 
-def places_in_groups(pieces: tuple[Assessed, ...]) -> dict[int, tuple[int, int]]:
-    """Artifact id -> (place in its group, the group's quota). Pieces worn by locked
+def places_in_groups(pieces: tuple[Assessed, ...]) -> dict[int, Place]:
+    """Artifact id -> its place in its group. Pieces worn by locked
     champions are left out: they aren't spare."""
     groups: dict[Group, list[Assessed]] = defaultdict(list)
 
@@ -337,7 +343,7 @@ def places_in_groups(pieces: tuple[Assessed, ...]) -> dict[int, tuple[int, int]]
     for group, members in groups.items():
         quota = group_quota(group.set_id, group.slot, group.main)
         ranked = sorted(members, key=lambda p: p.value, reverse=True)
-        places |= {p.artifact.id: (place, quota) for place, p in enumerate(ranked, start=1)}
+        places |= {p.artifact.id: Place(place, quota) for place, p in enumerate(ranked, start=1)}
 
     return places
 

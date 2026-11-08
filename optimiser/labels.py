@@ -10,9 +10,8 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 
 import re
 
-from optimiser.account import GlyphGrade, GlyphKind, Stat, StatLine
+from optimiser.account import LOCK_LEVELS, GlyphGrade, GlyphKind, Locks, Stat, StatLine
 from optimiser.solve import AnyGear, Pool, Unequipped, UpToLock
-from optimiser.store import LOCK_LEVELS, Locks
 
 STAT_LABELS = {
     Stat.HP: "HP",

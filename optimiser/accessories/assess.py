@@ -1,6 +1,6 @@
 """
-accessories.py - every accessory the account has (worn, in the inventory, or waiting in the
-mailbox), each with its potential (`optimiser.potential`) and its value: the potential,
+assess.py - every accessory the account has (worn, in the inventory, or waiting in the
+mailbox), each with its potential (`potential`) and its value: the potential,
 raised where its set, faction and slot are short of good pieces and lowered where there are
 plenty, and weighed by its set's meta tier (`roles.set_factor`; set-less pieces lowered).
 The clean-up and the roll and rework lists share it.
@@ -17,10 +17,9 @@ from enum import StrEnum
 
 import numpy as np
 
-from optimiser.account import Account, Artifact, Slot
-from optimiser.potential import ACCESSORIES, Potential, Scorer, assess
-from optimiser.roles import set_factor
-from optimiser.store import Locks
+from optimiser.accessories.potential import ACCESSORIES, Potential, Scorer, assess
+from optimiser.accessories.roles import set_factor
+from optimiser.account import Account, Artifact, Locks, Slot
 
 GOOD_SHARE = 0.25  # a piece is good when its potential is in its slot's top quarter
 SCARCITY = {0: 1.15, 1: 1.05, 2: 1.0}  # by good pieces on the shelf; more than that: below
@@ -45,9 +44,17 @@ class Assessed:
     where: Where
     potential: Potential
     scarcity: float
-    value: float
     wearer_locked: bool
     wearer: int | None = None
+
+    @property
+    def value(self) -> float:
+        """Its potential, weighed."""
+        return self.weighed(self.potential.value())
+
+    def weighed(self, score: float) -> float:
+        """A score of the piece, weighed by its shortage and its set's meta tier."""
+        return score * self.scarcity * set_factor(self.artifact.set_id)
 
 
 @dataclass(frozen=True)
@@ -78,15 +85,12 @@ def assess_accessories(account: Account, scorer: Scorer, locks: Locks) -> Assess
     scarcity = scarcity_by_shelf(owned, bars)
 
     def assessed(artifact: Artifact, where: Where) -> Assessed:
-        potential = potentials[artifact.id]
-        factor = scarcity.get(shelf_of(artifact), SCARCITY[0])
         wearer = account.owners.get(artifact.id)
         return Assessed(
             artifact,
             where,
-            potential,
-            factor,
-            potential.value() * factor * set_factor(artifact.set_id),
+            potentials[artifact.id],
+            scarcity.get(shelf_of(artifact), SCARCITY[0]),
             wearer_locked=wearer is not None and locks.get(wearer, 0) > 0,
             wearer=wearer,
         )
@@ -95,11 +99,13 @@ def assess_accessories(account: Account, scorer: Scorer, locks: Locks) -> Assess
 
 
 def good_bars(owned: list[tuple[Artifact, Potential]]) -> dict[Slot, float]:
-    return {
-        slot: float(np.quantile(values, 1 - GOOD_SHARE)) if values else 0.0
-        for slot in ACCESSORIES
-        if (values := [p.value() for a, p in owned if a.slot is slot]) is not None
-    }
+    bars = {}
+
+    for slot in ACCESSORIES:
+        values = [p.value() for a, p in owned if a.slot is slot]
+        bars[slot] = float(np.quantile(values, 1 - GOOD_SHARE)) if values else 0.0
+
+    return bars
 
 
 def scarcity_by_shelf(

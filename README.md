@@ -4,10 +4,14 @@ Tees the HellHades Artifact Extractor's account upload (`POST /api/Account/v2`)
 through mitmproxy and decodes it to JSON with HH's own `Models.dll`.
 
 ```
-capture/hh_capture.py   mitmproxy addon: saves upload -> captures/<ts>.bin, runs decoder
+capture/hh_capture.py   mitmproxy addon: saves upload -> data/captures/raw/<ts>.bin, runs decoder
 decoder/                C# decoder (references DLLs in the HH install dir)
 run-proxy.sh            starts mitmdump on 127.0.0.1:8080, MITMs only *.hellhades.com
-captures/latest/        newest export: champions.json, artifacts.json, hero-types.json, account.json
+data/                   everything that isn't code (gitignored):
+  captures/latest/      newest export: account.json, champions.json, artifacts.json, set_ids.json
+  game/                 the game's tables (update-static.sh, the oracle)
+  state/                the optimiser's store (locks, assumptions, runs)
+  cache/                the decoder's hero-type list
 ```
 
 ## One-time setup
@@ -22,9 +26,9 @@ captures/latest/        newest export: champions.json, artifacts.json, hero-type
 
 ## Use
 
-Run `./run-proxy.sh`, then start the extractor and game. Each account sync writes a new
-`captures/<timestamp>/`. Re-decode a capture manually:
-`bin/raid-export captures/<ts>.bin out/`
+Run `./run-proxy.sh`, then start the extractor and game. Each account sync saves the raw
+upload as `data/captures/raw/<timestamp>.bin` and replaces `data/captures/latest/`.
+Re-decode a capture manually: `bin/raid-export data/captures/raw/<ts>.bin out/`
 
 After an extractor update, rebuild so the decoder picks up the new models:
 `dotnet build decoder -c Release -o bin`. Use `-p:HHDir=...` or `HH_DIR=...` if the install moves.
@@ -35,9 +39,9 @@ After an extractor update, rebuild so the decoder picks up the new models:
 (`AppData/LocalLow/Plarium/Raid_ Shadow Legends/static-data/<version>/<hash>`, MessagePack +
 Lz4BlockArray) and writes:
 
-- `static/sets.json` – every artifact set: pieces, per-tier stat bonuses (variable sets such as
+- `data/game/sets.json` – every artifact set: pieces, per-tier stat bonuses (variable sets such as
   Stone Skin list the cumulative bonus at each piece count), names/descriptions
-- `static/hero_types.json` – names, faction, rarity, and per-form element/role/unscaled base stats
+- `data/game/hero_types.json` – names, faction, rarity, and per-form element/role/unscaled base stats
 
 Key names and types come from `schema/schema.json`, generated from an IL2CPP dump:
 `python3 -I tools/gen_schema.py ~/repo/raider/dump/dump.cs schema/schema.json`.
@@ -51,20 +55,20 @@ payload calls the game's own `GetBaseStats` on temporary in-memory heroes (never
 account) for each line of `/tmp/raider-oracle-request.txt`:
 
 ```
-python3 -I tools/oracle_request.py static/hero_types.json /tmp/raider-oracle-request.txt
+python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-request.txt
 (cd ~/repo/raider && ./run.sh)          # game running + logged in in ~/tmp/inject-test
-python3 -I tools/oracle_import.py /tmp/raider-oracle.json static/hero_types.json static/
+python3 -I tools/oracle_import.py /tmp/raider-oracle.json data/game/hero_types.json data/game/
 ```
 
-- `static/base_stats_6_60.json`: exact base stats at 6* L60 for every type/form
-- `static/level_curve.json`: ATK/DEF multiplier per grade/level (HP = static × 15 × m);
+- `data/game/base_stats_6_60.json`: exact base stats at 6* L60 for every type/form
+- `data/game/level_curve.json`: ATK/DEF multiplier per grade/level (HP = static × 15 × m);
   shared by all types to within rounding. SPD/RES/ACC/crit don't scale (crit is % in static data).
 
 An optional 5th request column sets the empower level and adds the game's `CalcEmpowerBonus`.
 
 ## Non-gear bonuses
 
-`./update-static.sh` also writes `static/bonuses.json` from the game data. Percentages apply
+`./update-static.sh` also writes `data/game/bonuses.json` from the game data. Percentages apply
 to base stats:
 
 - `great_hall[stat][level-1]`: bonus per level (max: +20% HP/ATK/DEF, +25% C.DMG, +80 ACC/RES);
@@ -76,29 +80,24 @@ to base stats:
   stats, already covered by `base_stats_6_60.json`.
 - `masteries[id]`: the 13 stat masteries; Lore of Steel is `set_bonus_multiplier: 1.15`
   (applied to artifact set stat bonuses). Per-champion mastery ids, `AwakenedGrade` and
-  `EmpowerLevel` come from `captures/latest/champions.json`.
+  `EmpowerLevel` come from `data/captures/latest/champions.json`.
 
 ## Gear optimiser
 
-```
-uv run python -m optimiser "Anaxia the Reborn" --set Lethal=4 --set "Stone Skin=4" \
-    --min SPD=200 --min ACC=150 --rank HP,DEF,SPD --builds 3 [--pool free] [--slack 0.01]
-```
+Run from the web UI's champion page (below). A HiGHS MILP over the latest capture: one
+binary per wearable artifact (accessories by faction), exact set bonuses through piece-count
+variables, then each ranked stat maximised in turn by priority, held within the slack of its
+best before the next. Further builds exclude earlier ones exactly. C.RATE/C.DMG limits are in
+%; ranking C.RATE stops at 100 %. `current` is the champion's gear under the same model:
+compare it with the game to check the model. The gear pool "Any" includes gear worn by
+others and says who wears it.
 
-A HiGHS MILP over the latest capture: one binary per wearable artifact (accessories by
-faction), exact set bonuses through piece-count variables, then each `--rank` stat maximised
-in turn, held within `--slack` of its best before the next. Further builds exclude earlier
-ones exactly. C.RATE/C.DMG limits are in %; ranking C.RATE stops at 100 %. `current` is the
-champion's gear under the same model: compare it with the game to check the model.
-`--pool all` (default) includes gear worn by others and says who wears it.
-
-Damage: `--rank DMG,... --skill "Song of Steel" --enemy-def 6000` (or the Damage row in the
-web form) ranks a skill's crit-hit damage, as the game's `DamageCalculator` computes it (read
-from the game code): formula × (1 + books) × (1 + C.DMG) × [1 - 0.85 (1 - e^(-effDEF/1500))],
-effDEF = DEF × (1 - ignore DEF), skill and set ignore DEF adding. Ranked by its log, so the
-model stays a MILP. Skills whose formula uses more than the champion's own stats (target HP,
-battle state) can't be ranked. Pair it with `--min CR=100`. Leaves out buffs/debuffs,
-affinity and the dealt-damage substats.
+Damage: the Damage row of the form ranks a skill's crit-hit damage against an enemy DEF, as
+the game's `DamageCalculator` computes it (read from the game code): formula × (1 + books) ×
+(1 + C.DMG) × [1 - 0.85 (1 - e^(-effDEF/1500))], effDEF = DEF × (1 - ignore DEF), skill and
+set ignore DEF adding. Ranked by its log, so the model stays a MILP. Skills whose formula uses
+more than the champion's own stats (target HP, battle state) can't be ranked. Pair it with a
+C.RATE minimum of 100. Leaves out buffs/debuffs, affinity and the dealt-damage substats.
 
 Includes the account's classic arena league bonus (from the capture; Gold V if missing).
 Includes the stats of the relics each champion wears (stones add skills only).
@@ -111,8 +110,8 @@ builds with every piece's full detail (slot, set, rank, rarity, level, main stat
 glyphs and rolls, ascension, faction lock, who wears it now, artifact id). The account reloads
 whenever the proxy writes a new capture.
 
-Layers: `optimiser/` (model and solver) <- `webui/service.py` (framework-free view models,
-ready to serve as JSON for a Vue front end) <- `webui/forms.py` (form -> `Request`) <-
+Layers: `optimiser/` (model and solver) <- `webui/service/` (framework-free view models, a
+module per page, ready to serve as JSON for a Vue front end) <- `webui/forms.py` (form -> `Request`) <-
 `webui/app.py` + `templates/` (FastAPI, Jinja, htmx, Pico CSS). Icons and portraits come
 from the game's own Unity bundles: `uv run --group assets python -I tools/extract_assets.py`
 writes `webui/static/assets/{portraits,sets,pieces}/` (newest bundle version wins; rerun after

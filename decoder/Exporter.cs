@@ -96,10 +96,10 @@ static class Exporter
                           $"{data.Relics.Count} relics -> {Path.GetFullPath(outDir)}");
     }
 
-    // raid-export/cache/hero_types.json (the binary lives in raid-export/bin/).
+    // raid-export/data/cache/hero_types.json (the binary lives in raid-export/bin/).
     static string HeroTypeCachePath =>
         Environment.GetEnvironmentVariable("RAID_HERO_TYPES_CACHE")
-        ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "cache", "hero_types.json"));
+        ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "data", "cache", "hero_types.json"));
 
     static void Dump(string dir, string file, object value) =>
         File.WriteAllText(Path.Combine(dir, file), JsonSerializer.Serialize(value, Json));

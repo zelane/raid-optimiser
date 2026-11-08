@@ -18,11 +18,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from optimiser.account import Account, Champion
-from optimiser.store import LOCK_LEVELS
-from webui import extractor, service
+from optimiser.account import LOCK_LEVELS, Account, Champion
+from webui import extractor
 from webui.forms import (
+    FlagSetting,
     FormErrors,
+    GlyphPlan,
+    WeightSetting,
     parse_equip,
     parse_flag,
     parse_glyph,
@@ -33,6 +35,10 @@ from webui.forms import (
     parse_target_free,
     parse_weight,
 )
+from webui.service import accessories as accessory_pages
+from webui.service import assumptions as assumption_pages
+from webui.service import champions as champion_pages
+from webui.service import current, results, runs
 
 HERE = Path(__file__).resolve().parent
 
@@ -46,19 +52,23 @@ templates.env.globals["static_url"] = lambda path: static_url(path)
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    champions = service.search_champions(service.current_account(), service.current_locks(), "")
+    champions = champion_pages.search_champions(
+        current.current_account(), current.current_locks(), ""
+    )
     return templates.TemplateResponse(request, "index.html", {"champions": champions})
 
 
 @app.get("/champions", response_class=HTMLResponse)
 def champion_list(request: Request, query: str = ""):
-    champions = service.search_champions(service.current_account(), service.current_locks(), query)
+    champions = champion_pages.search_champions(
+        current.current_account(), current.current_locks(), query
+    )
     return templates.TemplateResponse(request, "_champion_list.html", {"champions": champions})
 
 
 @app.post("/champions/{champion_id}/lock", response_class=HTMLResponse)
 async def lock(request: Request, champion_id: int):
-    champion = find_champion(service.current_account(), champion_id)
+    champion = find_champion(current.current_account(), champion_id)
     form = {key: str(value) for key, value in (await request.form()).items()}
 
     match parse_lock(form):
@@ -66,13 +76,13 @@ async def lock(request: Request, champion_id: int):
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case level:
-            listed = service.lock_champion(champion, level)
+            listed = champion_pages.lock_champion(champion, level)
             return templates.TemplateResponse(request, "_lock.html", {"listed": listed})
 
 
 @app.get("/assumptions", response_class=HTMLResponse)
 def assumptions(request: Request):
-    page = service.assumptions_page(service.current_account())
+    page = assumption_pages.assumptions_page(current.current_account())
     return templates.TemplateResponse(request, "assumptions.html", {"page": page})
 
 
@@ -84,31 +94,31 @@ async def set_assumption(request: Request):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
-        case flag, on:
-            view = service.set_assumption(flag, on)
+        case FlagSetting(flag=flag, on=on):
+            view = assumption_pages.set_assumption(flag, on)
             return templates.TemplateResponse(request, "_flag.html", {"flag": view})
 
 
 @app.post("/glyphs", response_class=HTMLResponse)
 async def plan_glyph(request: Request):
-    account = service.current_account()
+    account = current.current_account()
     form = {key: str(value) for key, value in (await request.form()).items()}
 
     match parse_glyph(form, account.tables):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
-        case kind, grade:
-            row = service.plan_glyph_for(account, kind, grade)
+        case GlyphPlan(kind=kind, grade=grade):
+            row = assumption_pages.plan_glyph_for(account, kind, grade)
             return templates.TemplateResponse(request, "_glyph_row.html", {"row": row})
 
 
 @app.get("/accessories", response_class=HTMLResponse)
-def accessories(request: Request, tab: str = service.ACCESSORY_TABS[0]):
-    if tab not in service.ACCESSORY_TABS:
+def accessories(request: Request, tab: str = accessory_pages.ACCESSORY_TABS[0]):
+    if tab not in accessory_pages.ACCESSORY_TABS:
         raise HTTPException(404, f"no tab {tab}")
 
-    page = service.accessories_page(service.current_account(), tab)
+    page = accessory_pages.accessories_page(current.current_account(), tab)
     return templates.TemplateResponse(request, "accessories.html", {"page": page})
 
 
@@ -120,8 +130,8 @@ async def accessory_weight(request: Request):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
-        case key, stat, weight:
-            service.change_type_weight(key, stat, weight)
+        case WeightSetting(key=key, stat=stat, weight=weight):
+            accessory_pages.change_type_weight(key, stat, weight)
             return HTMLResponse('<small class="up">Saved: the lists re-plan with it.</small>')
 
 
@@ -134,14 +144,16 @@ async def accessory_target(request: Request):
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case target:
-            plan = service.set_target_free(service.current_account(), target)
+            plan = accessory_pages.set_target_free(current.current_account(), target)
             return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
 
 
 @app.post("/accessories/{artifact_id}/protect", response_class=HTMLResponse)
 async def protect_accessory(request: Request, artifact_id: int):
     form = {key: str(value) for key, value in (await request.form()).items()}
-    plan = service.protect_accessory(service.current_account(), artifact_id, parse_protect(form))
+    plan = accessory_pages.protect_accessory(
+        current.current_account(), artifact_id, parse_protect(form)
+    )
     return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
 
 
@@ -149,7 +161,7 @@ async def protect_accessory(request: Request, artifact_id: int):
 async def sell_accessories(request: Request):
     fields = [str(value) for value in (await request.form()).getlist("artifact_id")]
 
-    match parse_sell(fields, service.pieces_to_sell(service.current_account())):
+    match parse_sell(fields, accessory_pages.pieces_to_sell(current.current_account())):
         case FormErrors(messages=messages):
             outcome = extractor.Err("; ".join(messages))
 
@@ -165,9 +177,9 @@ async def sell_accessories(request: Request):
 
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)
 def champion(request: Request, champion_id: int):
-    account = service.current_account()
-    page = service.champion_page(
-        account, service.current_locks(), find_champion(account, champion_id)
+    account = current.current_account()
+    page = champion_pages.champion_page(
+        account, current.current_locks(), find_champion(account, champion_id)
     )
     context = {"page": page}
     return templates.TemplateResponse(request, "champion.html", context)
@@ -175,22 +187,22 @@ def champion(request: Request, champion_id: int):
 
 @app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)
 async def builds(request: Request, champion_id: int):
-    account = service.current_account()
+    account = current.current_account()
     form = {key: str(value) for key, value in (await request.form()).items()}
 
     champion = find_champion(account, champion_id)
 
-    match parse_request(form, champion, account, service.current_locks()):
+    match parse_request(form, champion, account, current.current_locks()):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case solve_request:
-            outcome = service.solve(account, solve_request)
+            outcome = results.solve(account, solve_request)
 
     # The new run goes in the history too, swapped in beside the results.
     context = {
-        "run": service.record_run(account, form, solve_request, outcome),
-        "history": service.run_history(champion),
+        "run": runs.record_run(account, form, solve_request, outcome),
+        "history": runs.run_history(champion),
         "champion_id": champion.id,
         "history_oob": True,
     }
@@ -199,16 +211,16 @@ async def builds(request: Request, champion_id: int):
 
 @app.get("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
 def run(request: Request, champion_id: int, run_id: int):
-    champion = find_champion(service.current_account(), champion_id)
+    champion = find_champion(current.current_account(), champion_id)
     context = {"run": find_run(champion, run_id)}
     return templates.TemplateResponse(request, "_run.html", context)
 
 
 @app.delete("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
 def delete_run(request: Request, champion_id: int, run_id: int):
-    champion = find_champion(service.current_account(), champion_id)
-    service.forget_run(champion, run_id)
-    context = {"history": service.run_history(champion), "champion_id": champion.id}
+    champion = find_champion(current.current_account(), champion_id)
+    runs.forget_run(champion, run_id)
+    context = {"history": runs.run_history(champion), "champion_id": champion.id}
     return templates.TemplateResponse(request, "_history.html", context)
 
 
@@ -236,7 +248,7 @@ async def send_build(
     done: str,
 ) -> HTMLResponse:
     """The build button's pieces, sent to the game by `send`."""
-    account = service.current_account()
+    account = current.current_account()
     champion = find_champion(account, champion_id)
     form = {key: str(value) for key, value in (await request.form()).items()}
 
@@ -258,8 +270,8 @@ def find_champion(account: Account, champion_id: int) -> Champion:
     return champion
 
 
-def find_run(champion: Champion, run_id: int) -> service.RunView:
-    if (saved := service.saved_run(champion, run_id)) is None:
+def find_run(champion: Champion, run_id: int) -> runs.RunView:
+    if (saved := runs.saved_run(champion, run_id)) is None:
         raise HTTPException(404, f"no run {run_id} for champion {champion.id}")
 
     return saved

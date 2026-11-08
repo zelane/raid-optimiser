@@ -22,10 +22,6 @@ static *args:
 decoder:
     dotnet build decoder -c Release -o bin
 
-# Run the optimiser CLI, e.g. just opt "Name" --rank HP,DEF --min SPD=200 --builds 3
-opt *args:
-    uv run python -m optimiser "$@"
-
 # Start the web UI on http://127.0.0.1:8000, reloading on Python changes (--no-reload: off)
 web *args:
     uv run python -m webui "$@"
@@ -63,12 +59,12 @@ schema dump_cs=dump:
 
 # Write the raider oracle's request file (inject into ~/tmp/inject-test only!)
 oracle-request out=oracle_request_file:
-    python3 -I tools/oracle_request.py static/hero_types.json "{{out}}"
+    python3 -I tools/oracle_request.py data/game/hero_types.json "{{out}}"
 
-# Import the raider oracle's output into static/{base_stats_6_60,level_curve}.json
+# Import the raider oracle's output into data/game/{base_stats_6_60,level_curve}.json
 oracle-import input=oracle_out:
-    python3 -I tools/oracle_import.py "{{input}}" static/hero_types.json static/
+    python3 -I tools/oracle_import.py "{{input}}" data/game/hero_types.json data/game/
 
 # Champions (each mythical form apart) that may need a scaling exception (--all, --name X)
 exceptions *args:
-    uv run python -m optimiser.scaling_report "$@"
+    uv run python -m optimiser.accessories.scaling_report "$@"

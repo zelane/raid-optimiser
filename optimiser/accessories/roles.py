@@ -4,26 +4,24 @@ suit them, and which types each set is worn by. The accessory clean-up and the r
 lists value a piece by the best type it suits.
 
 There are standard types for every faction (their weights editable, kept in the store) and
-types of a faction's own, made from what its champions scale off (`optimiser.scaling`).
+types of a faction's own, made from what its champions scale off (`scaling`).
 
 - `Kind`, `ChampionType`: a type
-- `TypeKey`, `TYPE_LABELS`, `TYPE_KINDS`, `DEFAULT_TYPE_WEIGHTS`, `TYPE_MAINS`, `TYPE_STATS`,
-  `SUPPORT_BALANCE`: the standard types
+- `TypeKey`, `TYPE_STATS`, `SUPPORT_BALANCE`, `StandardType`, `STANDARD_TYPES`: the standard
+  types
 - `SetRole`, `SET_ROLES`, `DEFAULT_ROLE`, `LOW_VALUE_SETS`, `NO_SET`, `ROLE_KINDS`: who wears
   each set
-- `SET_TIERS`, `NO_SET_FACTOR`, `set_factor`: what the meta makes of each set
-- `standard_types`, `read_standard_types`, `set_type_weight`: the standard types, with the
-  store's weights
+- `set_role`, `crit_amulet_on_support_set`: a set's role, and its one exception
+- `Tier`, `SET_TIERS`, `NO_SET_FACTOR`, `set_factor`: what the meta makes of each set
+- `standard_types`: the standard types, with the stored weights over the defaults
 - `types_for`: the types an accessory could be for
 - `group_quota`: how many of a group to keep
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
 from optimiser.account import Slot, Stat
-from optimiser.store import read_weights, write_weight
 
 
 class Kind(StrEnum):
@@ -68,66 +66,73 @@ class TypeKey(StrEnum):
     SUPPORT = "support"
 
 
-TYPE_LABELS = {
-    TypeKey.ATK_DAMAGE: "ATK damage",
-    TypeKey.HP_DAMAGE: "HP damage",
-    TypeKey.DEF_DAMAGE: "DEF damage",
-    TypeKey.DEBUFFER: "Bomber / poisoner",
-    TypeKey.SUPPORT: "Support",
-}
-TYPE_KINDS = {
-    TypeKey.ATK_DAMAGE: Kind.DAMAGE,
-    TypeKey.HP_DAMAGE: Kind.DAMAGE,
-    TypeKey.DEF_DAMAGE: Kind.DAMAGE,
-    TypeKey.DEBUFFER: Kind.DAMAGE,
-    TypeKey.SUPPORT: Kind.SUPPORT,
-}
 TYPE_STATS = (Stat.SPD, Stat.ATK, Stat.HP, Stat.DEF, Stat.CD, Stat.ACC, Stat.RES)
 SUPPORT_BALANCE = 2  # supports want HP and DEF together: this much again of the lesser one
 
-DEFAULT_TYPE_WEIGHTS: dict[TypeKey, dict[Stat, float]] = {
-    TypeKey.ATK_DAMAGE: {
-        Stat.ATK: 5,
-        Stat.CD: 5,
-        Stat.SPD: 4,
-        Stat.ACC: 1,
-        Stat.HP: 0.5,
-        Stat.DEF: 0.5,
-    },
-    TypeKey.HP_DAMAGE: {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.DEF: 0.5},
-    TypeKey.DEF_DAMAGE: {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.HP: 0.5},
+
+@dataclass(frozen=True)
+class StandardType:
+    """A standard type as it ships: its default weights (the store's go over them)."""
+
+    label: str
+    kind: Kind
+    weights: dict[Stat, float]
+    mains: Mains
+
+
+STANDARD_TYPES: dict[TypeKey, StandardType] = {
+    TypeKey.ATK_DAMAGE: StandardType(
+        "ATK damage",
+        Kind.DAMAGE,
+        {Stat.ATK: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.HP: 0.5, Stat.DEF: 0.5},
+        (
+            (Slot.RING, (Stat.ATK,)),
+            (Slot.AMULET, (Stat.CD,)),
+            (Slot.BANNER, (Stat.ATK, Stat.ACC)),
+        ),
+    ),
+    TypeKey.HP_DAMAGE: StandardType(
+        "HP damage",
+        Kind.DAMAGE,
+        {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.DEF: 0.5},
+        (
+            (Slot.RING, (Stat.HP,)),
+            (Slot.AMULET, (Stat.CD,)),
+            (Slot.BANNER, (Stat.HP, Stat.ACC)),
+        ),
+    ),
+    TypeKey.DEF_DAMAGE: StandardType(
+        "DEF damage",
+        Kind.DAMAGE,
+        {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.HP: 0.5},
+        (
+            (Slot.RING, (Stat.DEF,)),
+            (Slot.AMULET, (Stat.CD,)),
+            (Slot.BANNER, (Stat.DEF, Stat.ACC)),
+        ),
+    ),
     # Bombs scale off ATK, and so do poisons with the Arachnelixir relic; debuffers that
     # scale off nothing wear support pieces instead.
-    TypeKey.DEBUFFER: {Stat.ACC: 5, Stat.SPD: 5, Stat.ATK: 4, Stat.HP: 1, Stat.DEF: 1},
+    TypeKey.DEBUFFER: StandardType(
+        "Bomber / poisoner",
+        Kind.DAMAGE,
+        {Stat.ACC: 5, Stat.SPD: 5, Stat.ATK: 4, Stat.HP: 1, Stat.DEF: 1},
+        (
+            (Slot.RING, (Stat.ATK,)),
+            (Slot.AMULET, (Stat.ATK,)),
+            (Slot.BANNER, (Stat.ACC, Stat.ATK)),
+        ),
+    ),
     # ACC and RES alike: a banner's main stat for supports is one or the other.
-    TypeKey.SUPPORT: {Stat.SPD: 5, Stat.ACC: 4, Stat.RES: 4, Stat.HP: 2, Stat.DEF: 2},
-}
-
-TYPE_MAINS: dict[TypeKey, Mains] = {
-    TypeKey.ATK_DAMAGE: (
-        (Slot.RING, (Stat.ATK,)),
-        (Slot.AMULET, (Stat.CD,)),
-        (Slot.BANNER, (Stat.ATK, Stat.ACC)),
-    ),
-    TypeKey.HP_DAMAGE: (
-        (Slot.RING, (Stat.HP,)),
-        (Slot.AMULET, (Stat.CD,)),
-        (Slot.BANNER, (Stat.HP, Stat.ACC)),
-    ),
-    TypeKey.DEF_DAMAGE: (
-        (Slot.RING, (Stat.DEF,)),
-        (Slot.AMULET, (Stat.CD,)),
-        (Slot.BANNER, (Stat.DEF, Stat.ACC)),
-    ),
-    TypeKey.DEBUFFER: (
-        (Slot.RING, (Stat.ATK,)),
-        (Slot.AMULET, (Stat.ATK,)),
-        (Slot.BANNER, (Stat.ACC, Stat.ATK)),
-    ),
-    TypeKey.SUPPORT: (
-        (Slot.RING, (Stat.HP, Stat.DEF)),
-        (Slot.AMULET, (Stat.HP, Stat.DEF)),
-        (Slot.BANNER, (Stat.ACC, Stat.RES, Stat.HP, Stat.DEF)),
+    TypeKey.SUPPORT: StandardType(
+        "Support",
+        Kind.SUPPORT,
+        {Stat.SPD: 5, Stat.ACC: 4, Stat.RES: 4, Stat.HP: 2, Stat.DEF: 2},
+        (
+            (Slot.RING, (Stat.HP, Stat.DEF)),
+            (Slot.AMULET, (Stat.HP, Stat.DEF)),
+            (Slot.BANNER, (Stat.ACC, Stat.RES, Stat.HP, Stat.DEF)),
+        ),
     ),
 }
 
@@ -163,14 +168,23 @@ SET_ROLES = {
 }
 DEFAULT_ROLE = SetRole.HYBRID  # sets released since
 
-# How the meta rates a set, as a multiplier on its pieces' value; sets not listed are 1.
+
+@dataclass(frozen=True)
+class Tier:
+    """How the meta rates a set: a multiplier on its pieces' value, and why."""
+
+    factor: float
+    reason: str
+
+
+# Sets not listed are 1.
 SET_TIERS = {
-    66: (1.3, "the top PvP set"),  # Mercurial
-    59: (1.3, "the only real damage set on accessories"),  # Merciless
-    35: (1.3, "an outstanding 9-piece bonus"),  # Swift Parry
-    61: (1.15, "an outstanding 1-piece bonus"),  # Feral
-    60: (1.15, "an outstanding 1-piece bonus"),  # Slayer
-    62: (1.15, "the best 2-piece speed bonus"),  # Pinpoint
+    66: Tier(1.3, "the top PvP set"),  # Mercurial
+    59: Tier(1.3, "the only real damage set on accessories"),  # Merciless
+    35: Tier(1.3, "an outstanding 9-piece bonus"),  # Swift Parry
+    61: Tier(1.15, "an outstanding 1-piece bonus"),  # Feral
+    60: Tier(1.15, "an outstanding 1-piece bonus"),  # Slayer
+    62: Tier(1.15, "the best 2-piece speed bonus"),  # Pinpoint
 }
 NO_SET_FACTOR = 0.6  # set-less pieces are kept only when very good
 LOW_VALUE_SETS = frozenset({NO_SET, 1002, 1004, 1001, 64, 63})  # one of each is enough
@@ -184,13 +198,23 @@ ROLE_KINDS = {
 KEEP = 2  # of each group, unless `group_quota` says less
 
 
+def set_role(set_id: int) -> SetRole:
+    """Sets released since the table was written default to Hybrid."""
+    return SET_ROLES.get(set_id, DEFAULT_ROLE)
+
+
+def crit_amulet_on_support_set(set_id: int, slot: Slot, main: Stat) -> bool:
+    """Support sets still keep a C.DMG amulet: some bosses' mechanics turn on crits."""
+    return set_role(set_id) is SetRole.SUPPORT and slot is Slot.AMULET and main is Stat.CD
+
+
 def set_factor(set_id: int) -> float:
     """What a set's pieces are worth against an average set's: its meta tier, or the
     set-less discount."""
     if set_id == NO_SET:
         return NO_SET_FACTOR
 
-    return SET_TIERS.get(set_id, (1.0, ""))[0]
+    return tier.factor if (tier := SET_TIERS.get(set_id)) else 1.0
 
 
 def standard_types(stored: dict[TypeKey, dict[Stat, float]]) -> tuple[ChampionType, ...]:
@@ -198,40 +222,24 @@ def standard_types(stored: dict[TypeKey, dict[Stat, float]]) -> tuple[ChampionTy
     return tuple(
         ChampionType(
             key=key.value,
-            label=TYPE_LABELS[key],
-            kind=TYPE_KINDS[key],
-            weights=tuple({**DEFAULT_TYPE_WEIGHTS[key], **stored.get(key, {})}.items()),
-            mains=TYPE_MAINS[key],
+            label=standard.label,
+            kind=standard.kind,
+            weights=tuple({**standard.weights, **stored.get(key, {})}.items()),
+            mains=standard.mains,
             balance=SUPPORT_BALANCE if key is TypeKey.SUPPORT else 0,
         )
-        for key in TypeKey
+        for key, standard in STANDARD_TYPES.items()
     )
-
-
-def read_standard_types(store: Path) -> tuple[ChampionType, ...]:
-    stored: dict[TypeKey, dict[Stat, float]] = {}
-
-    for (type_name, stat), weight in read_weights(store).items():
-        if type_name in TypeKey and stat in Stat:
-            stored.setdefault(TypeKey(type_name), {})[Stat(stat)] = weight
-
-    return standard_types(stored)
-
-
-def set_type_weight(store: Path, key: TypeKey, stat: Stat, weight: float) -> None:
-    write_weight(store, (key.value, stat.value), weight)
 
 
 def types_for(
     set_id: int, slot: Slot, main: Stat, faction: str | None, types: tuple[ChampionType, ...]
 ) -> tuple[str, ...]:
     """Keys of the types the set is worn by, of everyone or the piece's faction, whose main
-    stats include this one. Support sets still keep a C.DMG amulet: some bosses' mechanics
-    turn on crits."""
-    role = SET_ROLES.get(set_id, DEFAULT_ROLE)
-    kinds = ROLE_KINDS[role]
+    stats include this one."""
+    kinds = ROLE_KINDS[set_role(set_id)]
 
-    if role is SetRole.SUPPORT and slot is Slot.AMULET and main is Stat.CD:
+    if crit_amulet_on_support_set(set_id, slot, main):
         kinds = (Kind.DAMAGE,)
 
     return tuple(
@@ -242,12 +250,7 @@ def types_for(
 
 
 def group_quota(set_id: int, slot: Slot, main: Stat) -> int:
-    role = SET_ROLES.get(set_id, DEFAULT_ROLE)
-
-    if set_id in LOW_VALUE_SETS:
-        return 1
-
-    if role is SetRole.SUPPORT and slot is Slot.AMULET and main is Stat.CD:
+    if set_id in LOW_VALUE_SETS or crit_amulet_on_support_set(set_id, slot, main):
         return 1
 
     return KEEP

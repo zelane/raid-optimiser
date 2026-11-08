@@ -10,18 +10,15 @@ The account's real gear is left alone; solves use the glyphed copy.
 - `for_request`: the kinds a solve can use
 - `with_glyphs`: an account with them applied to its gear
 - `rank_caps`: the best roll a piece of each rank can take
-- `read_planned`, `plan_glyph`: kept in the store
 - `kind_key`, `grade_key`, `parse_kind`, `parse_grade`: how kinds and grades are written
 - `glyph_line`: one substat, glyphed
 """
 
 from collections.abc import Mapping
 from dataclasses import replace
-from pathlib import Path
 
-from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine, Tables
+from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine
 from optimiser.solve import Request, directions
-from optimiser.store import read_glyphs, write_glyph
 
 type Planned = Mapping[GlyphKind, GlyphGrade]
 
@@ -70,23 +67,6 @@ def glyph_line(line: StatLine, tops: Mapping[GlyphKind, float]) -> StatLine:
 
     top = tops.get(GlyphKind(line.stat, line.absolute), 0)
     return replace(line, planned_glyph=top) if top > line.glyph else line
-
-
-def read_planned(store: Path, tables: Tables) -> dict[GlyphKind, GlyphGrade]:
-    """What the store holds, less anything the game's glyph table no longer has."""
-    planned = {}
-
-    for kind_text, grade_text in read_glyphs(store).items():
-        kind, grade = parse_kind(kind_text), parse_grade(grade_text)
-        if kind and grade and grade in tables.glyphs.get(kind, {}):
-            planned[kind] = grade
-
-    return planned
-
-
-def plan_glyph(store: Path, kind: GlyphKind, grade: GlyphGrade | None) -> None:
-    """None stops assuming the kind."""
-    write_glyph(store, kind_key(kind), grade_key(grade) if grade else None)
 
 
 def kind_key(kind: GlyphKind) -> str:

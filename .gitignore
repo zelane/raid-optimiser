@@ -8,11 +8,9 @@ __pycache__/
 bin/
 decoder/obj/
 
-# Your account: captures, and user state (locks)
-captures/
-state/
-cache/
+# Your account (captures, the store), the game's tables and the decoder's cache:
+# data/{captures,state,game,cache}
+data/
 
-# Game data and art (Plarium's): regenerate with update-static.sh, the oracle, extract_assets.py
-/static/
+# Game art (Plarium's): regenerate with extract_assets.py
 webui/static/assets/

@@ -32,27 +32,27 @@
             </tr>
           </thead>
           <tbody>
-            {% for name, label, percent in page.options.stats %}
+            {% for stat in page.options.stats %}
               <tr>
-                <th>{{ label }}{% if percent %} <small>%</small>{% endif %}</th>
+                <th>{{ stat.label }}{% if stat.percent %} <small>%</small>{% endif %}</th>
                 <td>
                   <input type="number"
                          step="any"
-                         name="min_{{ name }}"
-                         aria-label="{{ label }} at least">
+                         name="min_{{ stat.name }}"
+                         aria-label="{{ stat.label }} at least">
                 </td>
                 <td>
                   <input type="number"
                          step="any"
-                         name="max_{{ name }}"
-                         aria-label="{{ label }} at most">
+                         name="max_{{ stat.name }}"
+                         aria-label="{{ stat.label }} at most">
                 </td>
                 <td>
                   <input type="number"
                          min="1"
                          max="8"
-                         name="rank_{{ name }}"
-                         aria-label="{{ label }} priority">
+                         name="rank_{{ stat.name }}"
+                         aria-label="{{ stat.label }} priority">
                 </td>
               </tr>
             {% endfor %}
@@ -97,7 +97,7 @@
           <fieldset role="group" class="set-row">
             <select name="set___n__" aria-label="Set" required>
               <option value="">—</option>
-              {% for set_id, name in page.options.sets %}<option value="{{ set_id }}">{{ name }}</option>{% endfor %}
+              {% for option in page.options.sets %}<option value="{{ option.id }}">{{ option.name }}</option>{% endfor %}
             </select>
             <input type="number"
                    name="pieces___n__"
@@ -126,7 +126,7 @@
           Gear
           <select name="pool"
                   title="Gear worn by other champions the solve may use; the champion's own is always allowed">
-            {% for name, label in page.options.pools %}<option value="{{ name }}">{{ label }}</option>{% endfor %}
+            {% for pool in page.options.pools %}<option value="{{ pool.name }}">{{ pool.label }}</option>{% endfor %}
           </select>
         </label>
       </div>

@@ -6,21 +6,22 @@ A lock (1-5, 5 the strongest) keeps a champion's gear out of solves that only al
 champions locked below some level. Unlocked champions have no row, and count as 0.
 
 Glyphs are account-wide: each glyph kind ("SPD", "HP%") with the grade to assume
-("6-Legendary"), both as `optimiser.glyphs` writes them (opaque here). Kinds not assumed
+("6-Legendary"), both as `optimiser.glyphs` names them (opaque here). Kinds not assumed
 have no row.
 
 Settings are named flags ("max_gear_level"), on when they have a row; `optimiser.assume`
 names them.
 
-Type weights are what `optimiser.roles` values a stat at for a champion type, keyed by
+Type weights are what `optimiser.accessories.roles` values a stat at for a champion type, keyed by
 the type's and the stat's names (opaque here); weights left at their default have no row.
 Protected pieces are accessories the clean-up must never drop. Numbers are named settings
 with a value ("target_free"); unset ones have no row.
 
+`optimiser.settings` reads the flags, glyphs and weights back as the model's types.
+
 A run is a solve as a front end asked and showed it: the form it was asked with and what it
 found, both JSON the front end writes and reads (opaque here), with a summary for listings.
 
-- `LOCK_LEVELS`, `Locks`: what a lock is
 - `NewRun`, `RunEntry`, `Run`: a run to save, as listed, and in full
 - `SCHEMA`: the tables
 - `read_locks`, `write_lock`: locks
@@ -35,15 +36,12 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 
 import json
 import sqlite3
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-LOCK_LEVELS = range(1, 6)
-
-type Locks = Mapping[int, int]  # champion id -> lock level; unlocked champions are absent
 type WeightKey = tuple[str, str]  # champion type, stat
 
 

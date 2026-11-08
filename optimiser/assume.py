@@ -6,19 +6,16 @@ and glyphs (`optimiser.glyphs`). All account-wide, kept in the store. The captur
 alone: a solve gets an assumed copy of the account and its request.
 
 - `Flag`, `FLAG_LABELS`, `Assumptions`: what can be assumed
-- `read_assumptions`, `set_flag`: kept in the store
 - `assume`: an account and request with them applied
 - `top_level`, `levelled`, `ascended`: the champion and one piece, assumed
 """
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
-from pathlib import Path
 
 from optimiser.account import Account, Artifact, Champion, GearLine, GearTables
-from optimiser.glyphs import Planned, for_request, read_planned, with_glyphs
+from optimiser.glyphs import Planned, for_request, with_glyphs
 from optimiser.solve import Request
-from optimiser.store import read_flags, write_flag
 
 LEVELS_PER_GRADE = 10  # a champion's top level is 10 per star
 
@@ -42,15 +39,6 @@ FLAG_LABELS = {
 class Assumptions:
     flags: frozenset[Flag]
     glyphs: Planned
-
-
-def read_assumptions(store: Path, account: Account) -> Assumptions:
-    flags = frozenset(Flag(name) for name in read_flags(store) if name in Flag)
-    return Assumptions(flags, read_planned(store, account.tables))
-
-
-def set_flag(store: Path, flag: Flag, on: bool) -> None:
-    write_flag(store, flag, on)
 
 
 def assume(account: Account, request: Request, assumptions: Assumptions) -> tuple[Account, Request]:

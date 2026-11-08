@@ -20,7 +20,7 @@ each family the newest version wins. Set sprites are named after the game's set 
 display names, HH's names or an old name in `ALIASES`; a sprite that is a prefix of exactly
 one game set name matches it too. Anything unmatched is listed, and the UI shows text instead.
 
-- `GAME`, `OUT`, `SLOTS`, `ALIASES`: where things are, and the names the sprites use
+- `GAME`, `OUT`, `TABLES`, `CAPTURES`, `SLOTS`, `ALIASES`: where things are, and the names the sprites use
 - `main`: the workflow
 - `bundles`, `set_keys`, `match_set`, `save`: its steps
 """
@@ -43,7 +43,8 @@ GAME = (
     PREFIX / "drive_c/users/steamuser/AppData/Local/PlariumPlay/StandAloneApps/raid-shadow-legends"
 )
 OUT = ROOT / "webui" / "static" / "assets"
-STATIC = ROOT / "static"
+TABLES = ROOT / "data" / "game"  # the game's tables (update-static.sh)
+CAPTURES = ROOT / "data" / "captures" / "latest"
 # Sprite slot suffix -> the optimiser's slot name (`Slot` member, lower case).
 SLOTS = {
     "Weapon": "weapon",
@@ -75,7 +76,7 @@ VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 def main() -> None:
     keys = set_keys()
-    champions = json.load(open(ROOT / "captures" / "latest" / "champions.json"))
+    champions = json.load(open(CAPTURES / "champions.json"))
     factions = {c["Faction"] for c in champions}  # the capture's names match the sprites'
     unmatched: set[str] = set()
     written: dict[str, set[str]] = {
@@ -170,7 +171,7 @@ def capture_faction_names(champions: list[dict]) -> dict[str, str]:
     (Samurai -> Shadowkin, Olympians -> Argonites), so pair them up by champion type."""
     enum = json.load(open(ROOT / "schema" / "schema.json"))["enums"]["HeroFraction"]
     number_of = {name: number for number, name in enum.items()}
-    game_faction = {t["id"]: t["fraction"] for t in json.load(open(STATIC / "hero_types.json"))}
+    game_faction = {t["id"]: t["fraction"] for t in json.load(open(TABLES / "hero_types.json"))}
     names = {}
 
     for champion in champions:
@@ -186,11 +187,11 @@ def set_keys() -> dict[str, int]:
     by_game_name = {name: int(number) for number, name in enum.items()}
     keys = {normalise(name): set_id for name, set_id in by_game_name.items()}
 
-    for raw in json.load(open(ROOT / "static" / "sets.json")):
+    for raw in json.load(open(TABLES / "sets.json")):
         if raw["name"]:
             keys.setdefault(normalise(raw["name"]), by_game_name[raw["id"]])
 
-    for name, set_id in json.load(open(ROOT / "captures" / "latest" / "set_ids.json")).items():
+    for name, set_id in json.load(open(CAPTURES / "set_ids.json")).items():
         keys.setdefault(normalise(name), set_id)
 
     keys.pop("none", None)

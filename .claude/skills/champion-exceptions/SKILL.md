@@ -1,27 +1,27 @@
 ---
 name: champion-exceptions
-description: Find 6★ champions (each mythical form apart) whose stat needs the accessory scoring gets wrong, and record exceptions in optimiser/scaling.py OVERRIDES. Use when the user asks to check the roster for stat outliers or exceptions, after new 6★ champions or a game update (champion reworks), or when they name a champion whose gear priority differs from what the formulas say (Joan liking RES, a mythical geared for one form only).
+description: Find 6★ champions (each mythical form apart) whose stat needs the accessory scoring gets wrong, and record exceptions in optimiser/accessories/scaling.py OVERRIDES. Use when the user asks to check the roster for stat outliers or exceptions, after new 6★ champions or a game update (champion reworks), or when they name a champion whose gear priority differs from what the formulas say (Joan liking RES, a mythical geared for one form only).
 ---
 
 # Champion exceptions
 
 Accessories are faction-locked, so the clean-up and the roll/rework lists value each piece
-against champion types: the standard five (`optimiser/roles.py`) and a faction's own, made
-from its 6★ champions' formulas (`optimiser/scaling.py`). Each mythical form counts as a
+against champion types: the standard five (`optimiser/accessories/roles.py`) and a faction's own, made
+from its 6★ champions' formulas (`optimiser/accessories/scaling.py`). Each mythical form counts as a
 champion of its own. Formulas miss things; this skill finds the candidates and records the
 user's decisions as exceptions.
 
 ## 1. Fresh data
 
-- After a game update, `just static` (rebuilds `static/skills.json`, whose `scaling` field
+- After a game update, `just static` (rebuilds `data/game/skills.json`, whose `scaling` field
   holds heal/shield/revive/bomb formulas). The capture must be current for the roster.
 
 ## 2. Run the report
 
 ```
-uv run python -m optimiser.scaling_report            # flagged forms
-uv run python -m optimiser.scaling_report --all      # everything
-uv run python -m optimiser.scaling_report --name Joan
+uv run python -m optimiser.accessories.scaling_report            # flagged forms
+uv run python -m optimiser.accessories.scaling_report --all      # everything
+uv run python -m optimiser.accessories.scaling_report --name Joan
 ```
 
 Each row: name (with `(form N)` for mythicals), faction, the form's role, its pull per stat
@@ -40,7 +40,7 @@ typical geared stats; each effect counts its shape, not its size.
   functional, which formulas can't see.
 - **target-dependent**: the target's stats or battle counters are read as 0; fine for gear,
   unless the caster's own term is tiny next to them (then the champion barely scales).
-- **unreadable**: the formula didn't parse; read it in `static/skills.json` and say whether
+- **unreadable**: the formula didn't parse; read it in `data/game/skills.json` and say whether
   it matters.
 - **support, nothing scales**: listed with `--all` only; buffers and debuffers, covered by
   the standard support type.
@@ -53,11 +53,11 @@ one form or one content.
 
 ## 4. Record the decision
 
-In `optimiser/scaling.py`, `OVERRIDES` maps `(champion name, form number)` to:
+In `optimiser/accessories/scaling.py`, `OVERRIDES` maps `(champion name, form number)` to:
 
 - `Skip(reason)`: no type of its own for that form.
 - `Weigh(label, kind, weights, mains, reason)`: the type to use instead. Weights are average
-  6★ rolls per stat, like the standard types (`DEFAULT_TYPE_WEIGHTS` in `roles.py` for
+  6★ rolls per stat, like the standard types (`STANDARD_TYPES` in `roles.py` for
   scale: 5 the main stat, 4 SPD, 5 C.DMG for damage dealers); `mains` per slot, e.g.
   `((Slot.RING, (Stat.ATK,)), (Slot.AMULET, (Stat.CD,)), (Slot.BANNER, (Stat.ATK, Stat.RES)))`.
 

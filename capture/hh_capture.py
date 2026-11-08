@@ -2,8 +2,8 @@
 the web UI equip builds in game through the extractor.
 
 Capture: every `POST /api/Account/v2` the extractor sends to raidoptimiser.hellhades.com is
-saved as captures/raw/<timestamp>.bin (raw MessagePack+LZ4, newest KEEP_RAW kept) and
-decoded by the C# `raid-export` tool into captures/latest/*.json, which is replaced
+saved as data/captures/raw/<timestamp>.bin (raw MessagePack+LZ4, newest KEEP_RAW kept) and
+decoded by the C# `raid-export` tool into data/captures/latest/*.json, which is replaced
 atomically on each sync. The request itself is forwarded untouched.
 
 The extractor re-uploads every ~15s while the game runs, so decodes are coalesced:
@@ -38,7 +38,7 @@ from pathlib import Path
 from mitmproxy import ctx, http
 
 ROOT = Path(__file__).resolve().parent.parent
-CAPTURES = Path(os.environ.get("RAID_CAPTURES", ROOT / "captures"))
+CAPTURES = Path(os.environ.get("RAID_CAPTURES", ROOT / "data" / "captures"))
 DECODER = ROOT / "bin" / "raid-export"
 HOST = "raidoptimiser.hellhades.com"
 KEEP_RAW = 20

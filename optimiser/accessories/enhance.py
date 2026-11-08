@@ -9,15 +9,14 @@ counted) and leave out what the clean-up drops.
 - `REWORK_MARGIN`: how much better a rework has to look
 - `Step`, `Candidate`: what to do to a piece, and why it's listed
 - `roll_list`, `finish_list`, `rework_list`: the lists
-- `rolled_value`, `owned`, `shelf_value`: what they share
+- `rolled_value`, `owned`: what they share
 """
 
 from dataclasses import dataclass
 from enum import StrEnum
 
-from optimiser.accessories import Assessed, Assessment, Where
-from optimiser.potential import ROLL_TO, UPGRADE_LEVELS
-from optimiser.roles import set_factor
+from optimiser.accessories.assess import Assessed, Assessment, Where
+from optimiser.accessories.potential import ROLL_TO, UPGRADE_LEVELS
 
 REWORK_MARGIN = 1.1
 
@@ -47,7 +46,7 @@ def roll_list(assessment: Assessment, dropped: set[int]) -> list[Candidate]:
         Candidate(
             piece,
             Step.ROLL,
-            shelf_value(piece, after := rolled_value(piece)),
+            piece.weighed(after := rolled_value(piece)),
             piece.potential.now.best,
             after,
         )
@@ -63,7 +62,7 @@ def finish_list(assessment: Assessment, dropped: set[int]) -> list[Candidate]:
         Candidate(
             piece,
             Step.FINISH,
-            shelf_value(piece, piece.potential.natural.best),
+            piece.weighed(piece.potential.natural.best),
             piece.potential.now.best,
             piece.potential.natural.best,
         )
@@ -79,7 +78,7 @@ def rework_list(assessment: Assessment, dropped: set[int]) -> list[Candidate]:
         Candidate(
             piece,
             Step.REWORK,
-            shelf_value(piece, rework.best - piece.potential.natural.best),
+            piece.weighed(rework.best - piece.potential.natural.best),
             piece.potential.natural.best,
             rework.best,
         )
@@ -106,8 +105,3 @@ def owned(assessment: Assessment, dropped: set[int]) -> list[Assessed]:
         and piece.artifact.id not in dropped
         and not piece.artifact.special()
     ]
-
-
-def shelf_value(piece: Assessed, score: float) -> float:
-    """A score, weighed as the piece's value is: shortage, and its set's tier."""
-    return score * piece.scarcity * set_factor(piece.artifact.set_id)

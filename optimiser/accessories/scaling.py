@@ -2,7 +2,7 @@
 scaling.py - what the roster's 6★ champions scale off, and the champion types of a faction's
 own that come of it. Accessories are faction-locked, so a faction whose damage dealers scale
 off two stats (Rotos: 2.1·ATK + 0.19·HP) or whose supports heal and shield off ATK wants
-pieces the standard types (`optimiser.roles`) undervalue.
+pieces the standard types (`roles`) undervalue.
 
 A formula's pull on a stat is how much one roll of it adds (a % roll of the champion's base
 for ATK/HP/DEF, a flat roll for ACC/RES/SPD), at typical geared stats; a champion's pull
@@ -13,9 +13,10 @@ their faction's own, one per distinct shape.
 
 Mythicals count each form as a champion of its own: some want the same stats in both, others
 are geared for one form, which `OVERRIDES` can say. The champion-exceptions skill
-(`.claude/skills/champion-exceptions`) and `tools/scaling_report.py` find what needs one.
+(`.claude/skills/champion-exceptions`) and `scaling_report` (`just exceptions`)
+find what needs one.
 
-- `TYPICAL`, `ROLL`, `MIXED`, `MINOR`: what's typical, and what counts as a second stat
+- `TYPICAL`, `GEARED`, `MIXED`, `MINOR`: what's typical, and what counts as a second stat
 - `Wearer`, `Pull`: a champion in one form, and what it pulls on
 - `Skip`, `Weigh`, `Override`, `OVERRIDES`: exceptions, by champion name and form
 - `faction_types`: the roster's types
@@ -25,12 +26,11 @@ are geared for one form, which `OVERRIDES` can say. The champion-exceptions skil
 
 import ast
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from optimiser.account import Account, Champion, HeroForm, Slot, Stat
-from optimiser.labels import STAT_LABELS
-from optimiser.roles import (
-    DEFAULT_TYPE_WEIGHTS,
+from optimiser.accessories.potential import ROLL_6
+from optimiser.accessories.roles import (
+    STANDARD_TYPES,
     SUPPORT_BALANCE,
     TYPE_STATS,
     ChampionType,
@@ -38,14 +38,13 @@ from optimiser.roles import (
     Mains,
     TypeKey,
 )
+from optimiser.account import Account, Champion, HeroForm, Slot, Stat
+from optimiser.damage import STAT_NAMES
+from optimiser.labels import STAT_LABELS
 
 BODY = (Stat.ATK, Stat.HP, Stat.DEF)
-TOKENS = {"ATK": Stat.ATK, "HP": Stat.HP, "DEF": Stat.DEF, "ACC": Stat.ACC, "RES": Stat.RES}
-TOKENS |= {"SPD": Stat.SPD}
 TYPICAL = {Stat.ACC: 250.0, Stat.RES: 250.0, Stat.SPD: 250.0}  # flat stats, geared
 GEARED = 2.2  # ATK/HP/DEF geared, against base
-ROLL = {Stat.ACC: 10.5, Stat.RES: 10.5, Stat.SPD: 5.5}  # flat rolls; ATK/HP/DEF: 6% of base
-BODY_ROLL = 0.06
 MIXED = 0.3  # a second stat pulling this much of the first makes a mixed type
 MINOR = 0.1  # pulls below this are left out
 DAMAGE_KINDS = {"ApplyDebuff"}  # bombs
@@ -61,6 +60,10 @@ class Wearer:
     form_number: int
     form: HeroForm
     forms: int  # how many the champion has
+
+    def key(self) -> tuple[str, int]:
+        """As `OVERRIDES` names it: the champion's name and the form's number."""
+        return self.champion.name, self.form_number
 
     def name(self) -> str:
         """ "Kurosa the Covetous (form 2)" for a mythical, the plain name otherwise."""
@@ -129,9 +132,7 @@ def faction_types(account: Account) -> tuple[ChampionType, ...]:
             continue
 
         if (known := by_key.get(own.key)) is not None:
-            own = ChampionType(
-                **{**known.__dict__, "champions": (*known.champions, *own.champions)}
-            )
+            own = replace(known, champions=(*known.champions, *own.champions))
 
         by_key[own.key] = own
 
@@ -156,7 +157,7 @@ def wearers(account: Account) -> list[Wearer]:
 
 def wearer_type(wearer: Wearer, account: Account) -> ChampionType | None:
     """Its exception if it has one, else what its formulas give."""
-    match OVERRIDES.get((wearer.champion.name, wearer.form_number)):
+    match OVERRIDES.get(wearer.key()):
         case Skip():
             return None
 
@@ -208,14 +209,16 @@ def normalised(pull: dict[Stat, float]) -> dict[Stat, float]:
 def formula_pull(formula: str, base: dict[Stat, float]) -> dict[Stat, float]:
     """How much one roll of each stat the formula reads adds to it; {} if it can't be read."""
     stats = {stat: base.get(stat, 0) * GEARED for stat in BODY} | TYPICAL
-    rolls = {stat: base.get(stat, 0) * BODY_ROLL for stat in BODY} | ROLL
+    # An average roll: a % one of base for ATK/HP/DEF, a flat one for the rest.
+    rolls = {stat: base.get(stat, 0) * ROLL_6[(stat, False)] for stat in BODY}
+    rolls |= {stat: ROLL_6[(stat, True)] for stat in TYPICAL}
 
     if (now := evaluate(formula, stats)) is None:
         return {}
 
     pull = {}
 
-    for stat in {TOKENS[t] for t in re.findall(r"[A-Z_]+", formula) if t in TOKENS}:
+    for stat in {STAT_NAMES[t] for t in re.findall(r"[A-Z_]+", formula) if t in STAT_NAMES}:
         rolled = evaluate(formula, {**stats, stat: stats[stat] + rolls[stat]})
         if rolled is not None and rolled > now:
             pull[stat] = rolled - now
@@ -252,7 +255,7 @@ def evaluate(formula: str, stats: dict[Stat, float]) -> float | None:
         lambda m: (
             m.group(0)
             if m.group(0) in ("not", "or", "and")
-            else str(stats.get(TOKENS[m.group(0)], 0) if m.group(0) in TOKENS else 0)
+            else str(stats.get(STAT_NAMES[m.group(0)], 0) if m.group(0) in STAT_NAMES else 0)
         ),
         expression,
     )
@@ -304,7 +307,7 @@ def support_type(wearer: Wearer, pull: dict[Stat, float]) -> ChampionType | None
     if leading in (Stat.HP, Stat.DEF):
         return None
 
-    weights = dict(DEFAULT_TYPE_WEIGHTS[TypeKey.SUPPORT])
+    weights = dict(STANDARD_TYPES[TypeKey.SUPPORT].weights)
 
     for stat, share in pull.items():
         if share >= MINOR:

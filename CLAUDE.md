@@ -7,9 +7,12 @@ its upload. Game tables come from the game's own data.
 
 ## Layout
 
+- `data/` (gitignored): everything that isn't code. `captures/` (the capture), `game/` (the
+  game's tables), `state/` (the store), `cache/` (the decoder's hero-type list);
+  `optimiser/paths.py` names them. `schema/` (tracked) stays at the top.
 - `capture/hh_capture.py` + `run-proxy.sh`: mitmproxy tees the HH extractor's upload
   (`POST /api/Account/v2`, MessagePack + LZ4Block `RaidData`). `decoder/` (C#, references HH's
-  DLLs) writes `captures/latest/{account,champions,artifacts,set_ids}.json`.
+  DLLs) writes `data/captures/latest/{account,champions,artifacts,set_ids}.json`.
 - In game: the same addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
   `EquipArtifacts`) and `/preview` (`{"account_id", "hero_id", "artifact_ids"}`, `PreviewBuild`,
   the game's build preview: nothing changes, no sync follows). It injects the SignalR
@@ -22,28 +25,30 @@ its upload. Game tables come from the game's own data.
 - `update-static.sh`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
-  IL2CPP dump, `tools/gen_schema.py`) into `static/{sets,hero_types,bonuses,skills,glyphs,gear}.json`.
+  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear}.json`.
 - `tools/oracle_request.py` / `tools/oracle_import.py`: base stats via the raider oracle
-  (below) into `static/{base_stats_6_60,level_curve}.json`.
+  (below) into `data/game/{base_stats_6_60,level_curve}.json`.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
   (UnityPy) into `webui/static/assets/`.
-- `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `labels`, `cli`).
-- `optimiser/store.py`: user state the capture doesn't hold, in SQLite at `state/optimiser.sqlite`
+- `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
+  `labels`), `paths` (where the data lives) and `settings` (the store's rows as the model's
+  types: the only model module besides `store` that touches the file).
+- `optimiser/store.py`: user state the capture doesn't hold, in SQLite at `data/state/optimiser.sqlite`
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list. A solve's gear pool
   (`AnyGear | UpToLock(level) | Unequipped`) decides whose worn gear it may take; the
   champion's own gear is always allowed.
   Also what solves assume (account-wide, `/assumptions` page; `optimiser/assume.py`): flags for
   the champion at their rank's top level, gear at +16 (main stat only) and ascended gear fully
-  ascended (`planned_*` fields; `static/gear.json` tables, checked exact against every piece),
+  ascended (`planned_*` fields; `data/game/gear.json` tables, checked exact against every piece),
   and glyphs to assume (a grade per kind): `optimiser/glyphs.py` gives solves a copy of the account whose substats of those kinds carry the grade's top roll
   (`StatLine.planned_glyph`), capped below 6* at the best glyph of the piece's rank, where it
   beats the real glyph; current stats use the real gear. Only stats the request wants more of
   are glyphed (`solve.directions` > 0: minimums, ranked stats, the damage skill's stats + C.DMG).
   Also each champion's run history: the submitted form and the outcome view
-  (`dataclasses.asdict` JSON, rebuilt by `service.revive`; a run whose shape no longer fits
+  (`dataclasses.asdict` JSON, rebuilt by `service.runs.revive`; a run whose shape no longer fits
   shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
 - Accessories (`/accessories`, tabs in the workflow's order: Swaps · Roll · Rework · Clean up,
-  then Weights). Only unequipped gear takes
+  then Weights; `optimiser/accessories/`, which doesn't use the solver). Only unequipped gear takes
   inventory space (2200 for accessories); overflow waits in the mailbox (the capture's
   `InboxItems` "Overflow" artifacts, `Account.mailbox`).
   - `roles.py`: champion types (ATK/HP/DEF damage, bomber/poisoner, support: per-stat weights,
@@ -56,11 +61,11 @@ its upload. Game tables come from the game's own data.
     form counts as a champion of its own (`Tables.hero_forms`). Exceptions go in
     `scaling.OVERRIDES` (`Skip` / `Weigh`, by champion name and form); the
     `champion-exceptions` skill finds candidates with `just exceptions`
-    (`optimiser/scaling_report.py`).
+    (`optimiser/accessories/scaling_report.py`).
   - `potential.py`: every way a piece can turn out (upgrades at +4/8/12/16 add a substat until
     four, then roll one; a rework keeps each line's roll count, set and faction and re-picks
     main stat and substats; once only: `RerollsCount`), scored in average 6★ rolls, quantile 75.
-  - `accessories.py`: each piece's value: max(+16, rework) potential × shortage factor (good
+  - `assess.py`: each piece's value: max(+16, rework) potential × shortage factor (good
     pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's meta tier
     (`roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint 1.15; set-less 0.6).
   - `cleanup.py`: inventory + mailbox planned together; the lowest values go until
@@ -72,8 +77,10 @@ its upload. Game tables come from the game's own data.
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
-- `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service.py` is framework-free (frozen
-  dataclass view models, ready to serve as JSON if the UI moves to Vue); `forms.py` is the
+- `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service/` is framework-free (frozen
+  dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
+  (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
+  cached capture, locks) and `views` (champion rows, piece names and art); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.
   Colour palettes (Pico's default and Hana, from `~/repo/demeter`'s `palettes.css`) live in
   `static/palettes.css`: the nav's switcher (`palette.js`) sets `<html data-palette>` and a
@@ -81,13 +88,12 @@ its upload. Game tables come from the game's own data.
 
 ## Commands
 
-The `justfile` wraps these (`just` lists recipes: `proxy`, `static`, `opt`, `web`,
+The `justfile` wraps these (`just` lists recipes: `proxy`, `static`, `web`,
 `web-restart`, `assets`, `check`, `schema`, `oracle-request`, `oracle-import`, …).
 
 ```
 ./run-proxy.sh                                   # capture (extractor + game running)
 ./update-static.sh                               # after a game update
-uv run python -m optimiser "Name" --rank HP,DEF --min SPD=200 --set Lethal=4 --builds 3
 uv run python -m webui                           # http://127.0.0.1:8000
 uv run --group assets python -I tools/extract_assets.py
 uv run --group dev black optimiser webui && uv run --group dev ruff check optimiser webui

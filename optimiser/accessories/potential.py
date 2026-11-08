@@ -1,7 +1,7 @@
 """
 potential.py - what an accessory could become: every way its remaining upgrades can land
 and, if it hasn't been reworked, every way a rework can re-pick it, each scored against the
-champion types it could be for (`optimiser.roles`). A piece's potential is a quantile of
+champion types it could be for (`roles`). A piece's potential is a quantile of
 those scores, so concentrated rolls (a triple roll anywhere) count for their upside.
 
 Scores are in average 6★ rolls: each stat's value (flat and % together, flat as a share of a
@@ -18,9 +18,11 @@ is, alike among what the slot can roll.
 - `Scorer`, `make_scorer`: the types, as scoring needs them
 - `Scores`, `Potential`: a piece's scores
 - `assess`: a piece's potential
+- `Line`, `Outcomes`, `ReworkBase`, `Scored`: what the outcomes are worked out from, and are
 - `natural`, `reworked` (`count_chances`, `rework_outcomes`): its outcomes, and their scores
   (`score_outcomes`, `quantiles`)
-- `roll_units`, `line_units`, `main_units`, `upgrades_left`: what they share
+- `roll_size`, `one_roll`, `main_line`, `roll_units`, `line_units`, `main_units`,
+  `upgrades_left`: what they share
 """
 
 from dataclasses import dataclass
@@ -30,8 +32,8 @@ from math import comb, factorial
 
 import numpy as np
 
+from optimiser.accessories.roles import ChampionType, Kind, types_for
 from optimiser.account import Artifact, GearLine, GearTables, Slot, Stat
-from optimiser.roles import ChampionType, Kind, types_for
 
 ACCESSORIES = (Slot.RING, Slot.AMULET, Slot.BANNER)
 MAIN_STATS = {
@@ -124,12 +126,14 @@ class Potential:
 
 def assess(artifact: Artifact, scorer: Scorer) -> Potential:
     lines = tuple(
-        (line.stat, line.absolute, line_units(line.stat, line.absolute, line.value + line.glyph))
+        Line(
+            line.stat, line.absolute, line_units(line.stat, line.absolute, line.value + line.glyph)
+        )
         for line in artifact.substats
     )
     main = artifact.primary.stat or Stat.HP
     allowed = types_for(artifact.set_id, artifact.slot, main, artifact.faction, scorer.types)
-    roll = RANK_ROLL.get(artifact.rank, artifact.rank / 6)
+    roll = roll_size(artifact.rank)
     main_rolls = main_units(scorer.gear, artifact.slot, main, artifact.rank)
 
     def natural_to(level: int) -> Scores:
@@ -144,15 +148,8 @@ def assess(artifact: Artifact, scorer: Scorer) -> Potential:
         rolled_to = max(artifact.level, ROLL_TO)
         chances = count_chances(counts, upgrades_left(artifact.level, rolled_to))
         upgrades = upgrades_left(rolled_to, UPGRADE_LEVELS[-1])
-        rework = reworked(
-            artifact.slot,
-            artifact.rank,
-            artifact.set_id,
-            artifact.faction,
-            chances,
-            upgrades,
-            scorer,
-        )
+        base = ReworkBase(artifact.slot, artifact.rank, artifact.set_id, artifact.faction)
+        rework = reworked(base, chances, upgrades, scorer)
 
     return Potential(
         now=natural_to(artifact.level),
@@ -162,39 +159,55 @@ def assess(artifact: Artifact, scorer: Scorer) -> Potential:
     )
 
 
-type Line = tuple[Stat | None, bool, float]  # stat (None: damage dealt/taken), flat, units
+@dataclass(frozen=True)
+class Line:
+    """A substat: `stat` None for damage dealt/taken; `units` its value in average rolls."""
+
+    stat: Stat | None
+    absolute: bool
+    units: float
+
+
+@dataclass(frozen=True)
+class Outcomes:
+    """Ways a piece can turn out: each one's chance, and its stat totals (a row per outcome,
+    a column per stat)."""
+
+    chances: np.ndarray
+    totals: np.ndarray
 
 
 def natural(
     slot: Slot, main: Stat, lines: tuple[Line, ...], upgrades: int, roll: float
-) -> list[tuple[float, np.ndarray]]:
-    """(probability, stat totals) for each way the upgrades can land. New substats come
-    first, any combination alike; the rest spread over the four lines multinomially."""
-    held = {(stat, absolute) for stat, absolute, _ in lines}
-    main_line = (main, main is not Stat.CD)
-    candidates = [c for c in SUBSTATS[slot] if c not in held and c != main_line]
+) -> Outcomes:
+    """Each way the upgrades can land. New substats come first, any combination alike; the
+    rest spread over the four lines multinomially."""
+    held = {(line.stat, line.absolute) for line in lines}
+    candidates = [c for c in SUBSTATS[slot] if c not in held and c != main_line(main)]
     new_count = min(upgrades, MAX_SUBSTATS - len(lines), len(candidates))
     boosts = upgrades - new_count
-    outcomes = []
+    chances: list[float] = []
+    totals_by_outcome: list[np.ndarray] = []
 
     for added in combinations(candidates, new_count):
-        all_lines = [*lines, *((stat, absolute, 0.0) for stat, absolute in added)]
+        all_lines = [*lines, *(Line(stat, absolute, 0.0) for stat, absolute in added)]
         added_weight = 1 / comb(len(candidates), new_count)
 
         for spread in spreads(boosts, len(all_lines)):
             totals = np.zeros(len(STATS))
 
-            for (stat, absolute, units), extra in zip(all_lines, spread, strict=True):
-                if stat is None:
+            for line, extra in zip(all_lines, spread, strict=True):
+                if line.stat is None:
                     continue
 
-                rolls_added = extra + (1 if (stat, absolute) in added else 0)
-                one_roll = roll_units(stat, absolute, ROLL_6.get((stat, absolute), 0)) * roll
-                totals[STATS.index(stat)] += units + rolls_added * one_roll
+                rolls_added = extra + (1 if (line.stat, line.absolute) in added else 0)
+                one = one_roll(line.stat, line.absolute, roll)
+                totals[STATS.index(line.stat)] += line.units + rolls_added * one
 
-            outcomes.append((added_weight * multinomial(spread), totals))
+            chances.append(added_weight * multinomial(spread))
+            totals_by_outcome.append(totals)
 
-    return outcomes
+    return Outcomes(np.array(chances), np.array(totals_by_outcome))
 
 
 type CountChances = tuple[tuple[tuple[int, ...], float], ...]  # (roll counts, chance)
@@ -214,49 +227,51 @@ def count_chances(counts: tuple[int, ...], upgrades: int) -> CountChances:
     return tuple(sorted(chances.items()))
 
 
+@dataclass(frozen=True)
+class ReworkBase:
+    """What a rework keeps of a piece, and so all its outcomes depend on (hashable: reworks
+    are cached)."""
+
+    slot: Slot
+    rank: int
+    set_id: int
+    faction: str | None
+
+
+@dataclass(frozen=True)
+class Scored:
+    """Ways a piece can turn out: each one's chance, and its score for each type (a row per
+    outcome, a column per type)."""
+
+    chances: np.ndarray
+    scores: np.ndarray
+
+
 @lru_cache(maxsize=4096)
-def reworked(
-    slot: Slot,
-    rank: int,
-    set_id: int,
-    faction: str | None,
-    chances: CountChances,
-    upgrades: int,
-    scorer: Scorer,
-) -> Scores:
+def reworked(base: ReworkBase, chances: CountChances, upgrades: int, scorer: Scorer) -> Scores:
     """A rework's scores, over the roll counts the piece may have when it's reworked (a
     piece below +12 is rolled to +12 first)."""
-    outcomes = [
-        rework_outcomes(slot, rank, set_id, faction, counts, upgrades, scorer)
-        for counts, _ in chances
-    ]
+    outcomes = [rework_outcomes(base, counts, upgrades, scorer) for counts, _ in chances]
     weights = np.concatenate(
-        [w * chance for (w, _), (_, chance) in zip(outcomes, chances, strict=True)]
+        [o.chances * chance for o, (_, chance) in zip(outcomes, chances, strict=True)]
     )
-    return quantiles(weights, np.concatenate([s for _, s in outcomes]), scorer)
+    return quantiles(weights, np.concatenate([o.scores for o in outcomes]), scorer)
 
 
 @lru_cache(maxsize=4096)
 def rework_outcomes(
-    slot: Slot,
-    rank: int,
-    set_id: int,
-    faction: str | None,
-    counts: tuple[int, ...],
-    upgrades: int,
-    scorer: Scorer,
-) -> tuple[np.ndarray, np.ndarray]:
-    """(chances, (outcome, type) scores) of reworking lines holding `counts` rolls: a main
-    stat alike among the slot's, then the lines' stats alike among what that main leaves
-    (as permutations, since lines hold different roll counts). Upgrades still to come add
-    their expected rolls."""
-    roll = RANK_ROLL.get(rank, rank / 6)
-    per_main = []
+    base: ReworkBase, counts: tuple[int, ...], upgrades: int, scorer: Scorer
+) -> Scored:
+    """Reworking lines holding `counts` rolls: a main stat alike among the slot's, then the
+    lines' stats alike among what that main leaves (as permutations, since lines hold
+    different roll counts). Upgrades still to come add their expected rolls."""
+    slot, rank = base.slot, base.rank
+    roll = roll_size(rank)
+    per_main: list[Scored] = []
 
     for main in MAIN_STATS[slot]:
-        main_line = (main, main is not Stat.CD)
-        candidates = [c for c in SUBSTATS[slot] if c != main_line]
-        one_roll = np.array([roll_units(s, a, ROLL_6.get((s, a), 0)) * roll for s, a in candidates])
+        candidates = [c for c in SUBSTATS[slot] if c != main_line(main)]
+        rolls_of = np.array([one_roll(s, a, roll) for s, a in candidates])
         stat_index = np.array([STATS.index(s) for s, _ in candidates])
         picks = np.array(list(permutations(range(len(candidates)), len(counts))))
         rolls = np.array(counts) + upgrades / max(len(counts), 1)
@@ -267,32 +282,34 @@ def rework_outcomes(
             np.add.at(
                 totals,
                 (np.arange(len(picks)), stat_index[picks[:, column]]),
-                one_roll[picks[:, column]] * count,
+                rolls_of[picks[:, column]] * count,
             )
 
         probability = 1 / len(MAIN_STATS[slot]) / len(picks)
         main_rolls = main_units(scorer.gear, slot, main, rank)
-        allowed = types_for(set_id, slot, main, faction, scorer.types)
+        allowed = types_for(base.set_id, slot, main, base.faction, scorer.types)
         per_main.append(
-            (
+            Scored(
                 np.full(len(picks), probability),
                 score_matrix(totals, main, main_rolls, allowed, scorer),
             )
         )
 
-    return np.concatenate([w for w, _ in per_main]), np.concatenate([s for _, s in per_main])
+    return Scored(
+        np.concatenate([s.chances for s in per_main]),
+        np.concatenate([s.scores for s in per_main]),
+    )
 
 
 def score_outcomes(
-    outcomes: list[tuple[float, np.ndarray]],
+    outcomes: Outcomes,
     main: Stat,
     main_rolls: float,
     allowed: tuple[str, ...],
     scorer: Scorer,
 ) -> Scores:
-    weights = np.array([p for p, _ in outcomes])
-    totals = np.array([t for _, t in outcomes])
-    return quantiles(weights, score_matrix(totals, main, main_rolls, allowed, scorer), scorer)
+    scores = score_matrix(outcomes.totals, main, main_rolls, allowed, scorer)
+    return quantiles(outcomes.chances, scores, scorer)
 
 
 def score_matrix(
@@ -355,6 +372,21 @@ def multinomial(spread: tuple[int, ...]) -> float:
     return ways / len(spread) ** sum(spread)
 
 
+def roll_size(rank: int) -> float:
+    """A roll's size against a 6★ one."""
+    return RANK_ROLL.get(rank, rank / 6)
+
+
+def one_roll(stat: Stat, absolute: bool, size: float) -> float:
+    """An average roll of a rank whose rolls are `size` of 6★ ones, in average 6★ rolls."""
+    return roll_units(stat, absolute, ROLL_6.get((stat, absolute), 0)) * size
+
+
+def main_line(main: Stat) -> tuple[Stat, bool]:
+    """A main stat as a line: flat, but for C.DMG (always a %)."""
+    return main, main is not Stat.CD
+
+
 def roll_units(stat: Stat, absolute: bool, value: float) -> float:
     """`value` in average 6★ rolls of the stat; flat HP/ATK/DEF as a share of base, so it
     counts with the % line."""
@@ -370,7 +402,7 @@ def line_units(stat: Stat | None, absolute: bool, value: float) -> float:
 
 def main_units(gear: GearTables, slot: Slot, main: Stat, rank: int) -> float:
     """The main stat at +16 in rolls: `MAIN_ROLLS` at 6★, less at lower ranks."""
-    values = gear.primary.get(GearLine(slot, main, main is not Stat.CD), {})
+    values = gear.primary.get(GearLine(slot, *main_line(main)), {})
 
     if 6 not in values or rank not in values:
         return MAIN_ROLLS * rank / 6

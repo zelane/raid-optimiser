@@ -1,11 +1,11 @@
 """
 scaling_report.py - which 6★ champions (each form apart) may need an exception in
-`optimiser.scaling.OVERRIDES`: what each pulls on, the type it gets, and the flags worth a
+`scaling.OVERRIDES`: what each pulls on, the type it gets, and the flags worth a
 look. The champion-exceptions skill (`.claude/skills/champion-exceptions`) works from it.
 
-    uv run python -m optimiser.scaling_report            # flagged forms only
-    uv run python -m optimiser.scaling_report --all      # every form
-    uv run python -m optimiser.scaling_report --name Kurosa
+    uv run python -m optimiser.accessories.scaling_report            # flagged forms only
+    uv run python -m optimiser.accessories.scaling_report --all      # every form
+    uv run python -m optimiser.accessories.scaling_report --name Kurosa
 
 - `Flag`, `FLAG_NOTES`, `Row`: a form, as the report shows it
 - `report`: the rows
@@ -17,21 +17,21 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
-from optimiser.account import Account, load_account
-from optimiser.labels import STAT_LABELS
-from optimiser.scaling import (
+from optimiser.accessories.roles import ChampionType
+from optimiser.accessories.scaling import (
     OVERRIDES,
-    TOKENS,
+    STAT_NAMES,
     Wearer,
     evaluate,
     wearer_pull,
     wearer_type,
     wearers,
 )
+from optimiser.account import Account, Stat, load_account
+from optimiser.labels import STAT_LABELS
+from optimiser.paths import CAPTURES, GAME, SCHEMA
 
-ROOT = Path(__file__).resolve().parents[1]
 UTILITY = ("ACC", "RES", "SPD")
 TARGET_TERMS = re.compile(r"TRG_|REL_|target|Counter|Count\(|relic|CALCULATED|HP_PERC")
 
@@ -71,11 +71,11 @@ class Row:
 
 def report(account: Account) -> list[Row]:
     forms = wearers(account)
-    types = {(w.champion.name, w.form_number): wearer_type(w, account) for w in forms}
+    types = {w.key(): wearer_type(w, account) for w in forms}
     rows = []
 
     for wearer in forms:
-        own = types[(wearer.champion.name, wearer.form_number)]
+        own = types[wearer.key()]
         pull = wearer_pull(wearer, account)
         rows.append(
             Row(
@@ -95,9 +95,15 @@ def report(account: Account) -> list[Row]:
     return rows
 
 
-def flags_for(wearer: Wearer, account: Account, support, has_own, types) -> tuple[Flag, ...]:
+def flags_for(
+    wearer: Wearer,
+    account: Account,
+    support: dict[Stat, float],
+    has_own: bool,
+    types: dict[tuple[str, int], ChampionType | None],
+) -> tuple[Flag, ...]:
     formulas = [formula for _, formula in formulas_of(wearer, account)]
-    stats = {stat: 1000.0 for stat in TOKENS.values()}
+    stats = {stat: 1000.0 for stat in STAT_NAMES.values()}
     tokens = {token for formula in formulas for token in re.findall(r"[A-Z_]+", formula)}
     siblings = {
         own.key if own else None for (name, _), own in types.items() if name == wearer.champion.name
@@ -109,7 +115,7 @@ def flags_for(wearer: Wearer, account: Account, support, has_own, types) -> tupl
         (Flag.NO_SUPPORT_FORMULA, wearer.form.role == "Support" and not support),
         (Flag.FORMS_DIFFER, wearer.forms > 1 and len(siblings) > 1),
         (Flag.OWN_TYPE, has_own),
-        (Flag.OVERRIDDEN, (wearer.champion.name, wearer.form_number) in OVERRIDES),
+        (Flag.OVERRIDDEN, wearer.key() in OVERRIDES),
     )
     return tuple(flag for flag, applies in checks if applies)
 
@@ -124,7 +130,7 @@ def formulas_of(wearer: Wearer, account: Account) -> Iterator[tuple[str, str]]:
         yield from ((f"{skill.name}, {e.kind}", e.formula) for e in skill.scaling)
 
 
-def describe_pull(pull) -> str:
+def describe_pull(pull: dict[Stat, float]) -> str:
     ordered = sorted(pull.items(), key=lambda item: -item[1])
     return ", ".join(f"{STAT_LABELS[stat]} {share:.2g}" for stat, share in ordered) or "-"
 
@@ -144,11 +150,14 @@ def main() -> None:
     parser.add_argument("--name", help="only champions whose name contains this")
     args = parser.parse_args()
 
-    account = load_account(
-        ROOT / "captures" / "latest", ROOT / "static", ROOT / "schema" / "schema.json"
-    )
-    interesting = {Flag.UNREADABLE, Flag.UTILITY, Flag.FORMS_DIFFER, Flag.OWN_TYPE}
-    interesting |= {Flag.OVERRIDDEN}
+    account = load_account(CAPTURES, GAME, SCHEMA)
+    interesting = {
+        Flag.UNREADABLE,
+        Flag.UTILITY,
+        Flag.FORMS_DIFFER,
+        Flag.OWN_TYPE,
+        Flag.OVERRIDDEN,
+    }
 
     for row in report(account):
         if args.name and args.name.lower() not in row.name.lower():

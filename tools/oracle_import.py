@@ -1,6 +1,6 @@
 """Turn raider's base-stat oracle output into tables for the optimiser.
 
-    python3 -I tools/oracle_import.py /tmp/raider-oracle.json static/hero_types.json static/
+    python3 -I tools/oracle_import.py /tmp/raider-oracle.json data/game/hero_types.json data/game/
 
 Writes:
   base_stats_6_60.json  {type_id: [stats per form]} exact in-game base stats at 6* L60

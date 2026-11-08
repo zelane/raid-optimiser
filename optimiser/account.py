@@ -1,9 +1,10 @@
 """
-account.py - the account (from the HH capture) and the game's tables (from static/), parsed
+account.py - the account (from the HH capture) and the game's tables (`paths.GAME`), parsed
 once at the boundary into the shapes the stat model and solver use.
 
 - `Stat`, `Stats`, `Bonus`: stats, and the bonuses that raise them
 - `Slot`, `ARMOUR`, `StatLine`, `Artifact`, `Champion`: what can be worn, and by whom
+- `LOCK_LEVELS`, `Locks`: champion locks, which keep gear on its champion
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
@@ -12,6 +13,7 @@ once at the boundary into the shapes the stat model and solver use.
 - `Account`: everything a solve needs
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
 - `load_account`: the loader
+- `worn_gear`: what a champion wears
 - `arena_league`, `parse_tables`, `parse_sets` (`parse_ignore`), `parse_skills`,
   `parse_relics` (`relic_stats`), `parse_forms`, `parse_glyphs`, `parse_gear` (`by_line`),
   `great_hall_by_affinity`, `parse_champion`, `parse_artifact` (`parse_line`): its steps
@@ -19,6 +21,7 @@ once at the boundary into the shapes the stat model and solver use.
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum
 from pathlib import Path
@@ -105,12 +108,11 @@ class Artifact:
     faction: str | None
     reworked: bool = False  # its substats re-picked in the Forge, which only happens once
     variant: str = "Normal"  # the game's; "Corrupted" pieces have unusual stats and a border
+    planned_level: int | None = None  # assumed levelled to this (main stat only)
+    planned_ascend_level: int | None = None  # assumed ascended to this
 
     def special(self) -> bool:
         return self.variant != "Normal"
-
-    planned_level: int | None = None  # assumed levelled to this (main stat only)
-    planned_ascend_level: int | None = None  # assumed ascended to this
 
     def lines(self) -> tuple[StatLine, ...]:
         return (self.primary, *self.substats, *([self.ascension] if self.ascension else []))
@@ -134,6 +136,18 @@ class Champion:
     relics: tuple[Bonus, ...]  # the stats of the relics it wears
     great_hall: tuple[Bonus, ...]  # the account's Great Hall, for the champion's affinity
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
+
+    @property
+    def ascension(self) -> int:
+        """0 to 6: the type id's last digit (each ascension is a type of its own)."""
+        return self.type_id % 10
+
+
+LOCK_LEVELS = range(1, 6)  # 5 the strongest
+
+# Champion id -> lock level. A lock keeps a champion's gear out of solves that only allow gear
+# from champions locked below some level; unlocked champions are absent (0).
+type Locks = Mapping[int, int]
 
 
 @dataclass(frozen=True)
@@ -271,10 +285,14 @@ class Tables:
     lore_of_steel: LoreOfSteel
     sets: dict[int, ArtifactSet]
     skills: dict[int, Skill]
-    hero_skills: dict[int, tuple[int, ...]]  # hero type id -> its skill ids (first form)
     hero_forms: dict[int, tuple[HeroForm, ...]]  # hero type id -> every form, first first
     glyphs: dict[GlyphKind, dict[GlyphGrade, float]]  # each grade's top roll, weakest first
     gear: GearTables
+
+    def skills_of(self, type_id: int) -> tuple[int, ...]:
+        """The hero type's skill ids, in its first form."""
+        forms = self.hero_forms.get(type_id, ())
+        return forms[0].skills if forms else ()
 
 
 @dataclass(frozen=True)
@@ -331,6 +349,12 @@ def load_account(captures: Path, static: Path, schema: Path) -> Account:
         tables=tables,
         mailbox=mailbox,
     )
+
+
+def worn_gear(account: Account, champion: Champion) -> list[Artifact]:
+    """What the champion wears now."""
+    worn = set(champion.artifact_ids)
+    return [artifact for artifact in account.artifacts if artifact.id in worn]
 
 
 def great_hall_by_affinity(
@@ -528,7 +552,6 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         lore_of_steel=LoreOfSteel(*lore),
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),
         skills=parse_skills(static),
-        hero_skills={t["id"]: tuple(t["forms"][0]["skills"]) for t in hero_types if t["forms"]},
         hero_forms={
             t["id"]: parse_forms(t["forms"], base_by_form.get(t["id"], [])) for t in hero_types
         },

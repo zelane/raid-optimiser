@@ -12,17 +12,18 @@ concave, held under tangent lines; the third depends only on the DEF the sets ig
 comes in 5 % steps, so it's exact with a binary per step.
 
 - `AnyGear`, `Unequipped`, `UpToLock`, `Pool`, `Goal`, `Request`: what's asked
-- `Build`, `Shortfall`: the outcomes
+- `Build`, `SetsRuleOut`, `Shortfall`: the outcomes
 - `find_builds`: the workflow
 - `frame` (`wearable`, `prune`, `directions`), `check_sets`, `best_build`,
-  `explain_shortfall`: its steps, in the order it calls them
-- `Problem`, `Milp`, `formulate`, `set_terms`, `add_limits`, `Ranked`, `ranked`, `hold`,
-  `maximise`: the model the steps share
-- `log_damage`, `reach`, `spread`, `log_under_tangents`, `log_defence_multiplier`: the damage
-  goal
+  `explain_shortfall` (`best_alone`): its steps, in the order it calls them
+- `Problem`, `Milp`, `Expression`, `SetTerms`, `formulate`, `set_terms`, `add_limits`,
+  `Ranked`, `ranked`, `hold`, `maximise`: the model the steps share
+- `log_damage`, `reach`, `geometric_points`, `even_points`, `log_under_tangents`,
+  `log_defence_multiplier`: the damage goal
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import highspy
@@ -34,14 +35,14 @@ from optimiser.account import (
     ArtifactSet,
     Champion,
     FixedSet,
-    IgnoreDefence,
+    Locks,
     Slot,
     Stat,
     Stats,
     Tables,
     VariableSet,
 )
-from optimiser.damage import DamageGoal, LinearFormula, defence_multiplier
+from optimiser.damage import ActiveIgnore, DamageGoal, LinearFormula, applies, defence_multiplier
 from optimiser.stats import (
     artifact_stats,
     base_stats,
@@ -50,7 +51,6 @@ from optimiser.stats import (
     set_multiplier,
     set_stats,
 )
-from optimiser.store import Locks
 
 MAX_PIECES = 9
 # Ranking past these is wasted: crit rate stops at 100 %.
@@ -102,6 +102,10 @@ class Request:
     pool: Pool
     above_level: int  # only pieces enhanced past this level (8: +9 and up)
 
+    def damage_goal(self) -> DamageGoal | None:
+        """The skill damage ranked, if any is."""
+        return next((goal for goal in self.ranking if isinstance(goal, DamageGoal)), None)
+
 
 @dataclass(frozen=True)
 class Build:
@@ -110,11 +114,17 @@ class Build:
 
 
 @dataclass(frozen=True)
-class Shortfall:
-    """No build meets the request. `reason` when the sets alone rule it out; otherwise the
-    best each minimum can reach and the lowest each maximum can, with the sets asked."""
+class SetsRuleOut:
+    """No build meets the request: the set minimums alone rule it out."""
 
-    reason: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class Shortfall:
+    """No build meets the request's limits: the best each minimum can reach and the lowest
+    each maximum can, each on its own with the sets asked."""
+
     highest: dict[Stat, float]
     lowest: dict[Stat, float]
 
@@ -133,14 +143,14 @@ class Problem:
     set_multiplier: float
 
 
-def find_builds(account: Account, request: Request) -> list[Build] | Shortfall:
+def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut | Shortfall:
     """Up to `request.builds` builds, best first, no two alike."""
     # 1. What the champion can wear, and what each piece adds.
     problem = frame(account, request)
 
     # 2. Too few pieces of a required set: no need to solve.
     if reason := check_sets(problem, request):
-        return Shortfall(reason, {}, {})
+        return SetsRuleOut(reason)
 
     # 3. The best build, then the best unlike any found so far, until enough or none left.
     builds: list[Build] = []
@@ -280,26 +290,35 @@ def best_build(problem: Problem, request: Request, excluded: list[Build]) -> Bui
     return Build(picked, build_stats(problem.champion, picked, problem.tables))
 
 
-def explain_shortfall(problem: Problem, request: Request) -> Shortfall:
+def explain_shortfall(problem: Problem, request: Request) -> SetsRuleOut | Shortfall:
     """Each limited stat on its own, with only the set minimums asked."""
     highest: dict[Stat, float] = {}
     lowest: dict[Stat, float] = {}
 
     for stat in request.minimums:
-        milp = formulate(problem, request.set_minimums, [])
-        if (best := maximise(milp, milp.stats[stat])) is None:
-            return Shortfall("the set minimums can't be met together", {}, {})
+        if (best := best_alone(problem, request, stat, way=1)) is None:
+            return SetsRuleOut("the set minimums can't be met together")
 
         highest[stat] = best
 
     for stat in request.maximums:
-        milp = formulate(problem, request.set_minimums, [])
-        if (best := maximise(milp, -milp.stats[stat])) is None:
-            return Shortfall("the set minimums can't be met together", {}, {})
+        if (best := best_alone(problem, request, stat, way=-1)) is None:
+            return SetsRuleOut("the set minimums can't be met together")
 
-        lowest[stat] = -best
+        lowest[stat] = best
 
-    return Shortfall(None, highest, lowest)
+    return Shortfall(highest, lowest)
+
+
+def best_alone(problem: Problem, request: Request, stat: Stat, way: int) -> float | None:
+    """The highest (`way` 1) or lowest (-1) the stat reaches with only the set minimums asked;
+    None if they can't be met."""
+    milp = formulate(problem, request.set_minimums, [])
+    best = maximise(milp, way * milp.stats[stat])
+    return None if best is None else way * best
+
+
+type Expression = highspy.highs_linear_expression | highspy.highs_var
 
 
 @dataclass(frozen=True)
@@ -310,8 +329,15 @@ class Milp:
     highs: highspy.Highs
     chosen: dict[int, highspy.highs_var]  # artifact id -> 1 if worn
     stats: dict[Stat, highspy.highs_linear_expression]
-    # Each set ignore-DEF passive, and how many times it's active (a count expression).
-    ignore: list[tuple[IgnoreDefence, highspy.highs_linear_expression]]
+    ignore: list[ActiveIgnore[Expression]]
+
+
+@dataclass(frozen=True)
+class SetTerms:
+    """What a set adds to the model: to each stat, and the ignore-DEF passives it turns on."""
+
+    stats: Sequence[tuple[Stat, Expression]]
+    ignore: Sequence[ActiveIgnore[Expression]]
 
 
 def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Build]) -> Milp:
@@ -319,7 +345,7 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
     highs.silent()
     chosen = {a.id: highs.addBinary() for a in problem.pieces}
     terms: dict[Stat, list] = {stat: [] for stat in Stat}
-    ignore: list = []
+    ignore: list[ActiveIgnore[Expression]] = []
 
     for slot in Slot:
         if in_slot := [chosen[a.id] for a in problem.pieces if a.slot == slot]:
@@ -337,10 +363,10 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
         if minimum := set_minimums.get(set_id):
             highs.addConstr(count >= minimum)
 
-        stat_terms, ignore_terms = set_terms(highs, artifact_set, count, problem)
-        ignore += ignore_terms
+        added = set_terms(highs, artifact_set, count, problem)
+        ignore += added.ignore
 
-        for stat, term in stat_terms:
+        for stat, term in added.stats:
             terms[stat].append(term)
 
     for build in excluded:
@@ -353,24 +379,23 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
 
 
 def set_terms(
-    highs: highspy.Highs, artifact_set: ArtifactSet, count, problem: Problem
-) -> tuple[list, list]:
-    """What the set adds, given the expression counting its pieces: (stat, expression) pairs,
-    and (ignore-DEF passive, times active) pairs. Piece-count variables are tied to `count`
-    exactly, so a stat maximum can't hide a bonus."""
+    highs: highspy.Highs, artifact_set: ArtifactSet, count: Expression, problem: Problem
+) -> SetTerms:
+    """What the set adds, given the expression counting its pieces. Piece-count variables are
+    tied to `count` exactly, so a stat maximum can't hide a bonus."""
     base, multiplier = problem.base, problem.set_multiplier
 
     match artifact_set:
         case FixedSet(pieces=pieces, ignore=ignore):
             per_set = set_stats(artifact_set, pieces, base, multiplier)
             if not any(per_set.values()) and not ignore:
-                return [], []
+                return SetTerms([], [])
 
             times = highs.addIntegral(lb=0, ub=MAX_PIECES // pieces)
             highs.addConstr(pieces * times <= count)
             highs.addConstr(pieces * times >= count - (pieces - 1))
             stat_terms = [(stat, amount * times) for stat, amount in per_set.items() if amount]
-            return stat_terms, [(source, times) for source in ignore]
+            return SetTerms(stat_terms, [ActiveIgnore(source, times) for source in ignore])
 
         case VariableSet(ignore_at=ignore_at):
             totals = {
@@ -378,7 +403,7 @@ def set_terms(
                 for pieces in range(1, MAX_PIECES + 1)
             }
             if not any(any(t.values()) for t in totals.values()) and not ignore_at:
-                return [], []
+                return SetTerms([], [])
 
             exactly = {pieces: highs.addBinary() for pieces in range(MAX_PIECES + 1)}
             highs.addConstr(highs.qsum(exactly.values()) == 1)
@@ -389,13 +414,13 @@ def set_terms(
                 for stat, amount in total.items()
                 if amount
             ]
-            ignore_terms = [
-                (source, exactly[pieces])
+            ignore_terms: list[ActiveIgnore[Expression]] = [
+                ActiveIgnore(source, exactly[pieces])
                 for pieces in range(1, MAX_PIECES + 1)
                 if (reached := [tier for tier in ignore_at if tier <= pieces])
                 for source in ignore_at[max(reached)]
             ]
-            return stat_terms, ignore_terms
+            return SetTerms(stat_terms, ignore_terms)
 
 
 def add_limits(milp: Milp, request: Request) -> None:
@@ -410,7 +435,7 @@ def add_limits(milp: Milp, request: Request) -> None:
 class Ranked:
     """A goal as the solver maximises it; `log` when that's the log of the goal."""
 
-    expression: highspy.highs_linear_expression
+    expression: Expression
     log: bool
 
 
@@ -444,9 +469,9 @@ def log_damage(milp: Milp, goal: DamageGoal, problem: Problem):
     low, high = reach(problem, goal.formula.value(problem.constant), gear_formula.value)
     crit_low, crit_high = reach(problem, problem.constant[Stat.CD], lambda s: s[Stat.CD])
 
-    log_formula = log_under_tangents(highs, formula, spread(max(low, 1.0), high, geometric=True))
+    log_formula = log_under_tangents(highs, formula, geometric_points(max(low, 1.0), high))
     log_crit = log_under_tangents(
-        highs, 1 + milp.stats[Stat.CD], spread(1 + crit_low, 1 + crit_high, geometric=False)
+        highs, 1 + milp.stats[Stat.CD], even_points(1 + crit_low, 1 + crit_high)
     )
     return log_formula + log_crit + log_defence_multiplier(milp, goal)
 
@@ -461,10 +486,13 @@ def reach(problem: Problem, gearless: float, adds) -> tuple[float, float]:
     return gearless, gearless + max(best_per_slot, 0) * SET_HEADROOM + 1
 
 
-def spread(low: float, high: float, geometric: bool) -> list[float]:
-    if geometric:
-        return [low * (high / low) ** (step / (TANGENTS - 1)) for step in range(TANGENTS)]
+def geometric_points(low: float, high: float) -> list[float]:
+    """`TANGENTS` points from `low` to `high`, each the same ratio past the last."""
+    return [low * (high / low) ** (step / (TANGENTS - 1)) for step in range(TANGENTS)]
 
+
+def even_points(low: float, high: float) -> list[float]:
+    """`TANGENTS` points from `low` to `high`, evenly apart."""
     return [low + (high - low) * step / (TANGENTS - 1) for step in range(TANGENTS)]
 
 
@@ -484,18 +512,18 @@ def log_defence_multiplier(milp: Milp, goal: DamageGoal):
     binary per step carries its exact value. Passives granted by several sets count once
     unless they stack per set."""
     highs = milp.highs
-    sources = [(source, times) for source, times in milp.ignore if goal.aoe or not source.aoe_only]
-    by_skill: dict[int, list] = {}
+    by_skill: dict[int, list[ActiveIgnore[Expression]]] = {}
 
-    for source, times in sources:
-        by_skill.setdefault(source.skill_id, []).append((source, times))
+    for passive in milp.ignore:
+        if applies(goal, passive.source):
+            by_skill.setdefault(passive.source.skill_id, []).append(passive)
 
     parts = []
     most = 0.0
 
     for group in by_skill.values():
-        source = group[0][0]
-        active = highs.qsum(times for _, times in group)
+        source = group[0].source
+        active = highs.qsum(passive.times for passive in group)
 
         if source.per_set:
             parts.append(source.value * active)

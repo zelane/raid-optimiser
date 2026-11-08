@@ -1,6 +1,6 @@
 """Write the request file for raider's base-stat oracle.
 
-    python3 -I tools/oracle_request.py static/hero_types.json /tmp/raider-oracle-request.txt
+    python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-request.txt
 
 Lines are "type_id grade level form". Requests every hero type at 6* L60 (each
 metamorph form), plus the full grade x level grid for one type per rarity so the

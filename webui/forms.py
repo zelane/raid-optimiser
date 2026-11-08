@@ -14,6 +14,7 @@ with `weight` for a champion type's weight, `target_free` for the spaces to leav
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
+- `GlyphPlan`, `FlagSetting`, `WeightSetting`: what the assumption and weight forms set
 - `parse_request`: the boundary
 - `parse_equip`: the equip button's pieces
 - `parse_lock`: the lock picker's level
@@ -30,11 +31,15 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from optimiser.accessories.cleanup import ACCESSORY_SPACE
+from optimiser.accessories.roles import TypeKey
 from optimiser.account import (
+    LOCK_LEVELS,
     Account,
     Champion,
     GlyphGrade,
     GlyphKind,
+    Locks,
     Stat,
     Stats,
     Tables,
@@ -43,21 +48,41 @@ from optimiser.assume import Flag
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.glyphs import parse_grade, parse_kind
 from optimiser.labels import PERCENT_STATS, STAT_LABELS, parse_pool
-from optimiser.roles import TypeKey
-from optimiser.solve import Goal, Request
-from optimiser.store import LOCK_LEVELS, Locks
+from optimiser.solve import MAX_PIECES, Goal, Request
 
-MAX_PIECES = 9  # one per slot
 DEFAULT_ENEMY_DEF = 6000
 DEFAULT_ABOVE_LEVEL = 8
 MAX_BUILDS = 10
 MAX_WEIGHT = 10
-MAX_TARGET_FREE = 2200
+MAX_TARGET_FREE = ACCESSORY_SPACE
 
 
 @dataclass(frozen=True)
 class FormErrors:
     messages: list[str]
+
+
+@dataclass(frozen=True)
+class GlyphPlan:
+    """A glyph kind, and the grade to assume for it (None: none)."""
+
+    kind: GlyphKind
+    grade: GlyphGrade | None
+
+
+@dataclass(frozen=True)
+class FlagSetting:
+    flag: Flag
+    on: bool
+
+
+@dataclass(frozen=True)
+class WeightSetting:
+    """A standard champion type's weight for a stat."""
+
+    key: TypeKey
+    stat: Stat
+    weight: float
 
 
 def parse_request(
@@ -126,10 +151,7 @@ def parse_lock(form: Mapping[str, str]) -> int | FormErrors:
     return int(text)
 
 
-def parse_glyph(
-    form: Mapping[str, str], tables: Tables
-) -> tuple[GlyphKind, GlyphGrade | None] | FormErrors:
-    """The grade is None when none is to be assumed."""
+def parse_glyph(form: Mapping[str, str], tables: Tables) -> GlyphPlan | FormErrors:
     kind = parse_kind(form.get("kind", ""))
 
     if kind is None or kind not in tables.glyphs:
@@ -137,25 +159,25 @@ def parse_glyph(
 
     text = form.get("grade", "")
     if not text:
-        return kind, None
+        return GlyphPlan(kind, None)
 
     grade = parse_grade(text)
     if grade is None or grade not in tables.glyphs[kind]:
         return FormErrors([f"no such glyph grade: {text}"])
 
-    return kind, grade
+    return GlyphPlan(kind, grade)
 
 
-def parse_flag(form: Mapping[str, str]) -> tuple[Flag, bool] | FormErrors:
+def parse_flag(form: Mapping[str, str]) -> FlagSetting | FormErrors:
     name = form.get("flag", "")
 
     if name not in Flag:
         return FormErrors([f"no such assumption: {name}"])
 
-    return Flag(name), "on" in form
+    return FlagSetting(Flag(name), "on" in form)
 
 
-def parse_weight(form: Mapping[str, str]) -> tuple[TypeKey, Stat, float] | FormErrors:
+def parse_weight(form: Mapping[str, str]) -> WeightSetting | FormErrors:
     match form.get("key", "").split(":"):
         case [type_name, stat] if type_name in TypeKey and stat in Stat:
             key, weighed = TypeKey(type_name), Stat(stat)
@@ -169,7 +191,7 @@ def parse_weight(form: Mapping[str, str]) -> tuple[TypeKey, Stat, float] | FormE
     if not errors and not 0 <= weight <= MAX_WEIGHT:
         errors.append(f"weights are 0 to {MAX_WEIGHT}")
 
-    return FormErrors(errors) if errors else (key, weighed, weight)
+    return FormErrors(errors) if errors else WeightSetting(key, weighed, weight)
 
 
 def parse_target_free(form: Mapping[str, str]) -> int | FormErrors:
@@ -230,8 +252,8 @@ def parse_sets(form: Mapping[str, str], account: Account, errors: list[str]) -> 
             continue
 
         pieces = parse_number(form, f"pieces_{number}", f"pieces in set row {row + 1}", errors)
-        if not 1 <= pieces <= 9:
-            errors.append(f"set row {row + 1}: pieces must be 1 to 9")
+        if not 1 <= pieces <= MAX_PIECES:
+            errors.append(f"set row {row + 1}: pieces must be 1 to {MAX_PIECES}")
 
         minimums[set_id] = int(pieces)
 
@@ -269,7 +291,7 @@ def parse_damage(
     skill_field = form.get("damage_skill", "")
     skill_id = int(skill_field) if skill_field.isdigit() else None
 
-    if skill_id not in account.tables.hero_skills.get(champion.type_id, ()):
+    if skill_id not in account.tables.skills_of(champion.type_id):
         errors.append("choose one of the champion's skills to rank damage by")
         return None
 
