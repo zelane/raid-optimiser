@@ -91,6 +91,7 @@ class Artifact:
     primary: StatLine
     substats: tuple[StatLine, ...]
     ascension: StatLine | None
+    ascend_level: int  # stars ascended, 0 to `rank`
     faction: str | None
 
     def lines(self) -> tuple[StatLine, ...]:
@@ -326,6 +327,7 @@ def parse_artifact(raw: dict, hh_set_ids: dict[str, int]) -> Artifact:
         primary=parse_line(raw["PrimaryBonus"]),
         substats=tuple(parse_line(sub) for sub in raw["SecondaryBonuses"]),
         ascension=parse_line(raw["AscendBonus"]) if raw["AscendBonus"] else None,
+        ascend_level=raw.get("AscendLevel") or 0,
         faction=None if raw["RequiredFraction"] == "None" else raw["RequiredFraction"],
     )
 

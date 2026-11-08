@@ -4,10 +4,16 @@ extract_assets.py - icons and portraits from the game's Unity bundles, for the w
     uv run --group assets python -I tools/extract_assets.py
 
 Writes webui/static/assets/:
-  portraits/<type id with the ascension digit 0>.png  (HeroAvatars* bundles)
+  portraits/<type id with the ascension digit 0>.png  (HeroAvatars, HeroAvatarsLocal,
+                                                     FuseAvatarsLocal bundles)
   sets/<set id>.png                                   (ArtifactSets)
   pieces/<set id>_<slot>.png, pieces/<faction>_<slot>.png  (Artifacts: the piece art the
                                                        game shows; faction accessories)
+  affinities/<magic|force|spirit|void>.png             (HeroElements)
+  factions/<faction, as the capture names it>.png     (FractionAvatars: the banners)
+  stars/<yellow|purple|red>.png                       (UIShared: plain, ascended, awakened)
+  frames/<rarity, lower case>.png                     (UIShared: 9-slice portrait frames; no
+                                                       Uncommon. app.css holds their slices)
 
 Bundles ship with the install (StreamingAssets) and are downloaded later (resources/); for
 each family the newest version wins. Set sprites are named after the game's set names, the
@@ -37,6 +43,7 @@ GAME = (
     PREFIX / "drive_c/users/steamuser/AppData/Local/PlariumPlay/StandAloneApps/raid-shadow-legends"
 )
 OUT = ROOT / "webui" / "static" / "assets"
+STATIC = ROOT / "static"
 # Sprite slot suffix -> the optimiser's slot name (`Slot` member, lower case).
 SLOTS = {
     "Weapon": "weapon",
@@ -58,6 +65,11 @@ ALIASES = {
     "Taunting": "Provoke",
     "Warrior": "Cruel",
 }
+AFFINITIES = ("magic", "force", "spirit", "void")
+STARS = {"big_star": "yellow", "big_ascend_star": "purple", "big_red_star": "red"}
+FRAMES = ("Common", "Rare", "Epic", "Legendary", "Mythical")
+PORTRAIT_FAMILIES = ("HeroAvatars", "HeroAvatarsLocal", "FuseAvatarsLocal")
+PLACEHOLDER_PORTRAIT = re.compile(r"(\d+)(?:_?temp|_avatar)")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
@@ -66,11 +78,25 @@ def main() -> None:
     champions = json.load(open(ROOT / "captures" / "latest" / "champions.json"))
     factions = {c["Faction"] for c in champions}  # the capture's names match the sprites'
     unmatched: set[str] = set()
-    written: dict[str, set[str]] = {"portraits": set(), "sets": set(), "pieces": set()}
+    written: dict[str, set[str]] = {
+        kind: set()
+        for kind in ("portraits", "sets", "pieces", "affinities", "factions", "stars", "frames")
+    }
 
-    # 1. Portraits: sprites named by base type id.
-    for sprite in sprites("HeroAvatars"):
-        if (name := sprite.m_Name).isdigit():
+    # 1. Portraits: sprites named by base type id. Fusion champions' (and a few others')
+    # ship in their own local bundles.
+    # Placeholders ("1770_temp", "6480_avatar") only where there's no proper one.
+    placeholders = {}
+
+    for family in PORTRAIT_FAMILIES:
+        for sprite in sprites(family):
+            if (name := sprite.m_Name).isdigit():
+                save(sprite, "portraits", name, written)
+            elif placeholder := PLACEHOLDER_PORTRAIT.fullmatch(name):
+                placeholders[placeholder[1]] = sprite
+
+    for name, sprite in placeholders.items():
+        if name not in written["portraits"]:
             save(sprite, "portraits", name, written)
 
     # 2. Set icons.
@@ -92,7 +118,28 @@ def main() -> None:
         elif (set_id := match_set(owner, keys)) is not None:
             save(sprite, "pieces", f"{set_id}_{SLOTS[suffix]}", written)
 
+    # 4. Affinity icons.
+    for sprite in sprites("HeroElements"):
+        if sprite.m_Name in AFFINITIES:
+            save(sprite, "affinities", sprite.m_Name, written)
+
+    # 5. Faction banners, named by the game's faction number.
+    faction_names = capture_faction_names(champions)
+
+    for sprite in sprites("FractionAvatars"):
+        if name := faction_names.get(sprite.m_Name):
+            save(sprite, "factions", name, written)
+
+    # 6. Champion stars (plain, ascended and awakened) and portrait frames by rarity.
+    for sprite in sprites("UIShared"):
+        if colour := STARS.get(sprite.m_Name):
+            save(sprite, "stars", colour, written)
+        elif sprite.m_Name in FRAMES:
+            save(sprite, "frames", sprite.m_Name.lower(), written)
+
     print(", ".join(f"{len(keys)} {kind}" for kind, keys in written.items()), f"-> {OUT}")
+    if missing := factions - written["factions"]:
+        print("factions with no banner:", ", ".join(sorted(missing)))
     if unmatched:
         print("set icons with no matching set (shown as text):", ", ".join(sorted(unmatched)))
 
@@ -116,6 +163,21 @@ def bundles(family: str) -> list[Path]:
 def version_of(path: Path) -> tuple[int, ...]:
     match = VERSION.search(str(path))
     return tuple(int(part) for part in match.groups()) if match else (0, 0, 0)
+
+
+def capture_faction_names(champions: list[dict]) -> dict[str, str]:
+    """The game's faction number (as text) -> the capture's name for it. HH renames a few
+    (Samurai -> Shadowkin, Olympians -> Argonites), so pair them up by champion type."""
+    enum = json.load(open(ROOT / "schema" / "schema.json"))["enums"]["HeroFraction"]
+    number_of = {name: number for number, name in enum.items()}
+    game_faction = {t["id"]: t["fraction"] for t in json.load(open(STATIC / "hero_types.json"))}
+    names = {}
+
+    for champion in champions:
+        if game_name := game_faction.get(champion["TypeId"] // 10 * 10):
+            names[number_of[game_name]] = champion["Faction"]
+
+    return names
 
 
 def set_keys() -> dict[str, int]:

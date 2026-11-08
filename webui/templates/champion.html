@@ -1,33 +1,59 @@
 {% extends "base.html" %}
-{% from "_macros.html" import portrait, badges, stat_header, stat_cells %}
+{% from "_macros.html" import tile, faction %}
 {% block title %}{{ page.champion.name }} · Raid optimiser{% endblock %}
 {% block content %}
-  <hgroup>
-    <h2>{{ portrait(page.champion) }}{{ page.champion.name }}</h2>
-    <p>{{ badges(page.champion) }}</p>
-  </hgroup>
-
-  <div class="overflow-auto">
-    <table class="stats">
-      <thead>{{ stat_header(page.current) }}</thead>
-      <tbody><tr><th>Current</th>{{ stat_cells(page.current) }}</tr></tbody>
-    </table>
-  </div>
-
-  <form data-champion="{{ page.champion.id }}" hx-post="/champions/{{ page.champion.id }}/builds" hx-target="#results"
-        hx-indicator="#solving" hx-disabled-elt="find button">
-    <div class="grid">
+  <div class="champion-layout">
+    <aside class="champion-side">
+      <div class="champion-identity">
+        {{ tile(page.champion, "large") }}
+        <h2 class="champion-name">{{ faction(page.champion) }}{{ page.champion.name }}</h2>
+      </div>
+      <table class="current-stats" aria-label="Current stats">
+        <tbody>
+          {% for cell in page.current %}<tr><th>{{ cell.label }}</th><td>{{ cell.text }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </aside>
+    <form class="champion-main"
+          data-champion="{{ page.champion.id }}"
+          hx-post="/champions/{{ page.champion.id }}/builds"
+          hx-target="#results"
+          hx-indicator="#solving"
+          hx-disabled-elt="find button">
       <fieldset>
         <legend>Stat targets</legend>
         <table class="limits">
-          <thead><tr><th></th><th>At least</th><th>At most</th><th title="1 ranks first; blank: not ranked">Priority</th></tr></thead>
+          <thead>
+            <tr>
+              <th></th>
+              <th>At least</th>
+              <th>At most</th>
+              <th title="1 ranks first; blank: not ranked">Priority</th>
+            </tr>
+          </thead>
           <tbody>
             {% for name, label, percent in page.options.stats %}
               <tr>
                 <th>{{ label }}{% if percent %} <small>%</small>{% endif %}</th>
-                <td><input type="number" step="any" name="min_{{ name }}" aria-label="{{ label }} at least"></td>
-                <td><input type="number" step="any" name="max_{{ name }}" aria-label="{{ label }} at most"></td>
-                <td><input type="number" min="1" max="8" name="rank_{{ name }}" aria-label="{{ label }} priority"></td>
+                <td>
+                  <input type="number"
+                         step="any"
+                         name="min_{{ name }}"
+                         aria-label="{{ label }} at least">
+                </td>
+                <td>
+                  <input type="number"
+                         step="any"
+                         name="max_{{ name }}"
+                         aria-label="{{ label }} at most">
+                </td>
+                <td>
+                  <input type="number"
+                         min="1"
+                         max="8"
+                         name="rank_{{ name }}"
+                         aria-label="{{ label }} priority">
+                </td>
               </tr>
             {% endfor %}
             <tr>
@@ -35,53 +61,87 @@
               <td>
                 <select name="damage_skill" aria-label="Skill to rank damage by">
                   {% for skill in page.skills %}
-                    <option value="{{ skill.id }}" {% if not skill.supported %}disabled{% endif %} title="{{ skill.note }}">{{ skill.name }}{% if not skill.supported %} ✕{% endif %}</option>
+                    <option value="{{ skill.id }}"
+                            {% if not skill.supported %}disabled{% endif %}
+                            title="{{ skill.note }}">{{ skill.name }}{% if not skill.supported %} ✕{% endif %}</option>
                   {% endfor %}
                 </select>
               </td>
-              <td><input type="number" name="enemy_def" value="6000" min="0" step="any" aria-label="Enemy DEF" title="Enemy DEF"></td>
-              <td><input type="number" min="1" max="9" name="rank_DAMAGE" aria-label="Damage priority"></td>
+              <td>
+                <input type="number"
+                       name="enemy_def"
+                       value="6000"
+                       min="0"
+                       step="any"
+                       aria-label="Enemy DEF"
+                       title="Enemy DEF">
+              </td>
+              <td>
+                <input type="number"
+                       min="1"
+                       max="9"
+                       name="rank_DAMAGE"
+                       aria-label="Damage priority">
+              </td>
             </tr>
           </tbody>
         </table>
         <small class="hint">Damage: crit hit of the chosen skill against the enemy DEF (second box). Pair it with C.RATE at least 100.</small>
       </fieldset>
-
-      <div>
-        <fieldset>
-          <legend>Sets (at least)</legend>
-          {% for row in set_rows %}
-            <fieldset role="group">
-              <select name="set_{{ row }}" aria-label="Set">
-                <option value="">—</option>
-                {% for set_id, name in page.options.sets %}<option value="{{ set_id }}">{{ name }}</option>{% endfor %}
-              </select>
-              <input type="number" name="pieces_{{ row }}" min="1" max="9" value="4" aria-label="Pieces">
-            </fieldset>
-          {% endfor %}
-        </fieldset>
-
-
-        <div class="grid">
-          <label>Slack % <input type="number" name="slack" value="1" min="0" max="50" step="any"></label>
-          <label>Builds <input type="number" name="builds" value="3" min="1" max="10"></label>
-          <label title="Only pieces enhanced past this level">Level above <input type="number" name="above_level" value="8" min="0" max="16"></label>
-          <label>Gear
-            <select name="pool" title="Gear worn by other champions the solve may use; the champion's own is always allowed">
-              {% for name, label in page.options.pools %}<option value="{{ name }}">{{ label }}</option>{% endfor %}
+      <fieldset>
+        <legend>Sets (at least)</legend>
+        {% for row in set_rows %}
+          <fieldset role="group">
+            <select name="set_{{ row }}" aria-label="Set">
+              <option value="">—</option>
+              {% for set_id, name in page.options.sets %}<option value="{{ set_id }}">{{ name }}</option>{% endfor %}
             </select>
-          </label>
-        </div>
-
-        <div class="grid">
-          <button type="submit">Find builds</button>
-          <button type="reset" class="secondary outline" id="reset-form">Reset</button>
-        </div>
-        <span id="solving" class="htmx-indicator" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
+            <input type="number"
+                   name="pieces_{{ row }}"
+                   min="1"
+                   max="9"
+                   value="4"
+                   aria-label="Pieces">
+          </fieldset>
+        {% endfor %}
+      </fieldset>
+      <div class="grid">
+        <label>
+          Slack %
+          <input type="number" name="slack" value="1" min="0" max="50" step="any">
+        </label>
+        <label>
+          Builds
+          <input type="number" name="builds" value="3" min="1" max="10">
+        </label>
+        <label title="Only pieces enhanced past this level">
+          Level above
+          <input type="number" name="above_level" value="8" min="0" max="16">
+        </label>
+        <label>
+          Gear
+          <select name="pool"
+                  title="Gear worn by other champions the solve may use; the champion's own is always allowed">
+            {% for name, label in page.options.pools %}<option value="{{ name }}">{{ label }}</option>{% endfor %}
+          </select>
+        </label>
       </div>
-    </div>
-  </form>
-
-  <section id="results"></section>
+      <div class="grid">
+        <button type="submit">Find builds</button>
+        <button type="reset" class="secondary outline">Reset</button>
+      </div>
+      <span id="solving" class="htmx-indicator" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
+    </form>
+  </div>
+  {% with history = page.history, champion_id = page.champion.id %}
+    {% include "_history.html" %}
+  {% endwith %}
+  <section id="results">
+    {% if page.latest %}
+      {% with run = page.latest %}
+        {% include "_run.html" %}
+      {% endwith %}
+    {% endif %}
+  </section>
 {% endblock %}
-{% block scripts %}<script src="/static/app.js"></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url('app.js') }}"></script>{% endblock %}

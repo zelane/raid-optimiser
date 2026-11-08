@@ -14,5 +14,5 @@ state/
 cache/
 
 # Game data and art (Plarium's): regenerate with update-static.sh, the oracle, extract_assets.py
-static/
+/static/
 webui/static/assets/

@@ -1,16 +1,14 @@
-{% from "_macros.html" import portrait, badges, lock_picker %}
+{% from "_macros.html" import tile, faction, lock_picker %}
 {% if champions %}
-  <table class="champions">
-    <tbody>
-      {% for listed in champions %}
-        <tr>
-          <td>{{ portrait(listed.champion) }}<a href="/champions/{{ listed.champion.id }}">{{ listed.champion.name }}</a></td>
-          <td><small>{{ badges(listed.champion) }}</small></td>
-          <td class="lock-cell">{{ lock_picker(listed) }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="champion-grid">
+    {% for listed in champions %}
+      <article class="champion-card">
+        <a href="/champions/{{ listed.champion.id }}" class="card-tile">{{ tile(listed.champion) }}</a>
+        <a href="/champions/{{ listed.champion.id }}" class="card-name" title="{{ listed.champion.name }}">{{ faction(listed.champion) }}<span>{{ listed.short_name }}</span></a>
+        {{ lock_picker(listed) }}
+      </article>
+    {% endfor %}
+  </div>
 {% else %}
   <p>No champions match.</p>
 {% endif %}

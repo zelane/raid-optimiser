@@ -26,16 +26,17 @@ decoder:
 opt *args:
     uv run python -m optimiser "$@"
 
-# Start the web UI on http://127.0.0.1:8000
-web:
-    uv run python -m webui
+# Start the web UI on http://127.0.0.1:8000, reloading on Python changes (--no-reload: off)
+web *args:
+    uv run python -m webui "$@"
 
 # Stop the web UI (by port)
 web-stop:
     -fuser -k 8000/tcp
 
-# Restart the web UI (needed after Python changes)
-web-restart: web-stop web
+# Restart the web UI (it reloads on Python changes by itself)
+web-restart: web-stop
+    just web
 
 # Extract portraits, set icons and piece art from the game's Unity bundles
 assets:

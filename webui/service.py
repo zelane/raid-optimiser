@@ -2,19 +2,27 @@
 service.py - what the web pages show, as plain data: no HTML and no web framework, so a JSON
 API (for a Vue front end, say) can return the same objects with `dataclasses.asdict`.
 
-- `ChampionRow`, `ListedChampion`, `StatCell`, `LineView`, `PieceView`, `BuildView`: the views
-- `SkillOption`, `ResultsView`, `ShortfallView`, `FormOptions`, `ChampionPage`: what a page
-  is made of
+- `StarView`, `ChampionRow`, `ListedChampion`, `StatCell`, `LineView`, `PieceView`,
+  `BuildView`: the views
+- `SkillOption`, `ResultsView`, `ShortfallView`, `Outcome`, `FormOptions`, `RunEntryView`,
+  `RunView`, `ChampionPage`: what a page is made of
 - `current_account`: the account, reloaded when a new capture lands
 - `current_locks`, `lock_champion`: champion locks, kept in the store
+- `record_run`, `run_history`, `saved_run`, `forget_run`: a champion's runs, kept in the store
 - `search_champions`, `champion_page`, `solve`: what the pages ask for
-- `load_for`, `champion_row`, `form_options`, `skill_options`, `current_stats`, `current_gear`,
-  `shortfall_view`, `build_view`, `piece_view`, `line_view`, `stat_cells`, `damage_cell`,
-  `describe_goal`, `asset_url`: what they share
+- `RARITY_ORDER`, `AFFINITY_ORDER`, `game_order`: the game's default champion order
+- `describe_request`, `describe_ranked`, `outcome_note`, `outcome_json`, `revive_outcome`,
+  `revive`, `revive_value`, `run_view`, `entry_view`: what runs share
+- `load_for`, `listed_champion`, `champion_row`, `star_colour`, `form_options`, `skill_options`,
+  `current_stats`, `current_gear`, `shortfall_view`, `build_view`, `piece_view`, `line_view`,
+  `stat_cells`, `damage_cell`, `describe_goal`, `asset_url`: what they share
 """
 
 import time
-from dataclasses import dataclass
+import types
+import typing
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -39,9 +47,21 @@ from optimiser.labels import (
     pool_label,
     pool_name,
 )
-from optimiser.solve import Build, Request, Shortfall, find_builds
+from optimiser.solve import Build, Goal, Request, Shortfall, find_builds
 from optimiser.stats import build_stats, set_multiplier
-from optimiser.store import Locks, read_locks, write_lock
+from optimiser.store import (
+    Locks,
+    NewRun,
+    Run,
+    RunEntry,
+    delete_run,
+    latest_run,
+    list_runs,
+    read_locks,
+    read_run,
+    save_run,
+    write_lock,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 CAPTURES = ROOT / "captures" / "latest"
@@ -50,12 +70,29 @@ SCHEMA = ROOT / "schema" / "schema.json"
 STORE = ROOT / "state" / "optimiser.sqlite"
 ASSETS = Path(__file__).resolve().parent / "static" / "assets"
 SLOT_ORDER = list(Slot)
-SEARCH_LIMIT = 40
-SUPPORT_CHECK_DEF = 6000  # any DEF will do: whether a skill can be ranked doesn't depend on it
+SEARCH_LIMIT = 200
+HISTORY_LIMIT = 30  # runs listed per champion
+SUPPORT_CHECK_DEF = 6000
+# The game's numbers for sorting: `HeroRarity`, and `ElementExtension.GetCompareToValue`.
+RARITY_ORDER = {"Common": 1, "Uncommon": 2, "Rare": 3, "Epic": 4, "Legendary": 5, "Mythical": 6}
+AFFINITY_ORDER = {
+    "Spirit": 1,
+    "Magic": 2,
+    "Force": 3,
+    "Void": 4,
+}  # any DEF will do: whether a skill can be ranked doesn't depend on it
+
+
+@dataclass(frozen=True)
+class StarView:
+    colour: str  # "red" awakened, "purple" ascended, "yellow" neither
+    image_url: str | None
 
 
 @dataclass(frozen=True)
 class ChampionRow:
+    """The defaults are for runs saved before those fields existed."""
+
     id: int
     name: str
     rarity: str
@@ -67,6 +104,9 @@ class ChampionRow:
     affinity: str
     faction: str
     portrait_url: str | None
+    stars: list[StarView] = field(default_factory=list)
+    affinity_icon_url: str | None = None
+    faction_icon_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -75,6 +115,7 @@ class ListedChampion:
 
     champion: ChampionRow
     lock: int
+    short_name: str  # the name's first word, for the grid
 
 
 @dataclass(frozen=True)
@@ -113,8 +154,11 @@ class PieceView:
     ascension: LineView | None
     faction: str | None
     worn_by: str | None  # another champion, if it has to be taken off them
-    worn_by_portrait: str | None
+    worn_by_portrait: str | None  # whoever wears it, this champion included
     equipped: bool  # the champion already wears it
+    # The defaults are for runs saved before these existed.
+    stars: list[StarView] = field(default_factory=list)
+    ascend_level: int = 0
 
 
 @dataclass(frozen=True)
@@ -146,6 +190,9 @@ class ShortfallView:
     lines: list[str]
 
 
+type Outcome = ResultsView | ShortfallView
+
+
 @dataclass(frozen=True)
 class FormOptions:
     stats: list[tuple[str, str, bool]]  # name, label, entered in %
@@ -164,11 +211,31 @@ class SkillOption:
 
 
 @dataclass(frozen=True)
+class RunEntryView:
+    id: int
+    ran_at: str  # local time, "08 Nov 14:03"
+    summary: str
+    note: str
+
+
+@dataclass(frozen=True)
+class RunView:
+    """A saved run. `outcome` is None when it was saved in a shape these views no longer
+    have."""
+
+    entry: RunEntryView
+    form: dict[str, str]
+    outcome: Outcome | None
+
+
+@dataclass(frozen=True)
 class ChampionPage:
     champion: ChampionRow
     current: list[StatCell]
     options: FormOptions
     skills: list[SkillOption]
+    history: list[RunEntryView]
+    latest: RunView | None  # shown, and its form restored, when the page opens
 
 
 def current_account() -> Account:
@@ -188,40 +255,203 @@ def current_locks() -> Locks:
 def lock_champion(champion: Champion, level: int) -> ListedChampion:
     """Locks the champion at `level` (0 unlocks them)."""
     write_lock(STORE, champion.id, level)
-    return ListedChampion(champion_row(champion), level)
+    return listed_champion(champion, level)
+
+
+def record_run(
+    account: Account, form: dict[str, str], request: Request, outcome: Outcome
+) -> RunView:
+    run = NewRun(
+        champion_id=request.champion.id,
+        summary=describe_request(request, account),
+        note=outcome_note(outcome),
+        form=form,
+        outcome=outcome_json(outcome),
+    )
+    return run_view(save_run(STORE, run, datetime.now(UTC)), request.champion)
+
+
+def run_history(champion: Champion) -> list[RunEntryView]:
+    """Newest first."""
+    return [entry_view(entry) for entry in list_runs(STORE, champion.id, HISTORY_LIMIT)]
+
+
+def saved_run(champion: Champion, run_id: int) -> RunView | None:
+    """None when the champion has no such run."""
+    run = read_run(STORE, champion.id, run_id)
+    return run_view(run, champion) if run else None
+
+
+def forget_run(champion: Champion, run_id: int) -> None:
+    delete_run(STORE, champion.id, run_id)
 
 
 def search_champions(account: Account, locks: Locks, query: str) -> list[ListedChampion]:
-    """Champions whose name contains `query`, most developed first."""
+    """Champions whose name contains `query`, in the game's default order."""
     wanted = query.casefold().strip()
     matches = [c for c in account.champions.values() if wanted in c.name.casefold()]
-    matches.sort(key=lambda c: (-c.grade, -c.level, -(c.type_id % 10), c.name))
-    return [ListedChampion(champion_row(c), locks.get(c.id, 0)) for c in matches[:SEARCH_LIMIT]]
+    matches.sort(key=game_order, reverse=True)
+    return [listed_champion(c, locks.get(c.id, 0)) for c in matches[:SEARCH_LIMIT]]
+
+
+def listed_champion(champion: Champion, lock: int) -> ListedChampion:
+    return ListedChampion(champion_row(champion), lock, champion.name.split()[0])
 
 
 def champion_row(champion: Champion) -> ChampionRow:
+    ascension = champion.type_id % 10
+    colours = [star_colour(star, ascension, champion.awakening) for star in range(champion.grade)]
+
     return ChampionRow(
         id=champion.id,
         name=champion.name,
         rarity=champion.rarity,
         grade=champion.grade,
         level=champion.level,
-        ascension=champion.type_id % 10,
+        ascension=ascension,
         awakening=champion.awakening,
         empower=champion.empower,
         affinity=champion.element,
         faction=champion.faction,
         portrait_url=asset_url("portraits", str(champion.type_id // 10 * 10)),  # unascended
+        stars=[StarView(colour, asset_url("stars", colour)) for colour in colours],
+        affinity_icon_url=asset_url("affinities", champion.element.lower()),
+        faction_icon_url=asset_url("factions", champion.faction),
+    )
+
+
+def star_colour(star: int, ascension: int, awakening: int) -> str:
+    """Counting from the first star: awakened ones, then ascended ones, then plain (a
+    champion is never awakened past their ascension)."""
+    if star < awakening:
+        return "red"
+
+    if star < ascension:
+        return "purple"
+
+    return "yellow"
+
+
+def game_order(champion: Champion) -> tuple[int, ...]:
+    """The champion list's default sort ("Rank", descending; `HeroAvatarComparator.
+    CompareByRank`, negated): each key high to low, so the newest copy comes first."""
+    return (
+        champion.grade,
+        champion.level,
+        champion.type_id % 10,  # ascension
+        RARITY_ORDER.get(champion.rarity, 0),
+        champion.empower,
+        champion.awakening,
+        AFFINITY_ORDER.get(champion.element, 0),
+        champion.type_id,
+        champion.id,
     )
 
 
 def champion_page(account: Account, locks: Locks, champion: Champion) -> ChampionPage:
+    latest = latest_run(STORE, champion.id)
     return ChampionPage(
         champion=champion_row(champion),
         current=stat_cells(current_stats(account, champion), None),
         options=form_options(account, locks),
         skills=skill_options(account, champion),
+        history=run_history(champion),
+        latest=run_view(latest, champion) if latest else None,
     )
+
+
+def describe_request(request: Request, account: Account) -> str:
+    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: Locked up to 2" """
+    at_least = [
+        f"{STAT_LABELS[stat]} ≥ {format_stat(stat, value)}"
+        for stat, value in request.minimums.items()
+    ]
+    at_most = [
+        f"{STAT_LABELS[stat]} ≤ {format_stat(stat, value)}"
+        for stat, value in request.maximums.items()
+    ]
+    sets = [
+        f"{account.tables.sets[set_id].name} {pieces}"
+        for set_id, pieces in request.set_minimums.items()
+    ]
+    ranking = " › ".join(describe_ranked(goal) for goal in request.ranking)
+    return " · ".join([ranking, *at_least, *at_most, *sets, f"gear: {pool_label(request.pool)}"])
+
+
+def describe_ranked(goal: Goal) -> str:
+    match goal:
+        case DamageGoal(skill_name=skill_name):
+            return f"{skill_name} DMG"
+
+        case stat:
+            return STAT_LABELS[stat]
+
+
+def outcome_note(outcome: Outcome) -> str:
+    match outcome:
+        case ResultsView(builds=builds):
+            return f"{len(builds)} build{'s' if len(builds) != 1 else ''}"
+
+        case ShortfallView():
+            return "no build"
+
+
+def outcome_json(outcome: Outcome) -> dict:
+    return {"kind": type(outcome).__name__, "view": asdict(outcome)}
+
+
+def revive_outcome(saved: dict) -> Outcome | None:
+    """The outcome `outcome_json` saved, or None if the views have changed shape since."""
+    kinds = {"ResultsView": ResultsView, "ShortfallView": ShortfallView}
+
+    try:
+        return revive(kinds[saved["kind"]], saved["view"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def revive[T](cls: type[T], data: dict) -> T:
+    """A view `asdict` saved, rebuilt with its nested views; raises on fields that don't
+    fit."""
+    hints = typing.get_type_hints(cls)
+    return cls(**{name: revive_value(hints[name], value) for name, value in data.items()})
+
+
+def revive_value(hint: object, value: object) -> object:
+    origin = typing.get_origin(hint)
+
+    if value is None:
+        return None
+
+    if origin in (typing.Union, types.UnionType):
+        (inner,) = [arm for arm in typing.get_args(hint) if arm is not type(None)]
+        return revive_value(inner, value)
+
+    if origin is list and isinstance(value, list):
+        (item_hint,) = typing.get_args(hint)
+        return [revive_value(item_hint, item) for item in value]
+
+    if isinstance(hint, type) and is_dataclass(hint) and isinstance(value, dict):
+        return revive(hint, value)
+
+    return value
+
+
+def run_view(run: Run, champion: Champion) -> RunView:
+    """Results show the champion as they are now (a portrait extracted since, say)."""
+    match revive_outcome(run.outcome):
+        case ResultsView() as results:
+            outcome = replace(results, champion=champion_row(champion))
+
+        case other:
+            outcome = other
+
+    return RunView(entry_view(run.entry), run.form, outcome)
+
+
+def entry_view(entry: RunEntry) -> RunEntryView:
+    ran_at = entry.ran_at.astimezone().strftime("%d %b %H:%M")
+    return RunEntryView(entry.id, ran_at, entry.summary, entry.note)
 
 
 def skill_options(account: Account, champion: Champion) -> list[SkillOption]:
@@ -267,7 +497,7 @@ def form_options(account: Account, locks: Locks) -> FormOptions:
     )
 
 
-def solve(account: Account, request: Request) -> ResultsView | ShortfallView:
+def solve(account: Account, request: Request) -> Outcome:
     champion = request.champion
     started = time.monotonic()
     outcome = find_builds(account, request)
@@ -352,7 +582,8 @@ def build_view(
 def piece_view(artifact: Artifact, account: Account, champion: Champion) -> PieceView:
     artifact_set = account.tables.sets.get(artifact.set_id)
     owner_id = account.owners.get(artifact.id)
-    owner = None if owner_id in (None, champion.id) else account.champions[owner_id]
+    wearer = account.champions.get(owner_id) if owner_id is not None else None
+    owner = None if owner_id == champion.id else wearer
     slot_key = artifact.slot.name.lower()
 
     return PieceView(
@@ -369,9 +600,16 @@ def piece_view(artifact: Artifact, account: Account, champion: Champion) -> Piec
         primary=line_view(artifact.primary),
         substats=[line_view(line) for line in artifact.substats],
         ascension=line_view(artifact.ascension) if artifact.ascension else None,
+        stars=[
+            StarView(colour, asset_url("stars", colour))
+            for colour in (
+                star_colour(star, artifact.ascend_level, 0) for star in range(artifact.rank)
+            )
+        ],
+        ascend_level=artifact.ascend_level,
         faction=artifact.faction,
         worn_by=owner.name if owner else None,
-        worn_by_portrait=champion_row(owner).portrait_url if owner else None,
+        worn_by_portrait=champion_row(wearer).portrait_url if wearer else None,
         equipped=owner_id == champion.id,
     )
 

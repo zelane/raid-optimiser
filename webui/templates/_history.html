@@ -1,0 +1,16 @@
+<section id="history"{% if history_oob %} hx-swap-oob="true"{% endif %}>
+  {% if history %}
+    <h4>History</h4>
+    <ul class="history">
+      {% for entry in history %}
+        <li data-run-id="{{ entry.id }}">
+          <a href="#results" hx-get="/champions/{{ champion_id }}/runs/{{ entry.id }}" hx-target="#results">{{ entry.ran_at }}</a>
+          <span>{{ entry.summary }}</span>
+          <small>{{ entry.note }}</small>
+          <button class="delete secondary outline" title="Delete this run"
+                  hx-delete="/champions/{{ champion_id }}/runs/{{ entry.id }}" hx-target="#history" hx-swap="outerHTML">✕</button>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>

@@ -30,6 +30,9 @@ its upload. Game tables come from the game's own data.
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list. A solve's gear pool
   (`AnyGear | UpToLock(level) | Unequipped`) decides whose worn gear it may take; the
   champion's own gear is always allowed.
+  Also each champion's run history: the submitted form and the outcome view
+  (`dataclasses.asdict` JSON, rebuilt by `service.revive`; a run whose shape no longer fits
+  shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service.py` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.
@@ -49,8 +52,8 @@ uv run --group dev black optimiser webui && uv run --group dev ruff check optimi
 uv run --project ~/repo/python-style python-style optimiser webui   # house style checker
 ```
 
-The web server doesn't auto-reload: restart it after Python changes (templates and static
-files reload). Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
+The web server reloads itself when Python under `optimiser/` or `webui/` changes
+(watchfiles; `--no-reload` turns it off); templates and static files are read fresh anyway. Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
 that also matches your own shell command.
 
 ## Conventions
@@ -136,7 +139,10 @@ disassemble `GameAssembly.dll` at the dump's RVAs (capstone), labelling calls fr
 ## Assets
 
 Portraits are named by type id with ascension 0 (`9990`), piece art `<set id>_<slot>`, set
-icons by set id. Set accessories use the set's generic art even when faction-locked; only
+icons by set id. Affinity icons by lower-case affinity, faction banners by the capture's
+(HH's) faction name (HH renames Samurai → Shadowkin, Olympians → Argonites; the extractor
+pairs them by type), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
+portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only
 set-less accessories use `<faction>_<slot>`. Old sprite names mapped by the user: Berserker = Crit
 Damage, Healing = Regeneration, Rage = Killstroke, Stalwart2 = Defiant, Taunting = Provoke,
 Warrior = Cruel. Accessory-only sets have no icon. The images are Plarium's art: keep local.

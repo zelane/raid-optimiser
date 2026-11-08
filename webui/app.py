@@ -3,8 +3,10 @@ app.py - the web entry point: routes that render the service's views as HTML. On
 module and the templates know about HTTP or HTML; a JSON API would sit beside it.
 
 - `app`, `templates`: the FastAPI app and its Jinja templates
-- `index`, `champion_list`, `lock`, `champion`, `builds`, `equip`, `preview`: the routes
-- `find_champion`, `send_build`: what they share
+- `index`, `champion_list`, `lock`, `champion`, `builds`, `run`, `delete_run`, `equip`,
+  `preview`: the routes
+- `find_champion`, `find_run`, `send_build`: what they share
+- `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 """
 
 from collections.abc import Callable
@@ -26,6 +28,7 @@ app = FastAPI(title="Raid optimiser")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.globals["lock_levels"] = LOCK_LEVELS
+templates.env.globals["static_url"] = lambda path: static_url(path)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -69,21 +72,38 @@ async def builds(request: Request, champion_id: int):
     account = service.current_account()
     form = {key: str(value) for key, value in (await request.form()).items()}
 
-    match parse_request(
-        form, find_champion(account, champion_id), account, service.current_locks()
-    ):
+    champion = find_champion(account, champion_id)
+
+    match parse_request(form, champion, account, service.current_locks()):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case solve_request:
             outcome = service.solve(account, solve_request)
 
-    match outcome:
-        case service.ShortfallView() as shortfall:
-            return templates.TemplateResponse(request, "_shortfall.html", {"shortfall": shortfall})
+    # The new run goes in the history too, swapped in beside the results.
+    context = {
+        "run": service.record_run(account, form, solve_request, outcome),
+        "history": service.run_history(champion),
+        "champion_id": champion.id,
+        "history_oob": True,
+    }
+    return templates.TemplateResponse(request, "_run.html", context)
 
-        case results:
-            return templates.TemplateResponse(request, "_results.html", {"results": results})
+
+@app.get("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
+def run(request: Request, champion_id: int, run_id: int):
+    champion = find_champion(service.current_account(), champion_id)
+    context = {"run": find_run(champion, run_id)}
+    return templates.TemplateResponse(request, "_run.html", context)
+
+
+@app.delete("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
+def delete_run(request: Request, champion_id: int, run_id: int):
+    champion = find_champion(service.current_account(), champion_id)
+    service.forget_run(champion, run_id)
+    context = {"history": service.run_history(champion), "champion_id": champion.id}
+    return templates.TemplateResponse(request, "_history.html", context)
 
 
 @app.post("/champions/{champion_id}/equip", response_class=HTMLResponse)
@@ -130,3 +150,15 @@ def find_champion(account: Account, champion_id: int) -> Champion:
         raise HTTPException(404, f"no champion {champion_id}")
 
     return champion
+
+
+def find_run(champion: Champion, run_id: int) -> service.RunView:
+    if (saved := service.saved_run(champion, run_id)) is None:
+        raise HTTPException(404, f"no run {run_id} for champion {champion.id}")
+
+    return saved
+
+
+def static_url(path: str) -> str:
+    modified = HERE.joinpath("static", path).stat().st_mtime_ns
+    return f"/static/{path}?v={modified}"

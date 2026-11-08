@@ -38,6 +38,6 @@
     <span class="equip-result"></span>
   </div>
   <div class="pieces">
-    {% for p in build.slots %}{% if p %}{{ piece(p) }}{% else %}<article class="piece empty"><small>empty</small></article>{% endif %}{% endfor %}
+    {% for p in build.slots %}{% if p %}{{ piece(p, results.champion) }}{% else %}<article class="piece empty"><small>empty</small></article>{% endif %}{% endfor %}
   </div>
 {% endfor %}
