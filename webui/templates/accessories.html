@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Accessories · Raid optimiser{% endblock %}
+{% block content %}
+  <h2>Accessories</h2>
+  <nav class="tabs">
+    <ul>
+      {% for key, label in [("swaps", "1. Swaps"), ("roll", "2. Roll"), ("rework", "3. Rework"), ("cleanup", "4. Clean up"), ("weights", "Weights")] %}
+        <li><a href="/accessories?tab={{ key }}"{% if page.tab == key %} aria-current="page"{% endif %}>{{ label }}</a></li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  {% if page.tab == "swaps" %}
+    {% from "_accessory.html" import accessory_cells %}
+    {% from "_macros.html" import tile %}
+    <p>
+      Champions wearing an accessory that a loose one clearly beats as it is now (by 10% or
+      more; not counting what rolling or a rework might make of it),
+      of the same slot, main stat, set and faction, so the set bonus and main stat stay. A
+      set-less piece gives way to any set piece of its slot, main stat and faction with better
+      stats, however slightly. Only
+      unlocked champions: lock a champion to leave their gear alone. Substats change, so mind
+      speed tunes and ACC/RES thresholds. Equip, then roll, then clean up: the clean-up already
+      counts these as done, and sells what comes off where it's not worth keeping.
+    </p>
+    {% if page.swaps %}
+      <div class="swap-list">
+        {% for group in page.swaps %}
+          <article class="swap-group">
+            <header>
+              <a href="/champions/{{ group.champion.id }}" class="card-tile">{{ tile(group.champion) }}</a>
+              <div>
+                <a href="/champions/{{ group.champion.id }}"><strong>{{ group.champion.name }}</strong></a><br>
+                <small class="up">{{ group.gain }}</small>
+              </div>
+              <div class="swap-action">
+                <button type="button" class="equip-swap" hx-post="/champions/{{ group.champion.id }}/equip"
+                        hx-vals='{"artifact_ids": "{{ group.artifact_ids }}"}' hx-target="next .swap-result"
+                        hx-confirm="Equip {{ group.swaps | length }} piece{{ 's' if group.swaps | length > 1 }} on {{ group.champion.name }}?">Equip{{ ' all' if group.swaps | length > 1 }}</button>
+                <span class="swap-result"></span>
+              </div>
+            </header>
+            <table class="accessory-list">
+              <thead><tr><th></th><th>Equip</th><th>Main</th><th>Substats</th><th class="num" title="its stats as they are">Now</th>
+                <th></th><th>In place of</th><th>Main</th><th>Substats</th><th class="num" title="its stats as they are">Now</th></tr></thead>
+              <tbody>
+                {% for swap in group.swaps %}
+                  <tr>
+                    {{ accessory_cells(swap.better) }}
+                    <td class="num"><strong>{{ swap.better.now }}</strong><br><small class="up">{{ swap.gain }}</small></td>
+                    {{ accessory_cells(swap.worn) }}
+                    <td class="num">{{ swap.worn.now }}{% if swap.then_sell %}<br><small class="down">then sell</small>{% endif %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p>No champion wears a piece with a clearly better spare.</p>
+    {% endif %}
+
+  {% elif page.tab == "cleanup" %}
+    <p>
+      The inventory and the mailbox's overflow are planned together: the lowest-valued pieces go
+      until {{ page.cleanup.target_free }} spaces are left. Dropped inventory pieces are sold,
+      dropped mailbox pieces left unclaimed, the rest of the mailbox claimed. Worn pieces never
+      go. A piece's value is the better of its potential at +16 and after a rework (75th
+      percentile of how it can turn out, scored for the champion types its set is worn by),
+      times its shortage factor: ×1.15 when its set, faction and slot have no good piece, down
+      to ×0.9 with three or more.
+    </p>
+    <div id="cleanup">{% with plan = page.cleanup %}{% include "_cleanup.html" %}{% endwith %}</div>
+
+  {% elif page.tab == "roll" %}
+    {% from "_candidates.html" import candidates %}
+    <p>
+      What to level during an enhancement event, best first: +12 is cheap and shows most of a
+      piece, so pieces below it rank by their value at +12. Only pieces already good once at +16
+      on their own rolls are listed for +16. Pieces the clean-up drops aren't listed.
+    </p>
+    <h3>To +12</h3>
+    {{ candidates(page.enhance.roll, "at +12", page.enhance.shown) }}
+    <h3>To +16</h3>
+    {{ candidates(page.enhance.finish, "at +16", page.enhance.shown) }}
+
+  {% elif page.tab == "rework" %}
+    {% from "_candidates.html" import candidates %}
+    <p>
+      Pieces at +12 or more that haven't been reworked, where a rework looks at least 10%
+      better than their own rolls. A rework keeps each line's roll count, the set and the
+      faction, and re-picks the main stat and substats, so concentrated rolls in the wrong stats
+      and main stats their set has no use for come first. Ranked by the gain, shortage counted.
+    </p>
+    {{ candidates(page.enhance.rework, "reworked", page.enhance.shown) }}
+
+  {% else %}
+    <p>
+      What each champion type values, per stat, in average 6★ rolls (flat and % together).
+      A piece scores as the best type its set is worn by and its main stat suits; supports
+      also count the lesser of HP and DEF twice more, for balance. 0 ignores a stat.
+    </p>
+    <table class="weights">
+      <thead><tr><th></th>{% for label in page.weights.stats %}<th>{{ label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in page.weights.rows %}
+          <tr>
+            <th scope="row">{{ row.champion_type }}</th>
+            {% for cell in row.cells %}
+              <td><input type="number" name="weight" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
+                         aria-label="{{ row.champion_type }}: {{ page.weights.stats[loop.index0] }}"
+                         hx-post="/accessories/weights" hx-vals='{"key": "{{ cell.field }}"}'
+                         hx-trigger="change" hx-target="#weight-result"></td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p id="weight-result"></p>
+
+    <h3>Sets</h3>
+    <p>
+      A set's role decides which types its pieces count for; its tier multiplies their value
+      (and so how easily they count as good potential). Low-value sets keep one piece per group.
+    </p>
+    <table class="set-tiers">
+      <thead><tr><th>Set</th><th>Role</th><th class="num">Tier</th><th></th></tr></thead>
+      <tbody>
+        {% for row in page.weights.sets %}<tr><td>{{ row.set_name }}</td><td>{{ row.role }}</td><td class="num">{{ row.factor }}</td><td><small>{{ row.reason }}</small></td></tr>{% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Faction types, from your 6★ roster</h3>
+    <p>
+      Accessories are faction-locked, so a faction gets a type of its own while it has a 6★
+      champion who scales off more than one stat (damage hits and bombs for damage dealers,
+      heals, shields and revives for supports), or a support who heals off something other
+      than HP or DEF. They count only for that faction's pieces, beside the types above. Each
+      effect counts its shape, not its size.
+    </p>
+    <table class="weights faction-types">
+      <thead><tr><th>Faction</th><th>Type</th><th>From</th>{% for label in page.weights.stats %}<th>{{ label }}</th>{% endfor %}<th>Main stats</th></tr></thead>
+      <tbody>
+        {% for row in page.weights.faction_rows %}
+          <tr>
+            <td>{{ row.faction }}</td><td>{{ row.label }}</td><td><small>{{ row.champions | join(", ") }}</small></td>
+            {% for weight in row.weights %}<td>{{ weight }}</td>{% endfor %}
+            <td><small>{{ row.mains }}</small></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ static_url('cleanup.js') }}"></script>{% endblock %}

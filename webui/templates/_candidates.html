@@ -1,0 +1,24 @@
+{% from "_accessory.html" import accessory_cells %}
+{% macro candidates(rows, after_label, shown) %}
+  {% if rows %}
+    <table class="accessory-list">
+      <thead><tr><th>#</th><th></th><th>Piece</th><th>Main</th><th>Substats</th>
+        <th class="num">Now</th><th class="num">{{ after_label }}</th><th class="num" title="shortage counted">Priority</th><th>Best for</th></tr></thead>
+      <tbody>
+        {% for c in rows %}
+          <tr>
+            <td class="num muted">{{ loop.index }}</td>
+            {{ accessory_cells(c.row) }}
+            <td class="num">{{ c.before }}</td>
+            <td class="num">{{ c.after }}</td>
+            <td class="num"><strong>{{ c.priority }}</strong> <small class="muted">{{ c.row.scarcity }}</small></td>
+            <td><small>{{ c.row.fit or "–" }}</small></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if rows | length >= shown %}<p class="hint">The first {{ shown }} shown.</p>{% endif %}
+  {% else %}
+    <p>Nothing to list.</p>
+  {% endif %}
+{% endmacro %}

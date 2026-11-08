@@ -253,9 +253,16 @@ ENEMY_TARGETS = {"Target", "AllEnemies", "Boss", "EnemyWithHighestStamina", "Mos
                  "RandomEnemy", "RandomEnemyWithMaxBuffsCount"}
 
 
+# Effects other than damage whose size scales with the caster's stats: what heals, shields,
+# revives and bombs scale off.
+SCALING_KINDS = {"Heal", "ApplyBuff", "Revive", "ApplyDebuff"}
+OWN_STATS = re.compile(r"(?<![A-Z_])(ATK|DEF|HP|ACC|RES|SPD)(?![A-Z_])")
+
+
 def build_skills(skills, heroes):
     """The champions' skills: name, whether it's AoE, its unconditional damage hits (formula,
-    count, the skill's own DEF modifier) and the damage bonus each book adds."""
+    count, the skill's own DEF modifier), the damage bonus each book adds, and the formulas of
+    its other effects that scale with the caster's stats (`scaling`: kind and formula)."""
     wanted = {skill_id for h in heroes for f in h["forms"] for skill_id in f["skills"]}
     out = {}
     for skill_id in sorted(wanted):
@@ -274,6 +281,10 @@ def build_skills(skills, heroes):
             # One entry per book, in order (level L has the first L-1); 0 for non-damage books.
             "book_damage": [round(b["Value"], 6) if b["SkillBonusType"] == "Attack" else 0
                             for b in skill.get("SkillLevelBonuses") or []],
+            "scaling": [{"kind": e["KindId"], "formula": e["MultiplierFormula"]}
+                        for e in skill["Effects"] or []
+                        if e["KindId"] in SCALING_KINDS
+                        and OWN_STATS.search(e.get("MultiplierFormula") or "")],
         }
     return out
 

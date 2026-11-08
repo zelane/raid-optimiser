@@ -68,3 +68,7 @@ oracle-request out=oracle_request_file:
 # Import the raider oracle's output into static/{base_stats_6_60,level_curve}.json
 oracle-import input=oracle_out:
     python3 -I tools/oracle_import.py "{{input}}" static/hero_types.json static/
+
+# Champions (each mythical form apart) that may need a scaling exception (--all, --name X)
+exceptions *args:
+    uv run python -m optimiser.scaling_report "$@"

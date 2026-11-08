@@ -7,6 +7,7 @@ answers once the extractor reports back.
 - `Err`, `Result`, `failed`: an outcome, or why it failed
 - `equip`: put pieces on a champion in game
 - `preview`: show a champion in pieces in the game's build preview, changing nothing
+- `select_to_sell`: select pieces in the game's sell screen; selling is confirmed in game
 """
 
 import json
@@ -42,6 +43,10 @@ def equip(champion_id: int, artifact_ids: list[int]) -> Result[None]:
 def preview(account: Account, champion_id: int, artifact_ids: list[int]) -> Result[None]:
     body = {"account_id": account.user_id, "hero_id": champion_id, "artifact_ids": artifact_ids}
     return post("/preview", body)
+
+
+def select_to_sell(artifact_ids: list[int]) -> Result[None]:
+    return post("/sell", {"artifact_ids": artifact_ids})
 
 
 def post(path: str, body: dict) -> Result[None]:

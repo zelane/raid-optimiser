@@ -4,7 +4,8 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 
 - `app`, `templates`: the FastAPI app and its Jinja templates
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`, `champion`,
-  `builds`, `run`, `delete_run`, `equip`, `preview`: the routes
+  `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
+  `accessory_target`, `protect_accessory`, `sell_accessories`: the routes
 - `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 """
@@ -26,7 +27,11 @@ from webui.forms import (
     parse_flag,
     parse_glyph,
     parse_lock,
+    parse_protect,
     parse_request,
+    parse_sell,
+    parse_target_free,
+    parse_weight,
 )
 
 HERE = Path(__file__).resolve().parent
@@ -96,6 +101,66 @@ async def plan_glyph(request: Request):
         case kind, grade:
             row = service.plan_glyph_for(account, kind, grade)
             return templates.TemplateResponse(request, "_glyph_row.html", {"row": row})
+
+
+@app.get("/accessories", response_class=HTMLResponse)
+def accessories(request: Request, tab: str = service.ACCESSORY_TABS[0]):
+    if tab not in service.ACCESSORY_TABS:
+        raise HTTPException(404, f"no tab {tab}")
+
+    page = service.accessories_page(service.current_account(), tab)
+    return templates.TemplateResponse(request, "accessories.html", {"page": page})
+
+
+@app.post("/accessories/weights", response_class=HTMLResponse)
+async def accessory_weight(request: Request):
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_weight(form):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case key, stat, weight:
+            service.change_type_weight(key, stat, weight)
+            return HTMLResponse('<small class="up">Saved: the lists re-plan with it.</small>')
+
+
+@app.post("/accessories/target", response_class=HTMLResponse)
+async def accessory_target(request: Request):
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_target_free(form):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case target:
+            plan = service.set_target_free(service.current_account(), target)
+            return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
+
+
+@app.post("/accessories/{artifact_id}/protect", response_class=HTMLResponse)
+async def protect_accessory(request: Request, artifact_id: int):
+    form = {key: str(value) for key, value in (await request.form()).items()}
+    plan = service.protect_accessory(service.current_account(), artifact_id, parse_protect(form))
+    return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
+
+
+@app.post("/accessories/sell", response_class=HTMLResponse)
+async def sell_accessories(request: Request):
+    fields = [str(value) for value in (await request.form()).getlist("artifact_id")]
+
+    match parse_sell(fields, service.pieces_to_sell(service.current_account())):
+        case FormErrors(messages=messages):
+            outcome = extractor.Err("; ".join(messages))
+
+        case artifact_ids:
+            outcome = extractor.select_to_sell(artifact_ids)
+
+    context = {
+        "error": outcome.reason if extractor.failed(outcome) else None,
+        "done": "Selected in game: check them and confirm the sale there.",
+    }
+    return templates.TemplateResponse(request, "_equip_result.html", context)
 
 
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)

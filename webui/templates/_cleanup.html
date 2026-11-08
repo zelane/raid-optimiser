@@ -1,0 +1,80 @@
+{% from "_accessory.html" import accessory_cells, score_cells, score_heads, protect_toggle %}
+<div class="cleanup-summary">
+  <article><small>Inventory</small><strong>{{ plan.inventory }}</strong><small>of {{ plan.space }} spaces</small></article>
+  <article><small>Mailbox</small><strong>{{ plan.mailbox }}</strong><small>claim {{ plan.to_claim }}, leave {{ plan.leave_unclaimed | length }}</small></article>
+  <article><small>To sell</small><strong class="down">{{ plan.to_sell | length }}</strong><small>{% if plan.sold_after_swaps %}+{{ plan.sold_after_swaps }} after swaps · {% endif %}{{ plan.kept }} loose kept</small></article>
+  <article><small>Free after</small><strong class="{{ 'up' if plan.free_after >= plan.target_free else 'down' }}">{{ plan.free_after }}</strong>
+    <small>{% if plan.short %}{{ plan.short }} short: the rest are kept by rule{% else %}{{ plan.worn }} worn, never moved{% endif %}</small></article>
+</div>
+
+<form class="target" hx-post="/accessories/target" hx-target="#cleanup" hx-swap="innerHTML" hx-trigger="change">
+  <label>Leave <input type="number" name="target_free" value="{{ plan.target_free }}" min="0" max="2200" step="10"> spaces free</label>
+  <small class="muted">Kept by rule:
+    {% for reason, count in plan.keep_reasons.items() %}{{ reason }} {{ count }}{{ ", " if not loop.last }}{% endfor %}</small>
+</form>
+
+<details>
+  <summary>By set</summary>
+  <table class="set-summary">
+    <thead><tr><th>Set</th><th>Role</th><th>Loose</th><th>Sell</th><th>Leave in mailbox</th></tr></thead>
+    <tbody>
+      {% for row in plan.sets %}<tr><td>{{ row.set_name }}</td><td>{{ row.role }}</td><td>{{ row.loose }}</td><td>{{ row.to_sell }}</td><td>{{ row.leave_unclaimed }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</details>
+
+{% if plan.swaps %}
+  <p class="hint">
+    Planned with the {{ plan.swaps }} <a href="/accessories?tab=swaps">swaps</a> done:
+    {{ plan.sold_after_swaps }} of the pieces coming off are sold too, once they're off and the
+    next sync has them in the inventory.
+  </p>
+{% endif %}
+
+<h3>To sell</h3>
+{% if plan.to_sell %}
+  <form class="sell" hx-post="/accessories/sell" hx-target="#sell-result"
+        hx-confirm="Select the ticked pieces in the game's sell screen? Nothing is sold until you confirm there.">
+    <div class="sell-bar">
+      <button type="submit">Select <span class="sell-count">{{ plan.to_sell | length }}</span> in game</button>
+      <label><input type="checkbox" class="sell-all" checked> All</label>
+      <span id="sell-result"></span>
+    </div>
+    <table class="accessory-list">
+      <thead><tr><th></th><th></th><th>Piece</th><th>Main</th><th>Substats</th>{{ score_heads() }}<th>Group</th><th></th></tr></thead>
+      <tbody>
+        {% for drop in plan.to_sell %}
+          <tr>
+            <td><input type="checkbox" name="artifact_id" value="{{ drop.row.id }}" checked aria-label="Sell {{ drop.row.set_name }} {{ drop.row.slot }}"></td>
+            {{ accessory_cells(drop.row) }}
+            {{ score_cells(drop.row) }}
+            <td><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
+            <td>{{ protect_toggle(drop.row) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </form>
+{% else %}
+  <p>Nothing to sell.</p>
+{% endif %}
+
+<h3>Leave in the mailbox</h3>
+{% if plan.leave_unclaimed %}
+  <p class="hint">Not worth a space: claim everything else in the mailbox once the sale is done.</p>
+  <table class="accessory-list">
+    <thead><tr><th></th><th>Piece</th><th>Main</th><th>Substats</th>{{ score_heads() }}<th>Group</th><th></th></tr></thead>
+    <tbody>
+      {% for drop in plan.leave_unclaimed %}
+        <tr>
+          {{ accessory_cells(drop.row) }}
+          {{ score_cells(drop.row) }}
+          <td><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
+          <td>{{ protect_toggle(drop.row) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>Claim the whole mailbox.</p>
+{% endif %}

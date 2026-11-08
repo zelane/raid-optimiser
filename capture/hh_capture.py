@@ -18,6 +18,8 @@ into that socket as if the server had sent it, then waits for the extractor's
   pieces really move
 - `POST http://127.0.0.1:8081/preview` `{"account_id", "hero_id", "artifact_ids"}`:
   `PreviewBuild`, the game's build preview; nothing changes, so no account sync follows
+- `POST http://127.0.0.1:8081/sell` `{"artifact_ids"}`: `SellArtifacts`, which selects the
+  pieces in the game's sell screen; the sale is confirmed (or not) in game
 """
 
 import asyncio
@@ -47,6 +49,7 @@ RECORD_SEPARATOR = "\x1e"  # ends every SignalR JSON message
 INVOCATION = 1
 MAX_EQUIP = 16  # the extractor's own limits per request
 MAX_PREVIEW = 9
+MAX_SELL = 16384
 RESULT_TIMEOUT = 30.0
 
 
@@ -189,6 +192,14 @@ class HubControl:
         }
         return self._invoke("PreviewBuild", [request], operation_id)
 
+    def sell(self, body: dict) -> tuple[int, dict]:
+        artifact_ids = [int(artifact_id) for artifact_id in body["artifact_ids"]]
+
+        if reason := check_ids(artifact_ids, MAX_SELL):
+            return 400, {"error": reason}
+
+        return self._invoke("SellArtifacts", [artifact_ids], None)
+
     def _invoke(self, target: str, arguments: list, operation_id: str | None) -> tuple[int, dict]:
         if not self._lock.acquire(blocking=False):
             return 409, {"error": "another command is still running"}
@@ -227,6 +238,10 @@ def check_pieces(hero_id: int, artifact_ids: list[int], most: int) -> str | None
     if hero_id <= 0:
         return "hero_id must be positive"
 
+    return check_ids(artifact_ids, most)
+
+
+def check_ids(artifact_ids: list[int], most: int) -> str | None:
     if not 1 <= len(artifact_ids) <= most:
         return f"between 1 and {most} artifacts per request"
 
@@ -278,7 +293,11 @@ def field_of(result: dict | None, name: str):
 def control_handler(control: HubControl) -> type[BaseHTTPRequestHandler]:
     class ControlHandler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:
-            commands = {"/equip": control.equip, "/preview": control.preview}
+            commands = {
+                "/equip": control.equip,
+                "/preview": control.preview,
+                "/sell": control.sell,
+            }
             if (command := commands.get(self.path.rstrip("/"))) is None:
                 return self._reply(404, {"error": "unknown path"})
 

@@ -8,7 +8,9 @@ number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` wit
 `above_level`. The equip button posts `artifact_ids`, comma-separated; the champion list's lock
 picker posts `level`; the assumptions page posts `kind` (a `kind_key`) and `grade` (a
 `grade_key`, empty for none) for a glyph, and `flag` (a `Flag`) with `on` (present when ticked)
-for the rest.
+for the rest. The accessories pages post `key` ("<type>:<stat>", by the store's names)
+with `weight` for a champion type's weight, `target_free` for the spaces to leave, `on`
+(present when ticked) to protect a piece, and `artifact_id` (repeated) for the pieces to sell.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
@@ -17,6 +19,10 @@ for the rest.
 - `parse_lock`: the lock picker's level
 - `parse_glyph`: a glyph kind and the grade to assume for it
 - `parse_flag`: an assumption, on or off
+- `MAX_WEIGHT`, `parse_weight`: a champion type's weight for a stat
+- `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
+- `parse_protect`: a piece protected from the clean-up, or not
+- `parse_sell`: the pieces to select for selling
 - `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`, `parse_number`: its steps
 """
 
@@ -24,11 +30,20 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, GlyphGrade, GlyphKind, Stat, Stats, Tables
+from optimiser.account import (
+    Account,
+    Champion,
+    GlyphGrade,
+    GlyphKind,
+    Stat,
+    Stats,
+    Tables,
+)
 from optimiser.assume import Flag
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.glyphs import parse_grade, parse_kind
 from optimiser.labels import PERCENT_STATS, STAT_LABELS, parse_pool
+from optimiser.roles import TypeKey
 from optimiser.solve import Goal, Request
 from optimiser.store import LOCK_LEVELS, Locks
 
@@ -36,6 +51,8 @@ MAX_PIECES = 9  # one per slot
 DEFAULT_ENEMY_DEF = 6000
 DEFAULT_ABOVE_LEVEL = 8
 MAX_BUILDS = 10
+MAX_WEIGHT = 10
+MAX_TARGET_FREE = 2200
 
 
 @dataclass(frozen=True)
@@ -136,6 +153,52 @@ def parse_flag(form: Mapping[str, str]) -> tuple[Flag, bool] | FormErrors:
         return FormErrors([f"no such assumption: {name}"])
 
     return Flag(name), "on" in form
+
+
+def parse_weight(form: Mapping[str, str]) -> tuple[TypeKey, Stat, float] | FormErrors:
+    match form.get("key", "").split(":"):
+        case [type_name, stat] if type_name in TypeKey and stat in Stat:
+            key, weighed = TypeKey(type_name), Stat(stat)
+
+        case _:
+            return FormErrors(["no such weight"])
+
+    errors: list[str] = []
+    weight = parse_number(form, "weight", "weight", errors)
+
+    if not errors and not 0 <= weight <= MAX_WEIGHT:
+        errors.append(f"weights are 0 to {MAX_WEIGHT}")
+
+    return FormErrors(errors) if errors else (key, weighed, weight)
+
+
+def parse_target_free(form: Mapping[str, str]) -> int | FormErrors:
+    text = form.get("target_free", "").strip()
+
+    if not (text.isdigit() and int(text) <= MAX_TARGET_FREE):
+        return FormErrors([f"free spaces must be a whole number, 0 to {MAX_TARGET_FREE}"])
+
+    return int(text)
+
+
+def parse_protect(form: Mapping[str, str]) -> bool:
+    return "on" in form
+
+
+def parse_sell(fields: list[str], to_sell: set[int]) -> list[int] | FormErrors:
+    """Only pieces the plan sells now: an old page can't sell what it no longer would."""
+    if not all(text.isdigit() for text in fields):
+        return FormErrors(["artifact ids must be numbers"])
+
+    artifact_ids = list(dict.fromkeys(int(text) for text in fields))
+
+    if not artifact_ids:
+        return FormErrors(["tick at least one piece"])
+
+    if stale := [artifact_id for artifact_id in artifact_ids if artifact_id not in to_sell]:
+        return FormErrors([f"{len(stale)} pieces are no longer to sell; reload the page"])
+
+    return artifact_ids
 
 
 def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Stats:

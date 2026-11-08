@@ -16,7 +16,9 @@ its upload. Game tables come from the game's own data.
   invocation into the extractor's `/reader` hub WebSocket, as if HH's server sent it, then
   waits for (and swallows) the extractor's `HelperRequestResult`. `account_id` is the
   capture's `UserId`. `webui/extractor.py` is the client; each build has both buttons.
-  Selling (`SellArtifacts(int[])`) works the same way but can't be undone: not wired up.
+  `/sell` (`{"artifact_ids"}`, `SellArtifacts(int[])`) only selects the pieces in the game's
+  sell screen; the user confirms the sale in game. Only the accessories page sends it, and
+  only pieces its current plan sells (`forms.parse_sell`).
 - `update-static.sh`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
@@ -40,6 +42,36 @@ its upload. Game tables come from the game's own data.
   Also each champion's run history: the submitted form and the outcome view
   (`dataclasses.asdict` JSON, rebuilt by `service.revive`; a run whose shape no longer fits
   shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
+- Accessories (`/accessories`, tabs in the workflow's order: Swaps · Roll · Rework · Clean up,
+  then Weights). Only unequipped gear takes
+  inventory space (2200 for accessories); overflow waits in the mailbox (the capture's
+  `InboxItems` "Overflow" artifacts, `Account.mailbox`).
+  - `roles.py`: champion types (ATK/HP/DEF damage, bomber/poisoner, support: per-stat weights,
+    stored in `type_weights`, and the main stats that suit them) and set roles (Damage, Hybrid,
+    Support, Any; the user's table, by set id). Support sets still keep one C.DMG amulet.
+  - `scaling.py`: faction types from the 6★ roster: each champion's pull per stat from its
+    formulas (damage hits and bombs; for Support-role champions heals, shields, revives:
+    `skills.json` `scaling`), each effect counting its shape. Mixed scalers (Rotos, Fellhound)
+    and supports healing off ATK (Kurosa) get a type for their faction only. Each mythical
+    form counts as a champion of its own (`Tables.hero_forms`). Exceptions go in
+    `scaling.OVERRIDES` (`Skip` / `Weigh`, by champion name and form); the
+    `champion-exceptions` skill finds candidates with `just exceptions`
+    (`optimiser/scaling_report.py`).
+  - `potential.py`: every way a piece can turn out (upgrades at +4/8/12/16 add a substat until
+    four, then roll one; a rework keeps each line's roll count, set and faction and re-picks
+    main stat and substats; once only: `RerollsCount`), scored in average 6★ rolls, quantile 75.
+  - `accessories.py`: each piece's value: max(+16, rework) potential × shortage factor (good
+    pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's meta tier
+    (`roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint 1.15; set-less 0.6).
+  - `cleanup.py`: inventory + mailbox planned together; the lowest values go until
+    `target_free` spaces are left (sold, or left unclaimed). Special variants
+    (`VariantId` "Corrupted": unusual stats, a border) are left alone everywhere. Never dropped: protected pieces,
+    banners with SPD rolled 3+, good potential (slot's top quarter), each faction's Faction
+    Wars reserve, 6★ damage-set amulets not yet reworked (may rework to C.DMG). Group quotas
+    (2, 1 for low-value sets) make the surplus go first. Swaps (own tab, by champion): a loose
+    piece clearly better than one an unlocked champion wears in the same group is planned as
+    equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
+  - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service.py` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.

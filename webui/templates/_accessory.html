@@ -1,0 +1,45 @@
+{% from "_macros.html" import stars %}
+{# An accessory's cells in the lists: its art, what it is, its main stat and substats. #}
+{% macro accessory_cells(row) %}
+  <td>
+    <div class="piece-art small art-{{ row.rarity | lower }}" title="{{ row.set_name }} · {{ row.rarity }}">
+      {% if row.image_url %}<img src="{{ row.image_url }}" alt="">{% endif %}
+      <span class="piece-level">+{{ row.level }}</span>
+    </div>
+  </td>
+  <td>
+    <strong>{{ row.slot }}</strong> {{ stars(row.rank) }}
+    {% if row.reworked %}<small class="tag" title="reworked already: it can't be again">reworked</small>{% endif %}<br>
+    <small>{{ row.set_name }}</small>
+    {% if row.faction_icon_url %}<img class="faction small" src="{{ row.faction_icon_url }}" alt="{{ row.faction }}" title="{{ row.faction }}">
+    {% elif row.faction %}<small>· {{ row.faction }}</small>{% endif %}
+    {% if row.worn_by %}<br><small class="muted">on {{ row.worn_by }}</small>{% endif %}
+  </td>
+  <td><strong>{{ row.main }}</strong></td>
+  <td><small>{{ row.substats | join(" · ") }}</small></td>
+{% endmacro %}
+
+{# A piece's scores: now, at +16, after a rework, then its value (shortage counted). #}
+{% macro score_cells(row) %}
+  <td class="num">{{ row.now }}</td>
+  <td class="num">{{ row.natural }}</td>
+  <td class="num">{{ row.rework or "–" }}</td>
+  <td class="num" title="shortage: {{ row.scarcity }}"><strong>{{ row.value }}</strong> <small class="muted">{{ row.scarcity }}</small></td>
+  <td><small>{{ row.fit or "fits nothing in its set" }}</small></td>
+{% endmacro %}
+
+{% macro score_heads() %}
+  <th class="num" title="as it stands">Now</th>
+  <th class="num" title="levelled to +16 (75th percentile of how it can turn out)">+16</th>
+  <th class="num" title="reworked, then levelled (75th percentile)">Rework</th>
+  <th class="num" title="the better of +16 and rework, times the shortage factor">Value</th>
+  <th>Best for</th>
+{% endmacro %}
+
+{% macro protect_toggle(row) %}
+  <label class="protect" title="Never drop this piece">
+    <input type="checkbox" name="on" {% if row.protected %}checked{% endif %}
+           hx-post="/accessories/{{ row.id }}/protect" hx-trigger="change" hx-target="#cleanup" hx-swap="innerHTML">
+    Keep
+  </label>
+{% endmacro %}

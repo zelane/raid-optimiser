@@ -7,13 +7,13 @@ once at the boundary into the shapes the stat model and solver use.
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
-- `Hit`, `Skill`: champion skills, as far as damage goes
-- `LoreOfSteel`, `Tables`: the game's fixed tables
+- `Hit`, `Effect`, `Skill`: champion skills, as far as damage (and what else scales) goes
+- `HeroForm`, `LoreOfSteel`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
 - `load_account`: the loader
 - `arena_league`, `parse_tables`, `parse_sets` (`parse_ignore`), `parse_skills`,
-  `parse_relics` (`relic_stats`), `parse_glyphs`, `parse_gear` (`by_line`),
+  `parse_relics` (`relic_stats`), `parse_forms`, `parse_glyphs`, `parse_gear` (`by_line`),
   `great_hall_by_affinity`, `parse_champion`, `parse_artifact` (`parse_line`): its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
 """
@@ -103,6 +103,12 @@ class Artifact:
     ascension: StatLine | None
     ascend_level: int  # stars ascended, 0 to `rank`
     faction: str | None
+    reworked: bool = False  # its substats re-picked in the Forge, which only happens once
+    variant: str = "Normal"  # the game's; "Corrupted" pieces have unusual stats and a border
+
+    def special(self) -> bool:
+        return self.variant != "Normal"
+
     planned_level: int | None = None  # assumed levelled to this (main stat only)
     planned_ascend_level: int | None = None  # assumed ascended to this
 
@@ -117,6 +123,7 @@ class Champion:
     type_id: int
     faction: str
     element: str  # affinity: Magic, Force, Spirit, Void
+    role: str  # the game's: Attack, Defense, Health, Support
     rarity: str
     grade: int
     level: int
@@ -210,6 +217,15 @@ class Hit:
 
 
 @dataclass(frozen=True)
+class Effect:
+    """A skill effect other than damage whose size scales with the caster's stats: `kind` is
+    the game's (Heal, ApplyBuff for shields, Revive, ApplyDebuff for bombs)."""
+
+    kind: str
+    formula: str
+
+
+@dataclass(frozen=True)
 class Skill:
     id: int
     name: str
@@ -217,6 +233,17 @@ class Skill:
     aoe: bool
     hits: tuple[Hit, ...]
     book_damage: tuple[float, ...]  # per book, in order; level L has the first L-1
+    scaling: tuple[Effect, ...] = ()
+
+
+@dataclass(frozen=True)
+class HeroForm:
+    """One of a champion type's forms (mythicals have two): its role as the game names it
+    (Attack, Defense, Health, Support), its skills, and its 6★ L60 base stats if known."""
+
+    role: str
+    skills: tuple[int, ...]
+    base_6_60: Stats
 
 
 @dataclass(frozen=True)
@@ -245,17 +272,21 @@ class Tables:
     sets: dict[int, ArtifactSet]
     skills: dict[int, Skill]
     hero_skills: dict[int, tuple[int, ...]]  # hero type id -> its skill ids (first form)
+    hero_forms: dict[int, tuple[HeroForm, ...]]  # hero type id -> every form, first first
     glyphs: dict[GlyphKind, dict[GlyphGrade, float]]  # each grade's top roll, weakest first
     gear: GearTables
 
 
 @dataclass(frozen=True)
 class Account:
+    """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed."""
+
     user_id: int  # the Raid account
     champions: dict[int, Champion]
     artifacts: tuple[Artifact, ...]
     owners: dict[int, int]  # artifact id -> id of the champion wearing it
     tables: Tables
+    mailbox: tuple[Artifact, ...] = ()
 
 
 DEFAULT_LEAGUE = "GoldV"  # if the capture doesn't say
@@ -286,6 +317,11 @@ def load_account(captures: Path, static: Path, schema: Path) -> Account:
         parse_artifact(raw, hh_set_ids) for raw in read_json(captures / "artifacts.json")
     )
     owners = {art_id: c.id for c in champions for art_id in c.artifact_ids}
+    mailbox = tuple(
+        parse_artifact(raw, hh_set_ids)
+        for item in account.get("InboxItems") or ()
+        for raw in item.get("Artifacts") or ()
+    )
 
     return Account(
         user_id=account["UserId"],
@@ -293,6 +329,7 @@ def load_account(captures: Path, static: Path, schema: Path) -> Account:
         artifacts=artifacts,
         owners=owners,
         tables=tables,
+        mailbox=mailbox,
     )
 
 
@@ -349,6 +386,7 @@ def parse_champion(
         type_id=raw["TypeId"],
         faction=raw["Faction"],
         element=raw["Element"],
+        role=raw.get("Role") or "",
         rarity=raw["Rarity"],
         grade=GRADES[raw["Grade"]],
         level=raw["Level"],
@@ -379,6 +417,8 @@ def parse_artifact(raw: dict, hh_set_ids: dict[str, int]) -> Artifact:
         ascension=parse_line(raw["AscendBonus"]) if raw["AscendBonus"] else None,
         ascend_level=raw.get("AscendLevel") or 0,
         faction=None if raw["RequiredFraction"] == "None" else raw["RequiredFraction"],
+        reworked=bool(raw.get("RerollsCount")),
+        variant=raw.get("VariantId") or "Normal",
     )
 
 
@@ -435,6 +475,7 @@ def parse_skills(static: Path) -> dict[int, Skill]:
             aoe=raw["aoe"],
             hits=tuple(Hit(h["formula"], h["count"], h["defence_modifier"]) for h in raw["hits"]),
             book_damage=tuple(raw["book_damage"]),
+            scaling=tuple(Effect(e["kind"], e["formula"]) for e in raw.get("scaling", ())),
         )
         for skill_id, raw in read_json(static / "skills.json").items()
     }
@@ -454,12 +495,13 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         if "set_bonus_multiplier" in m
     )
     hero_types = read_json(static / "hero_types.json")
+    base_by_form = {
+        int(type_id): [{Stat(k): v for k, v in form.items() if k in Stat} for form in forms]
+        for type_id, forms in read_json(static / "base_stats_6_60.json").items()
+    }
 
     return Tables(
-        base_6_60={
-            int(type_id): {Stat(k): v for k, v in forms[0].items() if k in Stat}
-            for type_id, forms in read_json(static / "base_stats_6_60.json").items()
-        },
+        base_6_60={type_id: forms[0] for type_id, forms in base_by_form.items() if forms},
         unscaled={
             t["id"]: {Stat(k): v for k, v in t["forms"][0]["base_stats"].items() if k in Stat}
             for t in hero_types
@@ -487,8 +529,19 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),
         skills=parse_skills(static),
         hero_skills={t["id"]: tuple(t["forms"][0]["skills"]) for t in hero_types if t["forms"]},
+        hero_forms={
+            t["id"]: parse_forms(t["forms"], base_by_form.get(t["id"], [])) for t in hero_types
+        },
         glyphs=parse_glyphs(read_json(static / "glyphs.json")),
         gear=parse_gear(read_json(static / "gear.json")),
+    )
+
+
+def parse_forms(forms: list[dict], bases: list[Stats]) -> tuple[HeroForm, ...]:
+    """Base stats pair with forms by position; a form without them gets none."""
+    return tuple(
+        HeroForm(form["role"], tuple(form["skills"]), bases[number] if number < len(bases) else {})
+        for number, form in enumerate(forms)
     )
 
 

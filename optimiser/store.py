@@ -12,6 +12,11 @@ have no row.
 Settings are named flags ("max_gear_level"), on when they have a row; `optimiser.assume`
 names them.
 
+Type weights are what `optimiser.roles` values a stat at for a champion type, keyed by
+the type's and the stat's names (opaque here); weights left at their default have no row.
+Protected pieces are accessories the clean-up must never drop. Numbers are named settings
+with a value ("target_free"); unset ones have no row.
+
 A run is a solve as a front end asked and showed it: the form it was asked with and what it
 found, both JSON the front end writes and reads (opaque here), with a summary for listings.
 
@@ -21,6 +26,9 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `read_locks`, `write_lock`: locks
 - `read_glyphs`, `write_glyph`: glyphs
 - `read_flags`, `write_flag`: settings
+- `WeightKey`, `read_weights`, `write_weight`: champion type weights
+- `read_protected`, `write_protected`: protected accessories
+- `read_number`, `write_number`: numeric settings
 - `save_run`, `list_runs`, `read_run`, `latest_run`, `delete_run`: runs
 - `connect`, `run_from_row`: what they share
 """
@@ -36,6 +44,7 @@ from pathlib import Path
 LOCK_LEVELS = range(1, 6)
 
 type Locks = Mapping[int, int]  # champion id -> lock level; unlocked champions are absent
+type WeightKey = tuple[str, str]  # champion type, stat
 
 
 @dataclass(frozen=True)
@@ -82,6 +91,15 @@ SCHEMA = (
         grade TEXT NOT NULL
     )""",
     "CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)",
+    "DROP TABLE IF EXISTS accessory_weights",  # per main stat: replaced by type weights
+    """CREATE TABLE IF NOT EXISTS type_weights (
+        type TEXT NOT NULL,
+        stat TEXT NOT NULL,
+        weight REAL NOT NULL,
+        PRIMARY KEY (type, stat)
+    )""",
+    "CREATE TABLE IF NOT EXISTS protected_artifacts (artifact_id INTEGER PRIMARY KEY)",
+    "CREATE TABLE IF NOT EXISTS numbers (name TEXT PRIMARY KEY, value REAL NOT NULL)",
 )
 RUN_COLUMNS = "id, ran_at, summary, note, form, outcome"
 
@@ -146,6 +164,65 @@ def write_flag(path: Path, name: str, on: bool) -> None:
             db.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
         else:
             db.execute("DELETE FROM flags WHERE name = ?", (name,))
+
+
+def read_weights(path: Path) -> dict[WeightKey, float]:
+    if not path.exists():
+        return {}
+
+    with connect(path) as db:
+        rows = db.execute("SELECT type, stat, weight FROM type_weights").fetchall()
+
+    return {(type_name, stat): weight for type_name, stat, weight in rows}
+
+
+def write_weight(path: Path, key: WeightKey, weight: float) -> None:
+    with connect(path) as db:
+        db.execute(
+            "INSERT INTO type_weights (type, stat, weight) VALUES (?, ?, ?)"
+            " ON CONFLICT (type, stat) DO UPDATE SET weight = excluded.weight",
+            (*key, weight),
+        )
+
+
+def read_protected(path: Path) -> set[int]:
+    if not path.exists():
+        return set()
+
+    with connect(path) as db:
+        rows = db.execute("SELECT artifact_id FROM protected_artifacts").fetchall()
+
+    return {artifact_id for (artifact_id,) in rows}
+
+
+def write_protected(path: Path, artifact_id: int, protected: bool) -> None:
+    with connect(path) as db:
+        if protected:
+            db.execute(
+                "INSERT OR IGNORE INTO protected_artifacts (artifact_id) VALUES (?)",
+                (artifact_id,),
+            )
+        else:
+            db.execute("DELETE FROM protected_artifacts WHERE artifact_id = ?", (artifact_id,))
+
+
+def read_number(path: Path, name: str) -> float | None:
+    if not path.exists():
+        return None
+
+    with connect(path) as db:
+        row = db.execute("SELECT value FROM numbers WHERE name = ?", (name,)).fetchone()
+
+    return row[0] if row else None
+
+
+def write_number(path: Path, name: str, value: float) -> None:
+    with connect(path) as db:
+        db.execute(
+            "INSERT INTO numbers (name, value) VALUES (?, ?)"
+            " ON CONFLICT (name) DO UPDATE SET value = excluded.value",
+            (name, value),
+        )
 
 
 def save_run(path: Path, run: NewRun, ran_at: datetime) -> Run:

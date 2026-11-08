@@ -14,9 +14,13 @@
 <body>
   <main class="container">
     <nav>
+      {%- set here = request.url.path %}
       <ul><li><a href="/"><strong>Raid optimiser</strong></a></li></ul>
-      <ul>
-        <li><a href="/assumptions">Assumptions</a></li>
+      <ul class="menu">
+        {%- for path, label in [("/", "Champions"), ("/accessories", "Accessories"), ("/assumptions", "Assumptions")] %}
+        {%- set current = here == path or (path == "/" and here.startswith("/champions")) or (path != "/" and here.startswith(path)) %}
+        <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a></li>
+        {%- endfor %}
         <li>
           <select class="palette" aria-label="Colour palette">
             {% for key, label in palettes.items() %}<option value="{{ key }}" {% if key == palette %}selected{% endif %}>{{ label }}</option>{% endfor %}
