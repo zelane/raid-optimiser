@@ -80,7 +80,9 @@ its upload. Game tables come from the game's own data.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
-  cached capture, locks) and `views` (champion rows, piece names and art); `forms.py` is the
+  cached capture, locks), `views` (champion rows, piece names and art) and `scores` (accessory
+  potentials kept in `data/cache/potentials.pickle` by piece state, per scorer and scoring
+  code, so only changed pieces are rescored); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.
   Colour palettes (Pico's default and Hana, from `~/repo/demeter`'s `palettes.css`) live in
   `static/palettes.css`: the nav's switcher (`palette.js`) sets `<html data-palette>` and a

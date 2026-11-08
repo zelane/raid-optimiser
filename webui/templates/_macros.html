@@ -3,7 +3,7 @@
 {# A champion as the game's collection shows them: the portrait in its rarity frame, with
    affinity, level and empower on it, and the stars under it. #}
 {% macro tile(champion, size="") %}
-  <figure class="tile {{ size }}" title="{{ champion.name }} · {{ champion.rarity }}">
+  <figure class="tile {{ size }} rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}, {{ champion.rarity }}">
     <div class="tile-frame frame-{{ champion.rarity | lower }}">
       {% if champion.portrait_url %}<img class="tile-art" src="{{ champion.portrait_url }}" alt="{{ champion.name }}">
       {% else %}<span class="tile-missing">{{ champion.name }}</span>{% endif %}
@@ -36,21 +36,10 @@
 {% endmacro %}
 
 
-{% macro stat_cells(cells) %}
-  {% for cell in cells %}
-    <td>{{ cell.text }}{% if cell.change %}<br><small class="{{ 'up' if cell.better else 'down' }}">{{ cell.change }}</small>{% endif %}</td>
-  {% endfor %}
-{% endmacro %}
-
-{% macro stat_header(cells) %}
-  <tr><th></th>{% for cell in cells %}<th>{{ cell.label }}</th>{% endfor %}</tr>
-{% endmacro %}
-
-{# A stat as a table row: its name, its value, then its glyph (or whatever the caller adds:
-   the main stat's ascension bonus). #}
-{% macro line(stat, kind="") %}
+{# A substat as a table row: its name, its value, then its glyph. #}
+{% macro line(stat) %}
   {%- set muted = '' if stat.optimised else ' ignored' -%}
-  <tr class="{{ kind }}">
+  <tr>
   <th scope="row" class="stat-name{{ muted }}">{{ stat.label }}</th>
   <td class="stat-value">
     {%- if stat.planned_amount %}<span class="planned{{ muted }}" title="assumed (now {{ stat.amount }})">{{ stat.planned_amount }}</span>
@@ -58,8 +47,7 @@
   </td>
   <td class="stat-extra">
     {%- if stat.planned_glyph %}<span class="glyph planned" title="glyph to apply{{ ' (now ' ~ stat.glyph ~ ')' if stat.glyph }}">{{ stat.planned_glyph }}</span>
-    {%- elif stat.glyph %}<span class="glyph" title="glyph">{{ stat.glyph }}</span>{% endif %}
-    {%- if caller %}{{ caller() }}{% endif -%}
+    {%- elif stat.glyph %}<span class="glyph" title="glyph">{{ stat.glyph }}</span>{% endif -%}
   </td>
   </tr>
 {% endmacro %}
@@ -68,7 +56,7 @@
 {% macro piece(p, champion) %}
   <article class="piece{{ ' is-equipped' if p.equipped }}">
     <header>
-      <div class="piece-art art-{{ p.rarity | lower }}" title="{{ p.set_name }} · {{ p.rarity }}">
+      <div class="piece-art rarity-{{ p.rarity | lower }}" title="{{ p.set_name }}, {{ p.rarity }}">
         {% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.set_name }} {{ p.slot }}">{% endif %}
         {% if p.planned_level %}<span class="piece-level planned" title="to level (now +{{ p.level }})">+{{ p.planned_level }}</span>
         {%- else %}<span class="piece-level" title="level">+{{ p.level }}</span>{% endif %}
@@ -77,6 +65,7 @@
         <strong>{{ p.slot }}</strong>
         {% if p.stars %}{{ star_row(p.stars, p.rank ~ " stars" ~ (", ascended " ~ p.ascend_level if p.ascend_level else ""), "piece-stars") }}
         {%- else %}{{ stars(p.rank) }}{% endif %}
+        {{ main_stat(p) }}
       </div>
       {% if p.worn_by or p.equipped %}
         {% set wearer = "on " ~ (p.worn_by or champion.name) %}
@@ -87,14 +76,26 @@
     </header>
     {% if p.faction %}<p class="meta"><small>{{ p.faction }} only</small></p>{% endif %}
     <table class="piece-stats">
-      {% call line(p.primary, "main") %}
-      {%- if p.ascension %}<span class="ascension{{ ' planned' if p.ascension.planned_amount }}"
-          title="{{ 'to ascend ' ~ p.planned_ascend_level ~ '★ (now ' ~ p.ascension.amount ~ ' at ' ~ p.ascend_level ~ '★)' if p.ascension.planned_amount else 'ascension bonus' }}">
-        {{- p.ascension.label }} {{ p.ascension.planned_amount or p.ascension.amount -}}
-      </span>{% endif %}{% endcall %}
       {% for sub in p.substats %}{{ line(sub) }}{% endfor %}
     </table>
   </article>
+{% endmacro %}
+
+{# A piece's main stat, under its stars: the amount (an assumed one if it's to be levelled),
+   then its ascension bonus. Main stats take no glyphs. #}
+{% macro main_stat(p) %}
+  {%- set main = p.primary -%}
+  <span class="piece-main">
+    <span class="{{ '' if main.optimised else 'ignored' }}">{{ main.label }}</span>
+    {% if main.planned_amount %}<span class="planned" title="assumed (now {{ main.amount }})">{{ main.planned_amount }}</span>
+    {%- else %}<span>{{ main.amount }}</span>{% endif %}
+    {%- if p.ascension %}
+      <span class="ascension{{ ' planned' if p.ascension.planned_amount }}"
+            title="{{ 'to ascend ' ~ p.planned_ascend_level ~ '★ (now ' ~ p.ascension.amount ~ ' at ' ~ p.ascend_level ~ '★)' if p.ascension.planned_amount else 'ascension bonus' }}">
+        {{- p.ascension.label }} {{ p.ascension.planned_amount or p.ascension.amount -}}
+      </span>
+    {%- endif %}
+  </span>
 {% endmacro %}
 
 {% macro lock_picker(listed) %}

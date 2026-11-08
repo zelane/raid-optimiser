@@ -1,6 +1,7 @@
-{# A run: what it found, and the form it was asked with (app.js restores it). #}
-<div class="run" data-run-id="{{ run.entry.id }}">
-  <p class="last-run"><small>{{ run.entry.ran_at }} · {{ run.entry.summary }}</small></p>
+{# A run: what it found, and the form it was asked with (app.js restores it). What was asked
+   is its line in the history, marked there. #}
+<div class="run page-section" data-run-id="{{ run.entry.id }}">
+  <h2>Results</h2>
   {% if run.outcome is none %}
     <p><small>This run was saved by an older version and can't be shown; its inputs are restored.</small></p>
   {% elif run.outcome.builds is defined %}

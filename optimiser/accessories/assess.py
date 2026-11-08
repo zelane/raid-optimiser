@@ -7,17 +7,20 @@ The clean-up and the roll and rework lists share it.
 
 - `Where`, `Assessed`, `Assessment`: the account's accessories, assessed
 - `GOOD_SHARE`, `SCARCITY`, `PLENTY`: what good is, and what it's worth to be short
+- `placed_accessories`, `potentials_of`: the account's accessories and their potentials (the
+  slow part, worth keeping: only a piece's own state and the scorer change it)
 - `assess_accessories`: the workflow
 - `good_bars`, `scarcity_by_shelf`, `shelf_of`: its steps
 """
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
 import numpy as np
 
-from optimiser.accessories.potential import ACCESSORIES, Potential, Scorer, assess
+from optimiser.accessories.potential import ACCESSORIES, Piece, Potential, Scorer, assess
 from optimiser.accessories.roles import set_factor
 from optimiser.account import Account, Artifact, Locks, Slot
 
@@ -69,7 +72,7 @@ class Assessment:
         return weighed >= self.good_bars[piece.artifact.slot]
 
 
-def assess_accessories(account: Account, scorer: Scorer, locks: Locks) -> Assessment:
+def placed_accessories(account: Account) -> list[tuple[Artifact, Where]]:
     placed = [
         *(
             (a, Where.WORN if a.id in account.owners else Where.INVENTORY)
@@ -77,9 +80,31 @@ def assess_accessories(account: Account, scorer: Scorer, locks: Locks) -> Assess
         ),
         *((a, Where.MAILBOX) for a in account.mailbox),
     ]
-    placed = [(a, where) for a, where in placed if a.slot in ACCESSORIES and a.primary.stat]
-    potentials = {a.id: assess(a, scorer) for a, _ in placed}
+    return [(a, where) for a, where in placed if a.slot in ACCESSORIES and a.primary.stat]
 
+
+def potentials_of(
+    account: Account, scorer: Scorer, known: Mapping[Piece, Potential]
+) -> dict[Piece, Potential]:
+    """Each accessory's potential, by what it depends on: `known` ones (by the same scorer)
+    are kept, the rest scored."""
+    potentials: dict[Piece, Potential] = {}
+
+    for artifact, _ in placed_accessories(account):
+        piece = Piece.of(artifact)
+
+        if piece not in potentials:
+            potentials[piece] = known[piece] if piece in known else assess(piece, scorer)
+
+    return potentials
+
+
+def assess_accessories(
+    account: Account, by_piece: Mapping[Piece, Potential], locks: Locks
+) -> Assessment:
+    """`by_piece`: `potentials_of` the account."""
+    placed = placed_accessories(account)
+    potentials = {a.id: by_piece[Piece.of(a)] for a, _ in placed}
     owned = [(a, potentials[a.id]) for a, where in placed if where is not Where.MAILBOX]
     bars = good_bars(owned)
     scarcity = scarcity_by_shelf(owned, bars)

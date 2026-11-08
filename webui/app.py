@@ -46,7 +46,9 @@ app = FastAPI(title="Raid optimiser")
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.globals["lock_levels"] = LOCK_LEVELS
-templates.env.globals["palettes"] = {"default": "Default", "hana": "Hana"}  # palettes.css
+# palettes.css; a first visit (no cookie) gets Vault.
+templates.env.globals["palettes"] = {"vault": "Vault", "default": "Pico", "hana": "Hana"}
+templates.env.globals["default_palette"] = "vault"
 templates.env.globals["static_url"] = lambda path: static_url(path)
 
 

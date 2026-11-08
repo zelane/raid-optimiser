@@ -1,21 +1,25 @@
 <!doctype html>
-{%- set palette = request.cookies.get("raid_palette", "default") %}
-{%- if palette not in palettes %}{% set palette = "default" %}{% endif %}
-<html lang="en" data-palette="{{ palette }}">
+{%- set palette = request.cookies.get("raid_palette", default_palette) %}
+{%- if palette not in palettes %}{% set palette = default_palette %}{% endif %}
+{#- Vault is dark only: Pico's own dark theme underneath, so its icons and controls match. #}
+<html lang="en" data-palette="{{ palette }}"{% if palette == "vault" %} data-theme="dark"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Raid optimiser{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Alegreya:wght@500;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
   <link rel="stylesheet" href="{{ static_url('app.css') }}">
   <link rel="stylesheet" href="{{ static_url('palettes.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
 <body>
-  <main class="container">
-    <nav>
+  <header class="topbar">
+    <nav class="container">
       {%- set here = request.url.path %}
-      <ul><li><a href="/"><strong>Raid optimiser</strong></a></li></ul>
+      <ul><li><a href="/" class="wordmark">Raid optimiser</a></li></ul>
       <ul class="menu">
         {%- for path, label in [("/", "Champions"), ("/accessories", "Accessories"), ("/assumptions", "Assumptions")] %}
         {%- set current = here == path or (path == "/" and here.startswith("/champions")) or (path != "/" and here.startswith(path)) %}
@@ -28,6 +32,8 @@
         </li>
       </ul>
     </nav>
+  </header>
+  <main class="container">
     {% block content %}{% endblock %}
   </main>
   <script src="{{ static_url('palette.js') }}"></script>

@@ -2,7 +2,7 @@
 {# An accessory's cells in the lists: its art, what it is, its main stat and substats. #}
 {% macro accessory_cells(row) %}
   <td>
-    <div class="piece-art small art-{{ row.rarity | lower }}" title="{{ row.set_name }} · {{ row.rarity }}">
+    <div class="piece-art small rarity-{{ row.rarity | lower }}" title="{{ row.set_name }}, {{ row.rarity }}">
       {% if row.image_url %}<img src="{{ row.image_url }}" alt="">{% endif %}
       <span class="piece-level">+{{ row.level }}</span>
     </div>
@@ -16,7 +16,7 @@
     {% if row.worn_by %}<br><small class="muted">on {{ row.worn_by }}</small>{% endif %}
   </td>
   <td><strong>{{ row.main }}</strong></td>
-  <td><small>{{ row.substats | join(" · ") }}</small></td>
+  <td><small>{% for sub in row.substats %}<span class="nowrap">{{ sub }}</span>{{ " · " if not loop.last }}{% endfor %}</small></td>
 {% endmacro %}
 
 {# A piece's scores: now, at +16, after a rework, then its value (shortage counted). #}

@@ -1,11 +1,71 @@
 /*
- * Colour palettes (from ~/repo/demeter's palettes.css: its default and Hana), picked with the
- * switcher in the nav (base.html, palette.js), which sets <html data-palette="...">. "default"
- * is Pico's own look and needs nothing here. Each palette defines its colours as --m-*
- * variables for light and dark (following the system setting, like Pico), then one block maps
- * Pico's variables onto them, so every page picks them up (--m-heading is optional: headings,
- * else the text colour). Loaded after Pico and app.css so these win.
+ * Colour palettes, picked with the switcher in the nav (base.html, palette.js), which sets
+ * <html data-palette="...">: Vault (this app's own, and the default), and Pico's and Hana from
+ * ~/repo/demeter's palettes.css. "default" is Pico's own look and needs nothing here. Each
+ * palette defines its colours as --m-* variables (Hana for light and dark, following the
+ * system setting like Pico; Vault dark only), then one block maps Pico's and the app's
+ * variables onto them, so every page picks them up (--m-heading is optional: headings, else
+ * the text colour; --m-display too: the heading face, else the body's). Loaded after Pico and
+ * app.css so these win.
  */
+
+/* --- Vault (the default) ---------------------------------------------------- */
+
+/* The game's own vernacular: a dark hall of warm charcoal, brass for what you act on,
+   bone-white text. Dark only (base.html sets Pico's data-theme="dark" with it). Its typefaces: Alegreya
+   for headings and the wordmark, Alegreya Sans (old-style figures off: tables line up) for
+   everything else. */
+:root[data-palette='vault'] {
+  --pico-font-family-sans-serif: 'Alegreya Sans', 'Noto Sans', sans-serif;
+  --m-display: 'Alegreya', Georgia, serif;
+  --m-primary: #d9ad57;
+  --m-on-primary: #1a1408;
+  --m-secondary: #a9b1ba;
+  --m-on-secondary: #121110;
+  --m-tertiary: #7cc4b8;
+  --m-error: #ec7a63;
+  --m-surface: #121212;
+  --m-on-surface: #ebe3d0;
+  --m-surface-variant: #1d1c1a;
+  --m-on-surface-variant: #a39e94;
+  --m-outline: #3a3833;
+  --m-shadow: #000;
+  --m-hover: #2a2825;
+  --m-selection: #d9ad57;
+  --m-green: #84cf8a;
+  --m-yellow: #d9ad57;
+  --m-heading: #f3e7c9;
+  --m-mix: #fff; /* hovers lighten */
+  color-scheme: dark;
+}
+
+/* Alegreya Sans runs small and sets old-style figures: a touch larger, figures lined up. */
+:root[data-palette='vault'] body {
+  font-size: 1.06rem;
+  /* The hall's walls: cut stone (textures/stone.svg, greys about 50%) blended `overlay` onto
+     a blackish slate base, so it keeps the base's colour and only the joints and wear show; then
+     the edges fall into shadow (`multiply`). The page's content sits on a plain slab in front
+     of the wall (below), so the stone frames it rather than running under the numbers. */
+  background:
+    radial-gradient(ellipse 110% 90% at 50% 20%, #fff 35%, #2a2a2a) fixed,
+    url(textures/stone.svg) 0 0 / 480px 240px,
+    #1d2024;
+  background-blend-mode: multiply, overlay, normal;
+}
+:root[data-palette='vault'] main.container {
+  min-height: 100vh; padding-block: 2rem 4rem;
+  background: var(--m-surface);
+  box-shadow: 0 0 3rem 1rem rgb(0 0 0 / 0.65), 0 0 0 1px rgb(0 0 0 / 0.6);
+}
+:root[data-palette='vault'] .topbar {
+  margin-bottom: 0; border-bottom-color: rgb(0 0 0 / 0.6);
+  background: rgb(8 9 11 / 0.72);
+}
+/* Wide enough for walls either side: room inside the slab, and the top bar's ends in line. */
+@media (min-width: 1024px) {
+  :root[data-palette='vault'] :is(main.container, .topbar nav.container) { padding-inline: 2rem; }
+}
+:root[data-palette='vault'] :is(body, input, select, button, textarea) { font-variant-numeric: lining-nums; }
 
 /* --- Hana ----------------------------------------------------------------- */
 
@@ -95,6 +155,10 @@
   --pico-h4-color: var(--m-heading, var(--m-on-surface));
   --pico-h5-color: var(--m-heading, var(--m-on-surface));
   --pico-h6-color: var(--m-heading, var(--m-on-surface));
+
+  --stat-up: var(--m-green);
+  --stat-down: var(--m-error);
+  --accent: var(--m-primary);
 
   --pico-ins-color: var(--m-green);
   --pico-del-color: var(--m-error);

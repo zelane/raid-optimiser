@@ -2,7 +2,8 @@
 account.py - the account (from the HH capture) and the game's tables (`paths.GAME`), parsed
 once at the boundary into the shapes the stat model and solver use.
 
-- `Stat`, `Stats`, `Bonus`: stats, and the bonuses that raise them
+- `Stat`, `STAT_NAMES`, `Stats`, `Bonus`: stats (by the game's names), and the bonuses that
+  raise them
 - `Slot`, `ARMOUR`, `StatLine`, `Artifact`, `Champion`: what can be worn, and by whom
 - `LOCK_LEVELS`, `Locks`: champion locks, which keep gear on its champion
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
@@ -14,17 +15,20 @@ once at the boundary into the shapes the stat model and solver use.
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
-- `arena_league`, `parse_tables`, `parse_sets` (`parse_ignore`), `parse_skills`,
-  `parse_relics` (`relic_stats`), `parse_forms`, `parse_glyphs`, `parse_gear` (`by_line`),
-  `great_hall_by_affinity`, `parse_champion`, `parse_artifact` (`parse_line`): its steps
+- `arena_league`, `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets`
+  (`parse_ignore`), `parse_skills`, `parse_relics` (`relic_stats`), `parse_forms`,
+  `parse_glyphs`, `parse_gear` (`by_line`), `great_hall_by_affinity`, `parse_champion`,
+  `parse_artifact` (`parse_line`): its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
 """
 
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum, StrEnum
+from functools import lru_cache
 from pathlib import Path
+
+import orjson
 
 
 class Stat(StrEnum):
@@ -38,6 +42,9 @@ class Stat(StrEnum):
     ACC = "Accuracy"
     CR = "CriticalChance"
     CD = "CriticalDamage"
+
+
+STAT_NAMES: dict[str, Stat] = {stat.value: stat for stat in Stat}  # `in Stat` is slow
 
 
 type Stats = dict[Stat, float]
@@ -136,6 +143,10 @@ class Champion:
     relics: tuple[Bonus, ...]  # the stats of the relics it wears
     great_hall: tuple[Bonus, ...]  # the account's Great Hall, for the champion's affinity
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
+    # Which of its forms (`Tables.hero_forms`) it's taken in, 0 first: mythicals have two, and
+    # each has its own base stats and skills. A playable form never changes affinity, so the
+    # Great Hall doesn't depend on it. The capture doesn't say; a request does.
+    form: int = 0
 
     @property
     def ascension(self) -> int:
@@ -253,10 +264,12 @@ class Skill:
 @dataclass(frozen=True)
 class HeroForm:
     """One of a champion type's forms (mythicals have two): its role as the game names it
-    (Attack, Defense, Health, Support), its skills, and its 6★ L60 base stats if known."""
+    (Attack, Defense, Health, Support), its skills, its base stats as the static data holds
+    them (HP / 15, crit in %), and its exact 6★ L60 base stats if known (else empty)."""
 
     role: str
     skills: tuple[int, ...]
+    unscaled: Stats
     base_6_60: Stats
 
 
@@ -270,12 +283,9 @@ class LoreOfSteel:
 
 @dataclass(frozen=True)
 class Tables:
-    """The game's fixed tables. Unscaled stats are as the static data holds them (HP / 15,
-    crit in %); `level_curve` scales them for ranks below 6* L60. The arena bonus is the
-    account's league."""
+    """The game's fixed tables. `level_curve` scales a form's unscaled stats for ranks below
+    6* L60. The arena bonus is the account's league."""
 
-    base_6_60: dict[int, Stats]
-    unscaled: dict[int, Stats]
     level_curve: dict[tuple[int, int], float]
     great_hall: dict[Stat, tuple[Bonus, ...]]  # stat -> the bonus at each level (1 first)
     arena: tuple[Bonus, ...]  # the account's classic arena league
@@ -289,10 +299,14 @@ class Tables:
     glyphs: dict[GlyphKind, dict[GlyphGrade, float]]  # each grade's top roll, weakest first
     gear: GearTables
 
-    def skills_of(self, type_id: int) -> tuple[int, ...]:
-        """The hero type's skill ids, in its first form."""
-        forms = self.hero_forms.get(type_id, ())
-        return forms[0].skills if forms else ()
+    def form_of(self, champion: Champion) -> HeroForm:
+        """The form the champion is in (`Champion.form`)."""
+        return self.hero_forms[champion.type_id][champion.form]
+
+    def skills_of(self, champion: Champion) -> tuple[int, ...]:
+        """The champion's skill ids, in the form they're in; none if the type is unknown."""
+        forms = self.hero_forms.get(champion.type_id, ())
+        return forms[champion.form].skills if champion.form < len(forms) else ()
 
 
 @dataclass(frozen=True)
@@ -324,7 +338,7 @@ GLYPH_RARITIES = ("Uncommon", "Rare", "Epic", "Legendary")
 def load_account(captures: Path, static: Path, schema: Path) -> Account:
     """The latest capture and the static tables, in one place."""
     account = read_json(captures / "account.json")
-    tables = parse_tables(static, schema, arena_league(account))
+    tables = cached_tables(static, schema, arena_league(account), tables_stamp(static, schema))
     relics = parse_relics(account["Relics"], read_json(static / "bonuses.json")["relics"])
     great_hall = great_hall_by_affinity(account.get("GreatHall"), tables)
     champions = [
@@ -370,9 +384,9 @@ def great_hall_by_affinity(
 
     return {
         affinity: tuple(
-            by_stat[Stat(stat)][level - 1]
+            by_stat[STAT_NAMES[stat]][level - 1]
             for stat, level in stat_levels.items()
-            if stat in Stat and level > 0
+            if stat in STAT_NAMES and level > 0
         )
         for affinity, stat_levels in levels.items()
     }
@@ -450,7 +464,7 @@ def parse_line(raw: dict) -> StatLine:
     kind = raw["Kind"]
     return StatLine(
         kind=kind,
-        stat=Stat(kind) if kind in Stat else None,
+        stat=STAT_NAMES.get(kind),
         value=raw["Value"],
         absolute=raw["IsAbsolute"],
         glyph=raw["Enhancement"],
@@ -510,6 +524,17 @@ def arena_league(account: dict) -> str:
     return league if league and league != "None" else DEFAULT_LEAGUE
 
 
+@lru_cache(maxsize=2)
+def cached_tables(static: Path, schema: Path, league: str, stamp: tuple[int, ...]) -> Tables:
+    """`parse_tables`, reparsed only when a game update rewrites the tables (`stamp`, only
+    the cache key: `tables_stamp`), not with each capture."""
+    return parse_tables(static, schema, league)
+
+
+def tables_stamp(static: Path, schema: Path) -> tuple[int, ...]:
+    return tuple(path.stat().st_mtime_ns for path in (schema, *sorted(static.glob("*.json"))))
+
+
 def parse_tables(static: Path, schema: Path, league: str) -> Tables:
     set_kinds = read_json(schema)["enums"]["ArtifactSetKindId"]
     bonuses = read_json(static / "bonuses.json")
@@ -520,17 +545,13 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
     )
     hero_types = read_json(static / "hero_types.json")
     base_by_form = {
-        int(type_id): [{Stat(k): v for k, v in form.items() if k in Stat} for form in forms]
+        int(type_id): [
+            {STAT_NAMES[k]: v for k, v in form.items() if k in STAT_NAMES} for form in forms
+        ]
         for type_id, forms in read_json(static / "base_stats_6_60.json").items()
     }
 
     return Tables(
-        base_6_60={type_id: forms[0] for type_id, forms in base_by_form.items() if forms},
-        unscaled={
-            t["id"]: {Stat(k): v for k, v in t["forms"][0]["base_stats"].items() if k in Stat}
-            for t in hero_types
-            if t["forms"]
-        },
         level_curve={
             (int(grade), int(level)): multiplier
             for grade, levels in read_json(static / "level_curve.json").items()
@@ -561,9 +582,14 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
 
 
 def parse_forms(forms: list[dict], bases: list[Stats]) -> tuple[HeroForm, ...]:
-    """Base stats pair with forms by position; a form without them gets none."""
+    """6★ L60 base stats pair with forms by position; a form without them gets none."""
     return tuple(
-        HeroForm(form["role"], tuple(form["skills"]), bases[number] if number < len(bases) else {})
+        HeroForm(
+            role=form["role"],
+            skills=tuple(form["skills"]),
+            unscaled={STAT_NAMES[k]: v for k, v in form["base_stats"].items() if k in STAT_NAMES},
+            base_6_60=bases[number] if number < len(bases) else {},
+        )
         for number, form in enumerate(forms)
     )
 
@@ -621,9 +647,8 @@ def parse_bonuses(by_stat: dict) -> tuple[Bonus, ...]:
 
 def parse_bonus(stat: str, value: float, absolute: bool) -> Bonus | None:
     """None for stats the optimiser ignores (damage dealt/taken, crit heal, ignore DEF)."""
-    return Bonus(Stat(stat), value, absolute) if stat in Stat else None
+    return Bonus(STAT_NAMES[stat], value, absolute) if stat in STAT_NAMES else None
 
 
 def read_json(path: Path):
-    with path.open() as file:
-        return json.load(file)
+    return orjson.loads(path.read_bytes())

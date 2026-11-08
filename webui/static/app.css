@@ -1,3 +1,11 @@
+/*
+ * The app's own styles, over Pico (palettes.css then maps each palette onto both).
+ *
+ * The one loud thing is rarity, the game's own colour language: a `rarity-<name>` class sets
+ * --rarity, which frames tiles and pieces, lights a champion card when it's pointed at, and
+ * glows behind the champion on their page. Everything else stays quiet.
+ */
+
 :root {
   --rarity-common: #9aa0a6;
   --rarity-uncommon: #3fb950;
@@ -7,118 +15,16 @@
   --rarity-mythical: #f85149;
   --stat-up: #3fb950;
   --stat-down: #f85149;
+  --accent: var(--pico-primary);
+  --rarity: var(--rarity-common);
 }
 
-.rarity-common { color: var(--rarity-common); }
-.rarity-uncommon { color: var(--rarity-uncommon); }
-.rarity-rare { color: var(--rarity-rare); }
-.rarity-epic { color: var(--rarity-epic); }
-.rarity-legendary { color: var(--rarity-legendary); }
-.rarity-mythical { color: var(--rarity-mythical); }
-
-.stars { color: var(--rarity-legendary); letter-spacing: -0.1em; }
-.up { color: var(--stat-up); }
-.down { color: var(--stat-down); }
-
-/* Champion tiles, after the game's collection: the portrait (140x182) in its rarity frame, the
-   game's 9-slice frames (slices from the sprites' borders, top right bottom left) over a plain
-   border in the rarity's colour for when a frame isn't extracted (and Uncommon, which has none).
-   Overlays scale with the tile's font size. */
-.tile { --tile-width: 5rem; width: var(--tile-width); margin: 0; font-size: calc(var(--tile-width) / 4.5); }
-.tile.large { --tile-width: 7.5rem; }
-.tile-frame {
-  position: relative; aspect-ratio: 140 / 182; overflow: hidden; background: #111;
-  border: solid var(--rarity-common); border-width: 0.4em 0.4em 0.5em;
-}
-.tile-art { display: block; width: 100%; height: 100%; object-fit: cover; }
-.tile-missing { display: grid; place-items: center; height: 100%; padding: 0.2em; color: #ddd; font-size: 0.7em; text-align: center; }
-.tile-affinity { position: absolute; left: 0.1em; bottom: 0.1em; width: 1.05em; }
-.tile-level, .tile-empower {
-  position: absolute; color: #fff; font-weight: 800; line-height: 1;
-  text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 1px #000;
-}
-.tile-level { right: 0.15em; bottom: 0.1em; font-size: 0.92em; }
-.tile-empower { right: 0.15em; top: 0.15em; color: #ffe27a; font-size: 1em; }
-.tile-frame.frame-uncommon { border-color: var(--rarity-uncommon); }
-.tile-frame.frame-rare { border-color: var(--rarity-rare); border-image: url(assets/frames/rare.png) 25 25 30 25; }
-.tile-frame.frame-epic { border-color: var(--rarity-epic); border-image: url(assets/frames/epic.png) 25 25 31 25; }
-.tile-frame.frame-legendary { border-color: var(--rarity-legendary); border-image: url(assets/frames/legendary.png) 25 25 31 25; }
-.tile-frame.frame-mythical { border-color: var(--rarity-mythical); border-image: url(assets/frames/mythical.png) 25 25 31 25; }
-.tile-frame.frame-common { border-image: url(assets/frames/common.png) 24 24 31 24; }
-.tile .champion-stars { display: flex; justify-content: center; margin-top: 0.15em; }
-.tile .champion-stars img { width: calc(100% / 6 + 0.1em); max-width: none; margin: 0 -0.05em; }
-.champion-name { display: inline-flex; align-items: center; gap: 0.5rem; }
-/* The champion page: the champion on the left, the request form stacked on the right (for a
-   viewport of at least 1280px); history and results run full width under both. */
-.champion-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.5rem; align-items: start; margin-bottom: 1rem; }
-.champion-side { display: flex; flex-direction: column; align-items: center; gap: 1rem; position: sticky; top: 1rem; }
-.champion-identity { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; max-width: 100%; }
-.champion-identity h2 { margin: 0; font-size: 1.25rem; text-align: center; }
-table.current-stats { width: 100%; margin: 0; }
-table.current-stats th, table.current-stats td { padding: 0.15rem 0.75rem; }
-table.current-stats td { text-align: right; font-variant-numeric: tabular-nums; }
-.icon { width: 1.5rem; height: 1.5rem; vertical-align: middle; margin-right: 0.25rem; }
-
-table.stats th, table.stats td { text-align: right; white-space: nowrap; }
-table.stats th:first-child { text-align: left; }
-table.stats tr.build-detail > td { text-align: left; white-space: normal; padding: 0.75rem 0 0; }
-.build-detail-body .pieces { margin-bottom: 1rem; }
-.build-notes:empty { display: none; }
-.build-toggle {
-  width: auto; margin: 0; padding: 0; border: 0; background: none;
-  color: var(--pico-primary); font-weight: bold; white-space: nowrap;
-}
-.build-toggle::before { content: "▸"; display: inline-block; width: 1em; transition: transform 0.15s; }
-.build-toggle[aria-expanded="true"]::before { transform: rotate(90deg); }
-tr.build-summary { cursor: pointer; }
-table.limits input { margin: 0; padding: 0.25rem 0.5rem; height: auto; }
-table.limits td, table.limits th { padding: 0.2rem 0.4rem; }
-
-.pieces {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-.piece { margin: 0; padding: 1rem; }
-.piece header { margin: -1rem -1rem 0.5rem; padding: 0.5rem 1rem; }
-.piece header { display: flex; align-items: center; gap: 0.75rem; }
-.piece-title {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem;
-  align-self: flex-start; line-height: 1.2; min-width: 0;
-}
-.piece-art {
-  position: relative; flex: none; width: 4rem; height: 4rem; box-sizing: border-box; overflow: hidden;
-  background: #111; border: 3px solid var(--rarity-common); border-radius: var(--pico-border-radius);
-}
-.piece-art img { display: block; width: 100%; height: 100%; }
-.piece-level {
-  position: absolute; right: 0.15em; bottom: 0.05em; color: #fff; font-weight: 800; font-size: 0.85em;
-  line-height: 1; text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 1px #000;
-}
-.piece-level.planned { color: var(--stat-up); }
-.piece .meta { margin-bottom: 0.25rem; }
-table.piece-stats { width: 100%; margin: 0; }
-table.piece-stats th, table.piece-stats td {
-  padding: 0 0 0 1rem; border: 0; background: none; text-align: left; vertical-align: baseline;
-}
-table.piece-stats th { padding-left: 0; font-weight: 600; }
-table.piece-stats td.stat-value { color: color-mix(in srgb, var(--pico-color) 55%, var(--pico-muted-color)); }
-table.piece-stats th, table.piece-stats td.stat-value { width: 1%; white-space: nowrap; }
-table.piece-stats tr.main > * { padding-bottom: 0.25rem; font-weight: bold; }
-.piece .glyph { color: var(--stat-up); }
-.planned { color: var(--stat-up); border-bottom: 1px dashed currentColor; }
-table.glyphs { max-width: 28rem; }
-table.glyphs select { margin: 0; padding-top: 0.25rem; padding-bottom: 0.25rem; height: auto; }
-.piece .ascension { color: var(--rarity-epic); }
-.piece .ignored { color: var(--pico-muted-color); }
-.art-uncommon { border-color: var(--rarity-uncommon); }
-.art-rare { border-color: var(--rarity-rare); }
-.art-epic { border-color: var(--rarity-epic); }
-.art-legendary { border-color: var(--rarity-legendary); }
-.art-mythical { border-color: var(--rarity-mythical); }
-
-.rank-grid { display: grid; grid-template-columns: repeat(2, 1fr); column-gap: var(--pico-grid-column-gap); }
+.rarity-common { --rarity: var(--rarity-common); }
+.rarity-uncommon { --rarity: var(--rarity-uncommon); }
+.rarity-rare { --rarity: var(--rarity-rare); }
+.rarity-epic { --rarity: var(--rarity-epic); }
+.rarity-legendary { --rarity: var(--rarity-legendary); }
+.rarity-mythical { --rarity: var(--rarity-mythical); }
 
 /* About 20% smaller than Pico's sizes at each breakpoint. */
 :root { --pico-font-size: 80%; }
@@ -128,91 +34,323 @@ table.glyphs select { margin: 0; padding-top: 0.25rem; padding-bottom: 0.25rem; 
 @media (min-width: 1280px) { :root { --pico-font-size: 100%; } }
 @media (min-width: 1536px) { :root { --pico-font-size: 105%; } }
 
-mark.equipped { background: var(--stat-up); color: #fff; }
+/* --- Type ------------------------------------------------------------------- */
 
-.piece.empty { display: flex; align-items: center; justify-content: center; opacity: 0.5; }
-.owner { margin-left: auto; align-self: flex-start; }
-img.owner { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; object-position: top; }
-mark.owner { font-size: 0.75em; white-space: nowrap; }
-.piece.is-equipped { opacity: 0.5; filter: grayscale(0.5); }
-@media (max-width: 768px) { .pieces { grid-template-columns: 1fr; } }
-.last-run { color: var(--pico-muted-color); margin-bottom: 0.25rem; }
-.hint { color: var(--pico-muted-color); display: block; margin-top: 0.25rem; }
-
-.equip { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
-.equip button { width: auto; margin: 0; padding: 0.25rem 0.75rem; }
-
-select.lock { width: auto; }
-select.lock { margin: 0; padding: 0.2rem 2rem 0.2rem 0.5rem; height: auto; font-size: 0.85em; }
-select.lock:not(.is-locked) { color: var(--pico-muted-color); }
-select.lock.is-locked { border-color: var(--rarity-legendary); }
-
-#history h4 { margin: 1rem 0 0.25rem; }
-ul.history { max-height: 12rem; overflow-y: auto; padding: 0; margin: 0 0 1rem; }
-ul.history li { list-style: none; display: flex; align-items: baseline; gap: 0.75rem; padding: 0.15rem 0.5rem; margin: 0; border-left: 3px solid transparent; }
-ul.history li span { flex: 1; color: var(--pico-muted-color); }
-ul.history li.current { border-left-color: var(--rarity-legendary); background: var(--pico-card-background-color); }
-ul.history li.current span { color: inherit; }
-ul.history a { white-space: nowrap; }
-ul.history button.delete { width: auto; margin: 0; padding: 0 0.4rem; font-size: 0.75em; border: none; }
-
+h1, h2, h3, h4, .wordmark { font-family: var(--m-display, inherit); letter-spacing: 0.01em; }
+h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+td, th { font-variant-numeric: tabular-nums lining-nums; }
+.lede { max-width: 72ch; color: var(--pico-muted-color); }
+.muted { color: var(--pico-muted-color); }
+.nowrap { white-space: nowrap; }
+.hint { display: block; margin-top: 0.25rem; color: var(--pico-muted-color); }
+.up { color: var(--stat-up); }
+.down { color: var(--stat-down); }
+.stars { color: var(--rarity-legendary); letter-spacing: -0.1em; }
 .star-yellow { color: var(--rarity-legendary); }
 .star-purple { color: var(--rarity-epic); }
 .star-red { color: var(--stat-down); }
-img.faction { height: 2.6rem; width: auto; max-width: none; }
+.planned { color: var(--stat-up); border-bottom: 1px dashed currentColor; }
 
-/* The champion list: a grid of cards, each the tile with the name and lock under it. */
-.champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 1rem 0.75rem; }
-.champion-card { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; margin: 0; padding: 0.5rem; text-align: center; }
-.champion-card .card-tile { text-decoration: none; }
-.card-name { display: flex; align-items: center; gap: 0.25rem; max-width: 100%; font-size: 0.8rem; line-height: 1.2; text-decoration: none; }
-.card-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.card-name img.faction { height: 1.6rem; flex: none; }
-.champion-card select.lock { width: 100%; font-size: 0.75rem; }
-.piece-stars { display: inline-flex; vertical-align: middle; }
-.piece-stars img { height: 1em; margin-right: -0.1em; }
-fieldset[role="group"] input[name^="pieces_"] { flex: 0 0 6rem; }
-.set-row .remove-set { flex: 0 0 3rem; padding-left: 0; padding-right: 0; }
-button.add-set { width: auto; padding: 0.25rem 0.75rem; font-size: 0.875rem; }
+/* --- Ornament ------------------------------------------------------------------ */
 
-/* The palette switcher: a compact select that sits in the nav line. */
+/* Section headings: the wordmark's diamond, then a brass rule fading out. */
+.page-section > h2, main > h2, #cleanup > h2 { display: flex; align-items: center; gap: 0.6rem; }
+.page-section > h2::before, main > h2::before, #cleanup > h2::before { content: "◆"; color: var(--accent); font-size: 0.55em; }
+.page-section > h2::after, main > h2::after, #cleanup > h2::after {
+  content: ""; flex: 1; height: 1px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), transparent);
+}
+
+/* --- The top bar ------------------------------------------------------------- */
+
+.topbar {
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  background: color-mix(in srgb, var(--pico-card-background-color) 70%, transparent);
+  margin-bottom: 1.5rem;
+}
+.topbar nav { flex-wrap: wrap; padding-block: 0.25rem; }
+.wordmark { font-size: 1.35rem; font-weight: 700; white-space: nowrap; color: var(--pico-h1-color); text-decoration: none; }
+.wordmark::before { content: "◆"; margin-right: 0.45rem; color: var(--accent); font-size: 0.8em; }
+nav ul.menu a[aria-current="page"] {
+  color: var(--accent); font-weight: 600; text-decoration: underline;
+  text-decoration-thickness: 2px; text-underline-offset: 0.45em;
+}
 select.palette {
   width: auto; margin: 0; padding: 0.25rem 2rem 0.25rem 0.75rem; font-size: 0.875rem;
   background-position: center right 0.5rem;
 }
 
-/* The top menu: the current page underlined. */
-nav ul.menu a[aria-current="page"] { text-decoration: underline; text-underline-offset: 0.3em; font-weight: 600; }
+/* --- Champion tiles ---------------------------------------------------------- */
 
-/* Accessory clean-up. */
-.weight-tables { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: flex-start; }
+/* After the game's collection: the portrait (140x182) in its rarity frame, the game's 9-slice
+   frames (slices from the sprites' borders, top right bottom left) over a plain border in the
+   rarity's colour for when a frame isn't extracted (and Uncommon, which has none). Overlays
+   scale with the tile's font size. */
+.tile { --tile-width: 5rem; width: var(--tile-width); margin: 0; font-size: calc(var(--tile-width) / 4.5); }
+.tile.large { --tile-width: 8.5rem; }
+.tile-frame {
+  position: relative; aspect-ratio: 140 / 182; overflow: hidden; background: #000;
+  border: solid var(--rarity); border-width: 0.4em 0.4em 0.5em;
+}
+.tile-art { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tile-missing { display: grid; place-items: center; height: 100%; padding: 0.2em; color: #ddd; font-size: 0.7em; text-align: center; }
+.tile-affinity { position: absolute; left: 0.1em; bottom: 0.1em; width: 1.05em; }
+.tile-level, .tile-empower, .piece-level {
+  position: absolute; color: #fff; font-weight: 800; line-height: 1;
+  text-shadow: 0 0 2px #000, 0 0 2px #000, 1px 1px 1px #000;
+}
+.tile-level { right: 0.15em; bottom: 0.1em; font-size: 0.92em; }
+.tile-empower { right: 0.15em; top: 0.15em; color: #ffe27a; font-size: 1em; }
+.tile-frame.frame-rare { border-image: url(assets/frames/rare.png) 25 25 30 25; }
+.tile-frame.frame-epic { border-image: url(assets/frames/epic.png) 25 25 31 25; }
+.tile-frame.frame-legendary { border-image: url(assets/frames/legendary.png) 25 25 31 25; }
+.tile-frame.frame-mythical { border-image: url(assets/frames/mythical.png) 25 25 31 25; }
+.tile-frame.frame-common { border-image: url(assets/frames/common.png) 24 24 31 24; }
+.tile .champion-stars { display: flex; justify-content: center; margin-top: 0.15em; }
+.tile .champion-stars img { width: calc(100% / 6 + 0.1em); max-width: none; margin: 0 -0.05em; }
+img.faction { height: 2.6rem; width: auto; max-width: none; }
+img.faction.small { height: 1.4rem; vertical-align: middle; }
+
+/* --- The champion list ------------------------------------------------------- */
+
+.list-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
+.list-head h1 { margin: 0; }
+.list-head input[type="search"] { flex: 1 1 18rem; margin: 0; }
+.champion-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 1rem 0.75rem; }
+.champion-card {
+  display: flex; flex-direction: column; align-items: center; gap: 0.35rem; margin: 0;
+  padding: 0.6rem 0.5rem 0.5rem; text-align: center;
+  border: 1px solid transparent; transition: border-color 0.15s, box-shadow 0.15s;
+}
+.champion-card:hover, .champion-card:focus-within {
+  border-color: color-mix(in srgb, var(--rarity) 40%, transparent);
+  box-shadow: 0 0 0.75rem -0.25rem color-mix(in srgb, var(--rarity) 25%, transparent);
+}
+.champion-card .card-tile { text-decoration: none; }
+.card-name {
+  display: flex; align-items: center; justify-content: center; gap: 0.25rem; max-width: 100%;
+  min-height: 2.4em; font-size: 0.8rem; line-height: 1.2; text-decoration: none; color: var(--pico-color);
+}
+.card-name span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.card-name img.faction { height: 1.6rem; flex: none; }
+.champion-card select.lock { width: 100%; font-size: 0.75rem; }
+
+select.lock { width: auto; margin: 0; padding: 0.2rem 2rem 0.2rem 0.5rem; height: auto; font-size: 0.85em; }
+select.lock:not(.is-locked) { color: var(--pico-muted-color); }
+select.lock.is-locked { border-color: var(--accent); color: var(--accent); }
+
+/* --- The champion page --------------------------------------------------------- */
+
+/* The champion on the left, lit in their rarity's colour; the request beside them: stat
+   targets in one column, the rest in the next. History and results run full width under
+   both. */
+.champion-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 2.5rem; align-items: start; margin-bottom: 1.5rem; }
+.champion-side { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+.champion-identity {
+  display: flex; flex-direction: column; align-items: center; gap: 0.6rem; padding: 1.5rem 0.75rem 1rem;
+  border-radius: var(--pico-border-radius);
+  background:
+    var(--pico-card-background-color);
+}
+/* The rarity's crest set over the portrait frame's lower edge (and a Mythical's over its top
+   edge), on top of the frame as the game sets them; the stars move down under it. */
+/* Each crest at the same scale to its sprite (0.04rem a pixel: the Mythical helm is 70 px
+   tall, the Epic chevron 36), about two thirds of it over the frame. */
+.crested { --frame-height: calc(8.5rem * 182 / 140); --crest-height: 0rem; position: relative; display: flex; justify-content: center; margin-top: 0.75rem; }
+.crested.crest-mythical { --crest-height: 2rem; }
+.crested.crest-legendary { --crest-height: 1rem; }
+.crested.crest-epic { --crest-height: 1.1rem; }
+.crest { position: absolute; z-index: 2; left: 50%; transform: translateX(-50%); width: auto; max-width: none; pointer-events: none; }
+.crest-top { top: 0rem; height: 1.2rem; }
+.crest-under { top: calc(var(--frame-height) - var(--crest-height) * 1); height: var(--crest-height); }
+.crested.has-crest .champion-stars { margin-top: calc(var(--crest-height) * 1); }
+.champion-identity h1 { margin: 0; font-size: 1.45rem; line-height: 1.15; text-align: center; }
+.champion-identity .facts { display: flex; align-items: center; gap: 0.5rem; color: var(--pico-muted-color); font-size: 0.85rem; }
+.champion-identity .facts img.faction { height: 1.8rem; }
+/* A mythical's form switch, after the game's: two helms in a dark pill, the picked one gold
+   (and named), the other white and dim. The radios stay focusable for the keyboard. */
+.form-switch {
+  display: inline-flex; gap: 0.25rem; margin-top: 0.25rem; padding: 0.25rem;
+  border: 1px solid var(--pico-muted-border-color); border-radius: 999px;
+  background: color-mix(in srgb, var(--pico-background-color) 70%, #000);
+}
+.form-switch label {
+  position: relative; display: flex; align-items: center; gap: 0.35rem; margin: 0;
+  padding: 0.2rem 0.7rem 0.2rem 0.4rem; border-radius: 999px; cursor: pointer;
+  color: var(--pico-muted-color); font-size: 0.8rem; transition: background-color 0.15s, color 0.15s;
+}
+.form-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.form-switch img { width: 1.6rem; height: 1.6rem; object-fit: contain; }
+.form-switch .form-on, .form-switch label:has(:checked) .form-off { display: none; }
+.form-switch label:has(:checked) .form-on { display: block; }
+.form-switch .form-off { opacity: 0.55; }
+.form-switch label:hover .form-off { opacity: 0.85; }
+.form-switch label:has(:checked) { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--pico-color); }
+.form-switch label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+table.current-stats { width: 100%; margin: 0; }
+table.current-stats th, table.current-stats td { padding: 0.2rem 0.75rem; }
+table.current-stats th { color: var(--pico-muted-color); font-weight: 500; }
+table.current-stats td { text-align: right; font-weight: 600; }
+
+/* The request is a panel of its own: stat targets on the left, a rule between them and the
+   groups on the right (sets, the search's settings, the buttons), each group ruled off. */
+.champion-main {
+  display: grid; grid-template-columns: minmax(0, 29rem) minmax(0, 1fr); gap: 0 2rem; align-items: start;
+  padding: 1.25rem 1.5rem 0.75rem; border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius); background: var(--pico-card-background-color);
+}
+.champion-main > .targets { grid-row: span 4; padding-right: 2rem; border-right: 1px solid var(--pico-muted-border-color); margin-right: -2rem; }
+.champion-main > fieldset:not(.targets) + fieldset, .champion-main > .actions {
+  padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color);
+}
+/* Floated, so a group's top rule runs above its legend rather than through it. */
+.champion-main legend { float: left; width: 100%; padding: 0; font-family: var(--m-display, inherit); font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
+.champion-main legend + * { clear: both; }
+table.limits { margin-bottom: 0.25rem; }
+table.limits td, table.limits th { padding: 0.2rem 0.3rem; }
+table.limits tbody th { white-space: nowrap; }
+table.limits thead th { font-size: 0.8rem; color: var(--pico-muted-color); font-weight: 500; }
+table.limits input, table.limits select { margin: 0; padding: 0.25rem 0.5rem; height: auto; }
+table.limits td.priority { width: 4.5rem; }
+.damage-pick { display: flex; align-items: center; gap: 0.5rem; }
+.damage-pick select { flex: 1; min-width: 0; }
+.damage-pick label { display: flex; align-items: center; gap: 0.35rem; margin: 0; white-space: nowrap; color: var(--pico-muted-color); font-size: 0.85rem; }
+.damage-pick input { width: 4.75rem; }
+.settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+.actions { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+.actions button { margin-bottom: 0.5rem; }
+fieldset[role="group"] input[name^="pieces_"] { flex: 0 0 6rem; }
+.set-row .remove-set { flex: 0 0 3rem; padding-left: 0; padding-right: 0; }
+button.add-set { width: auto; padding: 0.25rem 0.75rem; font-size: 0.875rem; }
+#solving { color: var(--accent); }
+
+@media (max-width: 1024px) {
+  .champion-layout, .champion-main { grid-template-columns: minmax(0, 1fr); }
+  .champion-main > .targets { grid-row: auto; padding-right: 0; border-right: 0; margin-right: 0; }
+  .champion-main > fieldset:not(.targets) { padding-top: 1rem; border-top: 1px solid var(--pico-muted-border-color); }
+  .champion-side { position: static; }
+}
+
+/* History and results: each its own section, ruled off with a heading. */
+.page-section { margin-top: 2.5rem; }
+.page-section > h2 { margin: 0 0 0.5rem; font-size: 1.3rem; }
+ul.history { max-height: 12rem; overflow-y: auto; padding: 0; margin: 0 0 1.5rem; }
+ul.history li { list-style: none; display: flex; align-items: baseline; gap: 0.75rem; padding: 0.15rem 0.5rem; margin: 0; border-left: 3px solid transparent; }
+ul.history li span { flex: 1; color: var(--pico-muted-color); }
+ul.history li.current { border-left-color: var(--accent); background: var(--pico-card-background-color); }
+ul.history li.current span { color: inherit; }
+ul.history a { white-space: nowrap; }
+ul.history button.delete { width: auto; margin: 0; padding: 0 0.4rem; font-size: 0.75em; border: none; }
+
+/* --- Build results ------------------------------------------------------------- */
+
+.run-head { color: var(--pico-muted-color); }
+
+/* The ledger: a build a row, so it grows down, not across. Each change sits in a fixed slot
+   after its value so columns read straight down. The picked build gets a brass rail; its
+   pieces fill the width under the ledger. */
+.ledger-wrap { overflow-x: auto; margin-bottom: 1.25rem; }
+table.ledger { width: 100%; margin: 0; }
+table.ledger th, table.ledger td { padding: 0.3rem 0.5rem; text-align: right; white-space: nowrap; }
+table.ledger thead th { color: var(--pico-muted-color); font-weight: 500; font-size: 0.85rem; }
+table.ledger tbody th { text-align: left; width: 1%; }
+/* The change's slot, in rem so the headings and the Now row can leave the same room and line
+   up with the values rather than the changes. */
+table.ledger { --change-slot: 3.6rem; }
+table.ledger td small { display: inline-block; width: 3.25rem; margin-left: 0.35rem; font-size: 0.75rem; text-align: left; }
+table.ledger thead th:not(:first-child), table.ledger tr.now td { padding-right: calc(0.5rem + var(--change-slot)); }
+table.ledger tr.now > * { color: var(--pico-muted-color); }
+table.ledger tr.now th { padding-left: calc(0.5rem + 3px); }
+table.ledger tr.build-row { cursor: pointer; }
+table.ledger tr.build-row:hover > * { background: color-mix(in srgb, var(--pico-color) 4%, transparent); }
+table.ledger tr.build-row > th { border-left: 3px solid transparent; }
+table.ledger tr.picked > * { background: color-mix(in srgb, var(--accent) 8%, transparent); font-weight: 600; }
+table.ledger tr.picked > th { border-left-color: var(--accent); }
+.build-pick {
+  width: auto; margin: 0; padding: 0; border: 0; background: none; box-shadow: none;
+  color: inherit; font-weight: 600; white-space: nowrap; /* Pico's --pico-color in a button is its inverse */
+}
+tr.picked .build-pick { color: var(--accent); }
+
+.build-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.75rem; }
+.build-head h3 { margin: 0; font-size: 1.15rem; }
+.build-notes { flex: 1 1 14rem; margin: 0; color: var(--pico-muted-color); font-size: 0.85rem; }
+.build-notes:empty { display: none; }
+.equip { display: flex; align-items: center; gap: 0.75rem; }
+.equip button { width: auto; margin: 0; padding: 0.25rem 0.75rem; }
+
+
+/* --- Pieces -------------------------------------------------------------------- */
+
+/* Three across, as the game lays out gear: weapon, helmet, shield; gloves, chest, boots; ring,
+   amulet, banner. One a row on a phone. */
+.pieces { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
+@media (max-width: 640px) { .pieces { grid-template-columns: minmax(0, 1fr); } }
+.piece { margin: 0; padding: 0.6rem 0.75rem 0.75rem; font-size: 0.9rem; }
+.piece header { display: flex; align-items: center; gap: 0.6rem; margin: -0.6rem -0.75rem 0.5rem; padding: 0.5rem 0.75rem; }
+.piece-title { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; align-self: flex-start; line-height: 1.2; min-width: 0; }
+.piece-art {
+  position: relative; flex: none; width: 3.5rem; height: 3.5rem; box-sizing: border-box; overflow: hidden;
+  background: #000; border: 3px solid var(--rarity); border-radius: var(--pico-border-radius);
+}
+.piece-art img { display: block; width: 100%; height: 100%; }
+.piece-art.small { width: 2.75rem; height: 2.75rem; border-width: 2px; }
+.piece-art.small .piece-level { font-size: 0.7em; }
+.piece-level { right: 0.15em; bottom: 0.05em; font-size: 0.85em; }
+.piece-level.planned { color: var(--stat-up); border: 0; }
+.piece .meta { margin-bottom: 0.25rem; }
+.piece-stars { display: inline-flex; vertical-align: middle; }
+.piece-stars img { height: 1em; margin-right: -0.1em; }
+table.piece-stats { width: 100%; margin: 0; }
+table.piece-stats th, table.piece-stats td { padding: 0 0 0 0.75rem; border: 0; background: none; text-align: left; vertical-align: baseline; }
+table.piece-stats th { padding-left: 0; font-weight: 600; }
+table.piece-stats td.stat-value { color: color-mix(in srgb, var(--pico-color) 55%, var(--pico-muted-color)); }
+table.piece-stats th, table.piece-stats td.stat-value { width: 1%; white-space: nowrap; }
+.piece-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.4rem; font-weight: 700; }
+.piece-main .ascension { font-weight: 600; font-size: 0.9em; }
+.piece .glyph { color: var(--stat-up); }
+.piece .ascension { color: var(--rarity-epic); }
+.piece .ignored { color: var(--pico-muted-color); }
+.piece.empty { display: flex; align-items: center; justify-content: center; opacity: 0.5; }
+/* Already on the champion: nothing to do for it, so it steps back. */
+.piece.is-equipped { opacity: 0.6; filter: saturate(0.4); }
+.owner { margin-left: auto; align-self: flex-start; }
+img.owner { width: 2rem; height: 2rem; border-radius: 50%; object-fit: cover; object-position: top; }
+mark.owner { font-size: 0.75em; white-space: nowrap; }
+mark.equipped { background: var(--stat-up); color: #fff; }
+
+/* --- Assumptions ----------------------------------------------------------------- */
+
+table.glyphs { max-width: 28rem; }
+table.glyphs select { margin: 0; padding-top: 0.25rem; padding-bottom: 0.25rem; height: auto; }
+table.glyphs select.is-planned { border-color: var(--accent); }
+
+/* --- Accessories ------------------------------------------------------------------ */
+
+nav.tabs { margin-bottom: 1rem; border-bottom: 1px solid var(--pico-muted-border-color); }
+nav.tabs ul { margin: 0; }
+nav.tabs a[aria-current="page"] {
+  color: var(--accent); font-weight: 600; text-decoration: underline;
+  text-decoration-thickness: 2px; text-underline-offset: 0.5em;
+}
 table.weights { width: auto; margin: 0; }
 table.weights th, table.weights td { padding: 0.15rem 0.3rem; text-align: center; }
+table.weights tbody th { text-align: left; }
 table.weights input { width: 3.75rem; margin: 0; padding: 0.15rem 0.3rem; height: auto; text-align: right; }
 .cleanup-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; margin: 1rem 0; }
 .cleanup-summary article { display: flex; flex-direction: column; margin: 0; padding: 0.75rem 1rem; }
-.cleanup-summary strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.cleanup-summary strong { font-family: var(--m-display, inherit); font-size: 1.9rem; line-height: 1.2; }
 .cleanup-summary small { color: var(--pico-muted-color); }
 table.set-summary { width: auto; }
 table.set-summary td + td, table.set-summary th + th { text-align: right; }
 .sell-bar { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 0.5rem; }
 .sell-bar button { width: auto; margin: 0; padding: 0.3rem 0.9rem; }
 .sell-bar label { margin: 0; }
-table.sell-list td { vertical-align: middle; padding: 0.3rem 0.5rem; }
-table.sell-list td.num { white-space: nowrap; font-variant-numeric: tabular-nums; }
-table.sell-list input[type="checkbox"] { margin: 0; }
-.piece-art.small { width: 2.75rem; height: 2.75rem; border-width: 2px; }
-.piece-art.small .piece-level { font-size: 0.7em; }
-img.faction.small { height: 1.4rem; vertical-align: middle; }
-@media (max-width: 768px) { table.sell-list { display: block; overflow-x: auto; } }
-nav.tabs { margin-bottom: 1rem; border-bottom: 1px solid var(--pico-muted-border-color); }
-nav.tabs ul { margin: 0; }
-nav.tabs a[aria-current="page"] { font-weight: 600; text-decoration: underline; text-underline-offset: 0.4em; }
 table.accessory-list td { vertical-align: middle; padding: 0.3rem 0.5rem; }
-table.accessory-list .num { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+table.accessory-list .num { white-space: nowrap; text-align: right; }
 table.accessory-list input[type="checkbox"] { margin: 0; }
 @media (max-width: 1024px) { table.accessory-list { display: block; overflow-x: auto; } }
-.muted { color: var(--pico-muted-color); }
 .tag { margin-left: 0.25rem; padding: 0 0.3rem; border: 1px solid currentColor; border-radius: 0.25rem; color: var(--rarity-epic); }
 label.protect { display: inline-flex; align-items: center; gap: 0.3rem; margin: 0; white-space: nowrap; font-size: 0.85em; }
 form.target { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.5rem; margin-bottom: 1rem; }
@@ -223,3 +361,7 @@ button.equip-swap { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0
 .swap-group header { display: flex; align-items: center; gap: 1rem; margin: -0.75rem -1rem 0.5rem; padding: 0.5rem 1rem; }
 .swap-group .tile { --tile-width: 3.5rem; }
 .swap-action { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}

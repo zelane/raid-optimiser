@@ -74,7 +74,11 @@ def forget_run(champion: Champion, run_id: int) -> None:
 
 
 def describe_request(request: Request, account: Account) -> str:
-    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: Locked up to 2" """
+    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: Locked up to 2", led by the form for
+    champions with several ("Health form · HP › ...")."""
+    champion = request.champion
+    forms = account.tables.hero_forms.get(champion.type_id, ())
+    form = [f"{forms[champion.form].role} form"] if len(forms) > 1 else []
     at_least = [
         f"{STAT_LABELS[stat]} ≥ {format_stat(stat, value)}"
         for stat, value in request.minimums.items()
@@ -88,7 +92,8 @@ def describe_request(request: Request, account: Account) -> str:
         for set_id, pieces in request.set_minimums.items()
     ]
     ranking = " › ".join(describe_ranked(goal) for goal in request.ranking)
-    return " · ".join([ranking, *at_least, *at_most, *sets, f"gear: {pool_label(request.pool)}"])
+    gear = f"gear: {pool_label(request.pool)}"
+    return " · ".join([*form, ranking, *at_least, *at_most, *sets, gear])
 
 
 def describe_ranked(goal: Goal) -> str:

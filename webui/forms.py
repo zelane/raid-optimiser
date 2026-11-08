@@ -5,12 +5,13 @@ The boundary: past here the solver sees only valid, typed requests.
 Fields: `min_<STAT>`/`max_<STAT>` (C.RATE and C.DMG in %), `set_<n>` with `pieces_<n>` (any
 number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` with
 `damage_skill` (skill id) and `enemy_def`, `slack` (%), `builds`, `pool` (a `pool_name`),
-`above_level`. The equip button posts `artifact_ids`, comma-separated; the champion list's lock
-picker posts `level`; the assumptions page posts `kind` (a `kind_key`) and `grade` (a
-`grade_key`, empty for none) for a glyph, and `flag` (a `Flag`) with `on` (present when ticked)
-for the rest. The accessories pages post `key` ("<type>:<stat>", by the store's names)
-with `weight` for a champion type's weight, `target_free` for the spaces to leave, `on`
-(present when ticked) to protect a piece, and `artifact_id` (repeated) for the pieces to sell.
+`above_level`, `form` (which of a mythical's forms, 0 first; absent: the first). The equip
+button posts `artifact_ids`, comma-separated; the champion list's lock picker posts `level`;
+the assumptions page posts `kind` (a `kind_key`) and `grade` (a `grade_key`, empty for none)
+for a glyph, and `flag` (a `Flag`) with `on` (present when ticked) for the rest. The
+accessories pages post `key` ("<type>:<stat>", by the store's names) with `weight` for a
+champion type's weight, `target_free` for the spaces to leave, `on` (present when ticked) to
+protect a piece, and `artifact_id` (repeated) for the pieces to sell.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
@@ -24,12 +25,13 @@ with `weight` for a champion type's weight, `target_free` for the spaces to leav
 - `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
 - `parse_protect`: a piece protected from the clean-up, or not
 - `parse_sell`: the pieces to select for selling
-- `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`, `parse_number`: its steps
+- `parse_form`, `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`,
+  `parse_number`: its steps
 """
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from optimiser.accessories.cleanup import ACCESSORY_SPACE
 from optimiser.accessories.roles import TypeKey
@@ -89,6 +91,7 @@ def parse_request(
     form: Mapping[str, str], champion: Champion, account: Account, locks: Locks
 ) -> Request | FormErrors:
     errors: list[str] = []
+    champion = parse_form(form, champion, account, errors)
     minimums = parse_limits(form, "min", errors)
     maximums = parse_limits(form, "max", errors)
     set_minimums = parse_sets(form, account, errors)
@@ -223,6 +226,20 @@ def parse_sell(fields: list[str], to_sell: set[int]) -> list[int] | FormErrors:
     return artifact_ids
 
 
+def parse_form(
+    form: Mapping[str, str], champion: Champion, account: Account, errors: list[str]
+) -> Champion:
+    """The champion in the form asked for (their skills and base stats follow it)."""
+    text = form.get("form", "0").strip() or "0"
+    forms = len(account.tables.hero_forms.get(champion.type_id, ()))
+
+    if not (text.isdigit() and int(text) < max(forms, 1)):
+        errors.append(f"{champion.name} has no such form")
+        return champion
+
+    return replace(champion, form=int(text))
+
+
 def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Stats:
     limits: Stats = {}
 
@@ -291,7 +308,7 @@ def parse_damage(
     skill_field = form.get("damage_skill", "")
     skill_id = int(skill_field) if skill_field.isdigit() else None
 
-    if skill_id not in account.tables.skills_of(champion.type_id):
+    if skill_id not in account.tables.skills_of(champion):
         errors.append("choose one of the champion's skills to rank damage by")
         return None
 

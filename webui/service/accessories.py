@@ -1,7 +1,8 @@
 """
 accessories.py - the accessories pages: swaps, the roll and rework lists, the clean-up, and
-the champion type weights. Assessing every accessory takes a couple of seconds, so the
-assessment is cached per capture, type weights and locks.
+the champion type weights. Scoring every accessory's potential is the slow part, so the
+potentials are cached per capture and type weights (not locks), and kept on disk per piece
+(`scores`).
 
 - `WeightCell`, `WeightRow`, `FactionTypeRow`, `SetTierRow`, `WeightTable`, `AccessoryRow`,
   `DropRow`, `CandidateRow`, `SwapRow`, `SwapGroup`, `SetSummary`, `CleanupView`,
@@ -9,7 +10,7 @@ assessment is cached per capture, type weights and locks.
 - `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`: their shape
 - `accessories_page`, `cleanup_page`, `set_target_free`, `protect_accessory`,
   `change_type_weight`, `pieces_to_sell`: what the pages ask for
-- `current_assessment` (`assessment_for`, cached), `current_plan`, `current_target_free`: the
+- `current_assessment` (`potentials_for`, cached), `current_plan`, `current_target_free`: the
   state they're made from
 - `cleanup_view`, `enhance_view`, `weight_table` (`tier_reason`), `set_summaries`,
   `swap_groups`, `swap_row`, `drop_row`, `row_context`, `accessory_row`, `type_labels`,
@@ -20,10 +21,10 @@ from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 
-from optimiser.accessories.assess import Assessed, Assessment, assess_accessories
+from optimiser.accessories.assess import Assessed, Assessment, assess_accessories, potentials_of
 from optimiser.accessories.cleanup import DEFAULT_TARGET_FREE, Placed, Plan, Swap, plan_cleanup
 from optimiser.accessories.enhance import Candidate, finish_list, rework_list, roll_list
-from optimiser.accessories.potential import make_scorer
+from optimiser.accessories.potential import Piece, Potential, make_scorer
 from optimiser.accessories.roles import (
     NO_SET,
     SET_ROLES,
@@ -36,10 +37,11 @@ from optimiser.accessories.roles import (
 )
 from optimiser.account import Account, Stat
 from optimiser.labels import STAT_LABELS, format_line, line_label
-from optimiser.paths import STORE
+from optimiser.paths import POTENTIALS, STORE
 from optimiser.settings import read_standard_types, set_type_weight
 from optimiser.store import read_number, read_protected, write_number, write_protected
 from webui.service.current import capture_mtime, current_locks, load_for, roster_types
+from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
     asset_url,
@@ -248,21 +250,25 @@ def pieces_to_sell(account: Account) -> set[int]:
 
 
 def current_assessment(account: Account) -> Assessment:
-    """Of the current capture: `account` is `current_account()`."""
-    types = read_standard_types(STORE)
-    locks = tuple(sorted(current_locks().items()))
-    return assessment_for(capture_mtime(), types, locks)
+    """Of the current capture: `account` is `current_account()`. Locks change often and
+    cheaply, so only the potentials are cached."""
+    potentials = potentials_for(capture_mtime(), read_standard_types(STORE))
+    return assess_accessories(account, potentials, current_locks())
 
 
 @lru_cache(maxsize=4)
-def assessment_for(
-    capture_mtime: int, types: tuple[ChampionType, ...], locks: tuple[tuple[int, int], ...]
-) -> Assessment:
-    """Cached (assessing every accessory takes a couple of seconds); the capture's mtime is
-    only the cache key."""
+def potentials_for(capture_mtime: int, types: tuple[ChampionType, ...]) -> dict[Piece, Potential]:
+    """Cached; scores are also kept on disk (`scores`), so only pieces new to the scorer are
+    scored. The capture's mtime is only the cache key."""
     account = load_for(capture_mtime)
-    every_type = (*types, *roster_types(capture_mtime))
-    return assess_accessories(account, make_scorer(every_type, account.tables.gear), dict(locks))
+    scorer = make_scorer((*types, *roster_types(capture_mtime)), account.tables.gear)
+    known = known_potentials(POTENTIALS, scorer)
+    potentials = potentials_of(account, scorer, known)
+
+    if potentials.keys() != known.keys():
+        keep_potentials(POTENTIALS, scorer, potentials)
+
+    return potentials
 
 
 def current_plan(assessment: Assessment) -> Plan:

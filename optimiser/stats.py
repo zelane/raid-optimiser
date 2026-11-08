@@ -53,11 +53,13 @@ def build_stats(champion: Champion, artifacts: Iterable[Artifact], tables: Table
 
 
 def base_stats(champion: Champion, tables: Tables) -> Stats:
-    """Exact at 6* L60; below that, the unscaled stats on the game's level curve."""
-    if (champion.grade, champion.level) == (6, 60) and champion.type_id in tables.base_6_60:
-        return tables.base_6_60[champion.type_id]
+    """The form's: exact at 6* L60; below that, the unscaled stats on the game's level curve."""
+    form = tables.form_of(champion)
 
-    unscaled = tables.unscaled[champion.type_id]
+    if (champion.grade, champion.level) == (6, 60) and form.base_6_60:
+        return form.base_6_60
+
+    unscaled = form.unscaled
     curve = tables.level_curve[(champion.grade, champion.level)]
     scaled = {
         Stat.HP: unscaled[Stat.HP] * UNSCALED_HP * curve,

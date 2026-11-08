@@ -1,14 +1,16 @@
-// Build results: clicking a build's summary row shows or hides its details under it.
+// Build results: picking a build's row in the ledger (its button, or anywhere on the row)
+// shows its pieces under the ledger. One build is shown at a time.
 document.addEventListener("click", (event) => {
-  const row = event.target.closest("tr.build-summary");
+  const row = event.target.closest("tr.build-row");
   if (!row || event.target.closest("a, input, select")) return;
 
-  const toggle = row.querySelector(".build-toggle");
-  const detail = document.getElementById(toggle.getAttribute("aria-controls"));
-  const open = toggle.getAttribute("aria-expanded") !== "true";
-
-  toggle.setAttribute("aria-expanded", String(open));
-  detail.hidden = !open;
+  for (const other of row.closest("tbody").querySelectorAll("tr.build-row")) {
+    const picked = other === row;
+    const pick = other.querySelector(".build-pick");
+    other.classList.toggle("picked", picked);
+    pick.setAttribute("aria-pressed", String(picked));
+    document.getElementById(pick.getAttribute("aria-controls")).hidden = !picked;
+  }
 });
 
 // Champion page: set rows are added and removed with their buttons (none to begin with).
@@ -16,8 +18,6 @@ document.addEventListener("click", (event) => {
 // one, or one picked from the history), restore the form it was asked with and mark it in
 // the history. Runs themselves are kept server-side.
 (function () {
-  forgetOldStorage();
-
   const form = document.querySelector("form[data-champion]");
   if (!form) return;
 
@@ -35,8 +35,18 @@ document.addEventListener("click", (event) => {
     if (remove) remove.closest(".set-row").remove();
   });
 
-  // Reset also clears the set rows (it fires during restore, before the saved ones go back).
-  form.addEventListener("reset", () => setRows.replaceChildren());
+  // Reset also clears the set rows (it fires during restore, before the saved ones go back),
+  // and goes back to the first form once the fields have been reset.
+  form.addEventListener("reset", () => {
+    setRows.replaceChildren();
+    setTimeout(showForm);
+  });
+
+  // A mythical's form: the helm picked decides which stats and skills the page shows. The
+  // other forms' skill pickers are disabled too, so only the picked one is submitted.
+  document.addEventListener("change", (event) => {
+    if (event.target.matches('input[name="form"]')) showForm();
+  });
   const timer = document.getElementById("timer");
   let started = 0;
   let ticking = null;
@@ -58,6 +68,15 @@ document.addEventListener("click", (event) => {
 
   // The history is swapped out of band after a solve, so mark it once that's settled too.
   document.body.addEventListener("htmx:oobAfterSwap", markCurrent);
+
+  function showForm() {
+    const picked = form.elements.namedItem("form")?.value || "0";
+
+    for (const part of document.querySelectorAll("[data-form]")) {
+      part.hidden = part.dataset.form !== picked;
+      if (part.matches("select")) part.disabled = part.hidden;
+    }
+  }
 
   function showElapsed() {
     timer.textContent = ((performance.now() - started) / 1000).toFixed(1) + "s";
@@ -104,20 +123,17 @@ document.addEventListener("click", (event) => {
       row.querySelector("input").value = values[`pieces_${n}`] ?? "4";
     }
 
+    // The form first (a radio group: setting its value picks that radio), then that form's
+    // skill: each form has its own picker.
     for (const [name, value] of Object.entries(values)) {
-      if (/^(set|pieces)_\d+$/.test(name)) continue;
+      if (/^(set|pieces)_\d+$/.test(name) || name === "damage_skill") continue;
 
       const field = form.elements.namedItem(name);
       if (field) field.value = value;
     }
-  }
 
-  // Forms and results used to be kept in this browser; they're in the store now.
-  function forgetOldStorage() {
-    try {
-      for (const key of Object.keys(localStorage)) {
-        if (key.startsWith("raid-optimiser-")) localStorage.removeItem(key);
-      }
-    } catch (e) { /* storage unavailable */ }
+    showForm();
+    const skill = form.querySelector('select[name="damage_skill"]:not([disabled])');
+    if (skill && values.damage_skill) skill.value = values.damage_skill;
   }
 })();

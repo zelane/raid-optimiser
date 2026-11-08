@@ -2,13 +2,13 @@
 {% if champions %}
   <div class="champion-grid">
     {% for listed in champions %}
-      <article class="champion-card">
-        <a href="/champions/{{ listed.champion.id }}" class="card-tile">{{ tile(listed.champion) }}</a>
-        <a href="/champions/{{ listed.champion.id }}" class="card-name" title="{{ listed.champion.name }}">{{ faction(listed.champion) }}<span>{{ listed.short_name }}</span></a>
+      <article class="champion-card rarity-{{ listed.champion.rarity | lower }}">
+        <a href="/champions/{{ listed.champion.id }}" class="card-tile" tabindex="-1">{{ tile(listed.champion) }}</a>
+        <a href="/champions/{{ listed.champion.id }}" class="card-name">{{ faction(listed.champion) }}<span>{{ listed.champion.name }}</span></a>
         {{ lock_picker(listed) }}
       </article>
     {% endfor %}
   </div>
 {% else %}
-  <p>No champions match.</p>
+  <p>No champion's name contains that. Check the spelling, or clear the search to see them all.</p>
 {% endif %}

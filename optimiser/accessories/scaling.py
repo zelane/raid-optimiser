@@ -170,7 +170,8 @@ def wearer_type(wearer: Wearer, account: Account) -> ChampionType | None:
 
 def wearer_pull(wearer: Wearer, account: Account) -> Pull:
     tables = account.tables
-    base = wearer.form.base_6_60 or tables.base_6_60.get(wearer.champion.type_id, {})
+    first_form = tables.hero_forms[wearer.champion.type_id][0]
+    base = wearer.form.base_6_60 or first_form.base_6_60
     damage: dict[Stat, float] = {}
     support: dict[Stat, float] = {}
 

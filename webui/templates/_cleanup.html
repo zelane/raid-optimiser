@@ -26,12 +26,13 @@
 {% if plan.swaps %}
   <p class="hint">
     Planned with the {{ plan.swaps }} <a href="/accessories?tab=swaps">swaps</a> done:
-    {{ plan.sold_after_swaps }} of the pieces coming off are sold too, once they're off and the
-    next sync has them in the inventory.
+    {{ plan.sold_after_swaps }} of the pieces coming off {{ "is" if plan.sold_after_swaps == 1 else "are" }}
+    sold too, once {{ "it's" if plan.sold_after_swaps == 1 else "they're" }} off and the next sync has
+    {{ "it" if plan.sold_after_swaps == 1 else "them" }} in the inventory.
   </p>
 {% endif %}
 
-<h3>To sell</h3>
+<h2>To sell</h2>
 {% if plan.to_sell %}
   <form class="sell" hx-post="/accessories/sell" hx-target="#sell-result"
         hx-confirm="Select the ticked pieces in the game's sell screen? Nothing is sold until you confirm there.">
@@ -48,7 +49,7 @@
             <td><input type="checkbox" name="artifact_id" value="{{ drop.row.id }}" checked aria-label="Sell {{ drop.row.set_name }} {{ drop.row.slot }}"></td>
             {{ accessory_cells(drop.row) }}
             {{ score_cells(drop.row) }}
-            <td><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
+            <td class="nowrap"><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
             <td>{{ protect_toggle(drop.row) }}</td>
           </tr>
         {% endfor %}
@@ -59,7 +60,7 @@
   <p>Nothing to sell.</p>
 {% endif %}
 
-<h3>Leave in the mailbox</h3>
+<h2>Leave in the mailbox</h2>
 {% if plan.leave_unclaimed %}
   <p class="hint">Not worth a space: claim everything else in the mailbox once the sale is done.</p>
   <table class="accessory-list">
@@ -69,7 +70,7 @@
         <tr>
           {{ accessory_cells(drop.row) }}
           {{ score_cells(drop.row) }}
-          <td><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
+          <td class="nowrap"><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>
           <td>{{ protect_toggle(drop.row) }}</td>
         </tr>
       {% endfor %}

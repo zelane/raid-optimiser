@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Assumptions · Raid optimiser{% endblock %}
+{% block title %}Assumptions: Raid optimiser{% endblock %}
 {% block content %}
-  <h2>Assumptions</h2>
-  <p>
+  <h1>Assumptions</h1>
+  <p class="lede">
     What solves take as done beyond the gear as it is now. Builds mark each assumed value, so
     you can see what still needs doing. Current stats keep the gear as it is.
   </p>
@@ -10,8 +10,8 @@
     {% for flag in page.flags %}{% include "_flag.html" %}{% endfor %}
   </fieldset>
 
-  <h3>Glyphs</h3>
-  <p>
+  <h2>Glyphs</h2>
+  <p class="lede">
     Every substat of a kind chosen here is taken as carrying that glyph at its top roll, unless
     the glyph already on it is better. Gear below 6★ takes glyphs up to its own rank, so there
     it's capped at that rank's top roll. A solve only glyphs stats it wants more of: a minimum,

@@ -1,17 +1,17 @@
 """
-champions.py - the champion list and a champion's page: their stats now, the request
-form's options, the skills damage can be ranked by, and their runs.
+champions.py - the champion list and a champion's page: in each of their forms, their stats
+now and the skills damage can be ranked by; the request form's options; and their runs.
 
 - `SEARCH_LIMIT`, `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the pages' shape, and
   the game's default champion order
 - `ListedChampion`, `StatOption`, `SetOption`, `PoolOption`, `FormOptions`, `SkillOption`,
-  `ChampionPage`: the views
+  `FormView`, `ChampionPage`: the views
 - `search_champions`, `lock_champion`, `champion_page`: what the pages ask for
-- `game_order`, `listed_champion`, `form_options`, `skill_options`, `describe_goal`,
-  `current_stats`: what they share
+- `game_order`, `listed_champion`, `form_options`, `form_views`, `skill_options`,
+  `describe_goal`, `current_stats`: what they share
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from optimiser.account import Account, Champion, Locks, Stat, Stats, worn_gear
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
@@ -21,7 +21,7 @@ from optimiser.stats import build_stats
 from optimiser.store import latest_run, write_lock
 from webui.service.results import StatCell, stat_cells
 from webui.service.runs import RunEntryView, RunView, run_history, run_view
-from webui.service.views import ChampionRow, champion_row
+from webui.service.views import ChampionRow, asset_url, champion_row
 
 SEARCH_LIMIT = 200
 SUPPORT_CHECK_DEF = 6000  # any DEF will do: whether a skill can be ranked doesn't depend on it
@@ -36,7 +36,6 @@ class ListedChampion:
 
     champion: ChampionRow
     lock: int
-    short_name: str  # the name's first word, for the grid
 
 
 @dataclass(frozen=True)
@@ -76,11 +75,26 @@ class SkillOption:
 
 
 @dataclass(frozen=True)
-class ChampionPage:
-    champion: ChampionRow
+class FormView:
+    """One of the champion's forms (most have only one): its stats in the gear worn now, and
+    the skills damage can be ranked by in it. `icon_url` is its helm when picked, `idle_url`
+    when not (None without the art; mythicals' two forms have it)."""
+
+    number: int  # 0 first, as the request's `form` field posts it
+    role: str  # the game's: Attack, Defense, Health, Support
+    icon_url: str | None
+    idle_url: str | None
     current: list[StatCell]
-    options: FormOptions
     skills: list[SkillOption]
+
+
+@dataclass(frozen=True)
+class ChampionPage:
+    """`forms`: one per form, the first first; a toggle on the page picks between them."""
+
+    champion: ChampionRow
+    forms: list[FormView]
+    options: FormOptions
     history: list[RunEntryView]
     latest: RunView | None  # shown, and its form restored, when the page opens
 
@@ -103,9 +117,8 @@ def champion_page(account: Account, locks: Locks, champion: Champion) -> Champio
     latest = latest_run(STORE, champion.id)
     return ChampionPage(
         champion=champion_row(champion),
-        current=stat_cells(current_stats(account, champion), None),
+        forms=form_views(account, champion),
         options=form_options(account, locks),
-        skills=skill_options(account, champion),
         history=run_history(champion),
         latest=run_view(latest, champion) if latest else None,
     )
@@ -128,7 +141,7 @@ def game_order(champion: Champion) -> tuple[int, ...]:
 
 
 def listed_champion(champion: Champion, lock: int) -> ListedChampion:
-    return ListedChampion(champion_row(champion), lock, champion.name.split()[0])
+    return ListedChampion(champion_row(champion), lock)
 
 
 def form_options(account: Account, locks: Locks) -> FormOptions:
@@ -143,10 +156,30 @@ def form_options(account: Account, locks: Locks) -> FormOptions:
     )
 
 
+def form_views(account: Account, champion: Champion) -> list[FormView]:
+    forms = account.tables.hero_forms.get(champion.type_id) or ()
+    views = []
+
+    for number, form in enumerate(forms):
+        in_form = replace(champion, form=number)
+        views.append(
+            FormView(
+                number=number,
+                role=form.role,
+                icon_url=asset_url("forms", str(number + 1)),
+                idle_url=asset_url("forms", f"{number + 1}-white"),
+                current=stat_cells(current_stats(account, in_form), None),
+                skills=skill_options(account, in_form),
+            )
+        )
+
+    return views
+
+
 def skill_options(account: Account, champion: Champion) -> list[SkillOption]:
     options = []
 
-    for skill_id in account.tables.skills_of(champion.type_id):
+    for skill_id in account.tables.skills_of(champion):
         skill = account.tables.skills.get(skill_id)
         if skill is None:
             continue

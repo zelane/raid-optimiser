@@ -8,7 +8,13 @@
   if (!picker) return;
 
   picker.addEventListener("change", () => {
-    document.documentElement.dataset.palette = picker.value;
+    const root = document.documentElement;
+    root.dataset.palette = picker.value;
+
+    // Vault is dark only (base.html does the same on page load).
+    if (picker.value === "vault") root.dataset.theme = "dark";
+    else delete root.dataset.theme;
+
     document.cookie =
       `${COOKIE}=${encodeURIComponent(picker.value)}; path=/; max-age=${ONE_YEAR}; SameSite=Lax`;
   });

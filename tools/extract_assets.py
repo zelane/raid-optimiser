@@ -14,6 +14,10 @@ Writes webui/static/assets/:
   stars/<yellow|purple|red>.png                       (UIShared: plain, ascended, awakened)
   frames/<rarity, lower case>.png                     (UIShared: 9-slice portrait frames; no
                                                        Uncommon. app.css holds their slices)
+  forms/<1|2>.png, forms/<1|2>-white.png              (MetamorphSwitchButton: a mythical's
+                                                       form, gold when chosen, else white)
+  ui/<name>.png                                       (UIShared: `UI_SPRITES`, the game's panel
+                                                       frame and rarity crests)
 
 Bundles ship with the install (StreamingAssets) and are downloaded later (resources/); for
 each family the newest version wins. Set sprites are named after the game's set names, the
@@ -69,6 +73,22 @@ ALIASES = {
 AFFINITIES = ("magic", "force", "spirit", "void")
 STARS = {"big_star": "yellow", "big_ascend_star": "purple", "big_red_star": "red"}
 FRAMES = ("Common", "Rare", "Epic", "Legendary", "Mythical")
+# The game's UI pieces the web UI dresses itself in -> their names there. The panel frame is
+# a 9-slice (28 px slices; app.css holds them).
+UI_SPRITES = {
+    "bg_background_runs": "panel",
+    "MythicalDecorTop": "crest-mythical",
+    "MythicalDecorBottom": "crest-mythical-bottom",
+    "LegendaryDecor": "crest-legendary",
+    "EpicDecor": "crest-epic",
+}
+# Mythical form switch sprites -> form number and state: winged helm 1, horned helm 2.
+FORM_ICONS = {
+    "metamorph_switch_form_button1": "1",
+    "metamorph_switch_form_button1_white": "1-white",
+    "metamorph_switch_form_button2": "2",
+    "metamorph_switch_form_button2_white": "2-white",
+}
 PORTRAIT_FAMILIES = ("HeroAvatars", "HeroAvatarsLocal", "FuseAvatarsLocal")
 PLACEHOLDER_PORTRAIT = re.compile(r"(\d+)(?:_?temp|_avatar)")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
@@ -81,7 +101,9 @@ def main() -> None:
     unmatched: set[str] = set()
     written: dict[str, set[str]] = {
         kind: set()
-        for kind in ("portraits", "sets", "pieces", "affinities", "factions", "stars", "frames")
+        for kind in (
+            "portraits", "sets", "pieces", "affinities", "factions", "stars", "frames", "forms", "ui"
+        )
     }
 
     # 1. Portraits: sprites named by base type id. Fusion champions' (and a few others')
@@ -131,12 +153,20 @@ def main() -> None:
         if name := faction_names.get(sprite.m_Name):
             save(sprite, "factions", name, written)
 
-    # 6. Champion stars (plain, ascended and awakened) and portrait frames by rarity.
+    # 6. Champion stars (plain, ascended and awakened), portrait frames by rarity, and the UI
+    # pieces (panel frame, rarity crests).
     for sprite in sprites("UIShared"):
         if colour := STARS.get(sprite.m_Name):
             save(sprite, "stars", colour, written)
         elif sprite.m_Name in FRAMES:
             save(sprite, "frames", sprite.m_Name.lower(), written)
+        elif name := UI_SPRITES.get(sprite.m_Name):
+            save(sprite, "ui", name, written)
+
+    # 7. A mythical's form switch: its two helms.
+    for sprite in sprites("MetamorphSwitchButton"):
+        if key := FORM_ICONS.get(sprite.m_Name):
+            save(sprite, "forms", key, written)
 
     print(", ".join(f"{len(keys)} {kind}" for kind, keys in written.items()), f"-> {OUT}")
     if missing := factions - written["factions"]:

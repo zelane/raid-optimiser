@@ -1,18 +1,20 @@
-{% from "_macros.html" import stat_header, stat_cells, piece %}
+{% from "_macros.html" import piece %}
 
-{# A build's full details, shown under its summary row in the table. #}
+{# A build's details: what's still to do for it, the buttons that send it to the game, and its
+   pieces. #}
 {% macro build_detail(build, results) %}
-  <div class="build-detail-body">
-    {% set notes = [] %}
-    {% if build.equipped %}{% set _ = notes.append(build.equipped ~ " already equipped") %}{% endif %}
-    {% if build.from_others %}{% set _ = notes.append(build.from_others ~ " worn by others") %}{% endif %}
-    {% set todo = [] %}
-    {% if build.to_level %}{% set _ = todo.append(build.to_level ~ " to level") %}{% endif %}
-    {% if build.to_ascend %}{% set _ = todo.append(build.to_ascend ~ " to ascend") %}{% endif %}
-    {% if build.glyphs_to_apply %}{% set _ = todo.append(build.glyphs_to_apply ~ " glyph" ~ ("s" if build.glyphs_to_apply != 1 else "") ~ " to apply") %}{% endif %}
+  {% set notes = [] %}
+  {% if build.equipped %}{% set _ = notes.append(build.equipped ~ " already equipped") %}{% endif %}
+  {% if build.from_others %}{% set _ = notes.append(build.from_others ~ " worn by others") %}{% endif %}
+  {% set todo = [] %}
+  {% if build.to_level %}{% set _ = todo.append(build.to_level ~ " to level") %}{% endif %}
+  {% if build.to_ascend %}{% set _ = todo.append(build.to_ascend ~ " to ascend") %}{% endif %}
+  {% if build.glyphs_to_apply %}{% set _ = todo.append(build.glyphs_to_apply ~ " glyph" ~ ("s" if build.glyphs_to_apply != 1 else "") ~ " to apply") %}{% endif %}
+  <div class="build-head">
+    <h3>Build {{ build.number }}</h3>
     <p class="build-notes">
-      {{- notes | join(" · ") }}{% if notes and todo %} · {% endif %}
-      {%- if todo %}<span class="planned">{{ todo | join(" · ") }}</span>{% endif -%}
+      {{- notes | join(", ") }}{% if notes and todo %}; {% endif %}
+      {%- if todo %}<span class="planned">{{ todo | join(", ") }}</span>{% endif -%}
     </p>
     <div class="equip">
       <button hx-post="/champions/{{ results.champion.id }}/preview"
@@ -28,33 +30,50 @@
       </button>
       <span class="equip-result"></span>
     </div>
-    <div class="pieces">
-      {% for p in build.slots %}{% if p %}{{ piece(p, results.champion) }}{% else %}<article class="piece empty"><small>empty</small></article>{% endif %}{% endfor %}
-    </div>
+  </div>
+  <div class="pieces">
+    {% for p in build.slots %}{% if p %}{{ piece(p, results.champion) }}{% else %}<article class="piece empty"><small>Empty</small></article>{% endif %}{% endfor %}
   </div>
 {% endmacro %}
-<p>
-  {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s
-  {% if results.champion_level_note %} · <span class="planned">{{ results.champion.name }} {{ results.champion_level_note }}</span>{% endif %}
-  {% if results.lore_of_steel %} · Lore of Steel applied{% endif %}
-  {% if results.damage %} · DMG: {{ results.damage }}{% endif %}
+
+<p class="run-head">
+  Found {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s.
+  {% if results.champion_level_note %}<span class="planned">{{ results.champion.name }} {{ results.champion_level_note }}.</span>{% endif %}
+  {% if results.lore_of_steel %}Lore of Steel applied.{% endif %}
+  {% if results.damage %}The DMG row is {{ results.damage }}.{% endif %}
 </p>
-<div class="overflow-auto">
-  <table class="stats">
-    <thead>{{ stat_header(results.current) }}</thead>
+
+{# The ledger: the gear worn now, then a build a row, each change beside its value. Picking a
+   build's row shows its pieces under the ledger (app.js); the first is picked to begin with. #}
+<div class="ledger-wrap">
+  <table class="ledger">
+    <thead>
+      <tr>
+        <th></th>
+        {% for now in results.current %}<th scope="col">{{ now.label }}</th>{% endfor %}
+      </tr>
+    </thead>
     <tbody>
-      <tr><th>Current</th>{{ stat_cells(results.current) }}</tr>
+      <tr class="now">
+        <th scope="row">Now</th>
+        {% for now in results.current %}<td>{{ now.text }}</td>{% endfor %}
+      </tr>
       {% for build in results.builds %}
-        {% set open = loop.first %}
-        <tr class="build-summary">
-          <th><button type="button" class="build-toggle" aria-expanded="{{ 'true' if open else 'false' }}"
-                      aria-controls="build-{{ build.number }}">Build {{ build.number }}</button></th>
-          {{ stat_cells(build.stats) }}
-        </tr>
-        <tr class="build-detail" id="build-{{ build.number }}" {{ '' if open else 'hidden' }}>
-          <td colspan="{{ results.current | length + 1 }}">{{ build_detail(build, results) }}</td>
+        <tr class="build-row{{ ' picked' if loop.first }}" data-build="{{ build.number }}">
+          <th scope="row">
+            <button type="button" class="build-pick" aria-pressed="{{ 'true' if loop.first else 'false' }}"
+                    aria-controls="build-{{ build.number }}">Build {{ build.number }}</button>
+          </th>
+          {% for cell in build.stats %}
+            <td>{{ cell.text }}<small class="{{ ('up' if cell.better else 'down') if cell.change }}">{{ cell.change or "" }}</small></td>
+          {% endfor %}
         </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+{% for build in results.builds %}
+  <section class="build-detail" id="build-{{ build.number }}"{% if not loop.first %} hidden{% endif %}>
+    {{ build_detail(build, results) }}
+  </section>
+{% endfor %}
