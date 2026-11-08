@@ -1,0 +1,70 @@
+{% macro stars(count) %}<span class="stars" title="{{ count }} stars">{{ "★" * count }}</span>{% endmacro %}
+
+{% macro portrait(champion) %}
+  {% if champion.portrait_url %}<img class="portrait" src="{{ champion.portrait_url }}" alt="">{% endif %}
+{% endmacro %}
+
+{% macro badges(champion) %}
+  <span class="rarity-{{ champion.rarity | lower }}">{{ champion.rarity }}</span>
+  · {{ stars(champion.grade) }} L{{ champion.level }}
+  {% if champion.ascension %} · ascended {{ champion.ascension }}{% endif %}
+  {% if champion.awakening %} · awakened {{ champion.awakening }}{% endif %}
+  {% if champion.empower %} · empowered +{{ champion.empower }}{% endif %}
+  · {{ champion.affinity }} · {{ champion.faction }}
+{% endmacro %}
+
+{% macro stat_cells(cells) %}
+  {% for cell in cells %}
+    <td>{{ cell.text }}{% if cell.change %}<br><small class="{{ 'up' if cell.better else 'down' }}">{{ cell.change }}</small>{% endif %}</td>
+  {% endfor %}
+{% endmacro %}
+
+{% macro stat_header(cells) %}
+  <tr><th></th>{% for cell in cells %}<th>{{ cell.label }}</th>{% endfor %}</tr>
+{% endmacro %}
+
+{% macro line(stat) %}
+  <span class="{{ '' if stat.optimised else 'ignored' }}">{{ stat.label }} {{ stat.amount }}</span>
+  {%- if stat.glyph %} <span class="glyph" title="glyph">{{ stat.glyph }}</span>{% endif %}
+  {%- if stat.rolls %} <span class="rolls" title="{{ stat.rolls }} rolls">{{ "•" * stat.rolls }}</span>{% endif %}
+{% endmacro %}
+
+{% macro piece(p) %}
+  <article class="piece rarity-border-{{ p.rarity | lower }}{{ ' is-equipped' if p.equipped }}">
+    <header>
+      {% if p.image_url %}<img class="piece-art" src="{{ p.image_url }}" alt="{{ p.set_name }} {{ p.slot }}">{% endif %}
+      <div>
+        <strong>{{ p.slot }}</strong><br>
+        <span class="set">{% if p.set_icon_url %}<img class="icon" src="{{ p.set_icon_url }}" alt="">{% endif %}{{ p.set_name }}</span>
+      </div>
+    </header>
+    <p class="meta">
+      {{ stars(p.rank) }} <span class="rarity-{{ p.rarity | lower }}">{{ p.rarity }}</span> +{{ p.level }}
+      {% if p.faction %}<br><small>{{ p.faction }} only</small>{% endif %}
+    </p>
+    <p class="main">{{ line(p.primary) }}
+      {%- if p.ascension %} <span class="ascension" title="ascension bonus">
+        {%- if p.ascension.label == p.primary.label %}+{{ p.ascension.amount }}{% else %}{{ p.ascension.label }} {{ p.ascension.amount }}{% endif -%}
+      </span>{% endif %}</p>
+    <ul class="subs">
+      {% for sub in p.substats %}<li>{{ line(sub) }}</li>{% endfor %}
+    </ul>
+    <footer>
+      <small>#{{ p.id }}</small>
+      {% if p.worn_by %}
+        {% if p.worn_by_portrait %}<img class="owner" src="{{ p.worn_by_portrait }}" alt="on {{ p.worn_by }}" title="on {{ p.worn_by }}">
+        {% else %}<mark>on {{ p.worn_by }}</mark>{% endif %}
+      {% endif %}
+      {% if p.equipped %}<mark class="equipped">equipped</mark>{% endif %}
+    </footer>
+  </article>
+{% endmacro %}
+
+{% macro lock_picker(listed) %}
+  <select class="lock{{ ' is-locked' if listed.lock }}" name="level" aria-label="Lock {{ listed.champion.name }}"
+          title="A locked champion's gear is used only by solves allowing their lock level"
+          hx-post="/champions/{{ listed.champion.id }}/lock" hx-trigger="change" hx-swap="outerHTML">
+    <option value="0">Unlocked</option>
+    {% for level in lock_levels %}<option value="{{ level }}" {% if level == listed.lock %}selected{% endif %}>Lock {{ level }}</option>{% endfor %}
+  </select>
+{% endmacro %}

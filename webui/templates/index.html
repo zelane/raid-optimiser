@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+  <input type="search" name="query" placeholder="Search champions" autofocus
+         hx-get="/champions" hx-trigger="input changed delay:250ms, search" hx-target="#champion-list">
+  <div id="champion-list">{% include "_champion_list.html" %}</div>
+{% endblock %}

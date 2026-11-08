@@ -1,0 +1,16 @@
+{% from "_macros.html" import portrait, badges, lock_picker %}
+{% if champions %}
+  <table class="champions">
+    <tbody>
+      {% for listed in champions %}
+        <tr>
+          <td>{{ portrait(listed.champion) }}<a href="/champions/{{ listed.champion.id }}">{{ listed.champion.name }}</a></td>
+          <td><small>{{ badges(listed.champion) }}</small></td>
+          <td class="lock-cell">{{ lock_picker(listed) }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <p>No champions match.</p>
+{% endif %}

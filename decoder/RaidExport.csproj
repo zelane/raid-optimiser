@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>raid-export</AssemblyName>
+    <RollForward>Major</RollForward>
+    <!-- HellHades extractor install dir. Override: dotnet build -p:HHDir=/path/to/hh -->
+    <HHDir Condition="'$(HHDir)' == ''">$(HOME)/.local/share/Steam/steamapps/compatdata/2441943673/pfx/drive_c/hh</HHDir>
+  </PropertyGroup>
+
+  <!-- Compile against HH's own models + their exact MessagePack build.
+       Private=false: we don't copy them; they're loaded from HHDir at runtime
+       so updating the extractor automatically updates the decoder. -->
+  <ItemGroup>
+    <Reference Include="HellHades.ArtifactExtractor.Models">
+      <HintPath>$(HHDir)/HellHades.ArtifactExtractor.Models.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MessagePack">
+      <HintPath>$(HHDir)/MessagePack.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(HHDir)/Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MessagePack.Annotations">
+      <HintPath>$(HHDir)/MessagePack.Annotations.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DefaultHHDir</_Parameter1>
+      <_Parameter2>$(HHDir)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

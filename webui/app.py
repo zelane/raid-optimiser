@@ -1,0 +1,132 @@
+"""
+app.py - the web entry point: routes that render the service's views as HTML. Only this
+module and the templates know about HTTP or HTML; a JSON API would sit beside it.
+
+- `app`, `templates`: the FastAPI app and its Jinja templates
+- `index`, `champion_list`, `lock`, `champion`, `builds`, `equip`, `preview`: the routes
+- `find_champion`, `send_build`: what they share
+"""
+
+from collections.abc import Callable
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
+from optimiser.account import Account, Champion
+from optimiser.store import LOCK_LEVELS
+from webui import extractor, service
+from webui.forms import SET_ROWS, FormErrors, parse_equip, parse_lock, parse_request
+
+HERE = Path(__file__).resolve().parent
+
+app = FastAPI(title="Raid optimiser")
+app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+templates = Jinja2Templates(directory=HERE / "templates")
+templates.env.globals["lock_levels"] = LOCK_LEVELS
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    champions = service.search_champions(service.current_account(), service.current_locks(), "")
+    return templates.TemplateResponse(request, "index.html", {"champions": champions})
+
+
+@app.get("/champions", response_class=HTMLResponse)
+def champion_list(request: Request, query: str = ""):
+    champions = service.search_champions(service.current_account(), service.current_locks(), query)
+    return templates.TemplateResponse(request, "_champion_list.html", {"champions": champions})
+
+
+@app.post("/champions/{champion_id}/lock", response_class=HTMLResponse)
+async def lock(request: Request, champion_id: int):
+    champion = find_champion(service.current_account(), champion_id)
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_lock(form):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case level:
+            listed = service.lock_champion(champion, level)
+            return templates.TemplateResponse(request, "_lock.html", {"listed": listed})
+
+
+@app.get("/champions/{champion_id}", response_class=HTMLResponse)
+def champion(request: Request, champion_id: int):
+    account = service.current_account()
+    page = service.champion_page(
+        account, service.current_locks(), find_champion(account, champion_id)
+    )
+    context = {"page": page, "set_rows": range(SET_ROWS)}
+    return templates.TemplateResponse(request, "champion.html", context)
+
+
+@app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)
+async def builds(request: Request, champion_id: int):
+    account = service.current_account()
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_request(
+        form, find_champion(account, champion_id), account, service.current_locks()
+    ):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case solve_request:
+            outcome = service.solve(account, solve_request)
+
+    match outcome:
+        case service.ShortfallView() as shortfall:
+            return templates.TemplateResponse(request, "_shortfall.html", {"shortfall": shortfall})
+
+        case results:
+            return templates.TemplateResponse(request, "_results.html", {"results": results})
+
+
+@app.post("/champions/{champion_id}/equip", response_class=HTMLResponse)
+async def equip(request: Request, champion_id: int):
+    def send(account: Account, champion: Champion, artifact_ids: list[int]):
+        return extractor.equip(champion.id, artifact_ids)
+
+    done = "Equipped. The next sync will show it here."
+    return await send_build(request, champion_id, send, done)
+
+
+@app.post("/champions/{champion_id}/preview", response_class=HTMLResponse)
+async def preview(request: Request, champion_id: int):
+    def send(account: Account, champion: Champion, artifact_ids: list[int]):
+        return extractor.preview(account, champion.id, artifact_ids)
+
+    return await send_build(request, champion_id, send, "Previewing in game.")
+
+
+async def send_build(
+    request: Request,
+    champion_id: int,
+    send: Callable[[Account, Champion, list[int]], extractor.Result[None]],
+    done: str,
+) -> HTMLResponse:
+    """The build button's pieces, sent to the game by `send`."""
+    account = service.current_account()
+    champion = find_champion(account, champion_id)
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_equip(form, account):
+        case FormErrors(messages=messages):
+            outcome = extractor.Err("; ".join(messages))
+
+        case artifact_ids:
+            outcome = send(account, champion, artifact_ids)
+
+    context = {"error": outcome.reason if extractor.failed(outcome) else None, "done": done}
+    return templates.TemplateResponse(request, "_equip_result.html", context)
+
+
+def find_champion(account: Account, champion_id: int) -> Champion:
+    if (champion := account.champions.get(champion_id)) is None:
+        raise HTTPException(404, f"no champion {champion_id}")
+
+    return champion

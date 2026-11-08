@@ -1,0 +1,43 @@
+{% from "_macros.html" import stat_header, stat_cells, piece %}
+<p>
+  {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s
+  {% if results.lore_of_steel %} · Lore of Steel applied{% endif %}
+  {% if results.damage %} · DMG: {{ results.damage }}{% endif %}
+</p>
+<div class="overflow-auto">
+  <table class="stats">
+    <thead>{{ stat_header(results.current) }}</thead>
+    <tbody>
+      <tr><th>Current</th>{{ stat_cells(results.current) }}</tr>
+      {% for build in results.builds %}
+        <tr><th><a href="#build-{{ build.number }}">Build {{ build.number }}</a></th>{{ stat_cells(build.stats) }}</tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% for build in results.builds %}
+  <h3 id="build-{{ build.number }}">Build {{ build.number }}
+    <small>
+      {% if build.equipped %} · {{ build.equipped }} already equipped{% endif %}
+      {% if build.from_others %} · {{ build.from_others }} worn by others{% endif %}
+    </small>
+  </h3>
+  <div class="equip">
+    <button hx-post="/champions/{{ results.champion.id }}/preview"
+            hx-vals='{"artifact_ids": "{{ build.artifact_ids | join(",") }}"}'
+            hx-target="next .equip-result" hx-disabled-elt="this" hx-indicator="this">
+      Preview in game
+    </button>
+    <button class="outline" hx-post="/champions/{{ results.champion.id }}/equip"
+            hx-vals='{"artifact_ids": "{{ build.artifact_ids | join(",") }}"}'
+            hx-target="next .equip-result" hx-disabled-elt="this" hx-indicator="this"
+            hx-confirm="Equip build {{ build.number }} on {{ results.champion.name }} in game?{% if build.from_others %} {{ build.from_others }} piece{{ 's' if build.from_others != 1 }} will be taken off other champions.{% endif %}">
+      Equip in game
+    </button>
+    <span class="equip-result"></span>
+  </div>
+  <div class="pieces">
+    {% for p in build.slots %}{% if p %}{{ piece(p) }}{% else %}<article class="piece empty"><small>empty</small></article>{% endif %}{% endfor %}
+  </div>
+{% endfor %}
