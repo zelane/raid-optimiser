@@ -1,9 +1,16 @@
 """
-store.py - what the capture doesn't hold, kept in SQLite: champion locks, and each
-champion's run history.
+store.py - what the capture doesn't hold, kept in SQLite: champion locks, the glyphs to
+assume on gear, account-wide settings, and each champion's run history.
 
 A lock (1-5, 5 the strongest) keeps a champion's gear out of solves that only allow gear from
 champions locked below some level. Unlocked champions have no row, and count as 0.
+
+Glyphs are account-wide: each glyph kind ("SPD", "HP%") with the grade to assume
+("6-Legendary"), both as `optimiser.glyphs` writes them (opaque here). Kinds not assumed
+have no row.
+
+Settings are named flags ("max_gear_level"), on when they have a row; `optimiser.assume`
+names them.
 
 A run is a solve as a front end asked and showed it: the form it was asked with and what it
 found, both JSON the front end writes and reads (opaque here), with a summary for listings.
@@ -12,6 +19,8 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `NewRun`, `RunEntry`, `Run`: a run to save, as listed, and in full
 - `SCHEMA`: the tables
 - `read_locks`, `write_lock`: locks
+- `read_glyphs`, `write_glyph`: glyphs
+- `read_flags`, `write_flag`: settings
 - `save_run`, `list_runs`, `read_run`, `latest_run`, `delete_run`: runs
 - `connect`, `run_from_row`: what they share
 """
@@ -68,6 +77,11 @@ SCHEMA = (
         outcome TEXT NOT NULL  -- JSON
     )""",
     "CREATE INDEX IF NOT EXISTS runs_by_champion ON runs (champion_id, id)",
+    """CREATE TABLE IF NOT EXISTS glyphs (
+        kind TEXT PRIMARY KEY,
+        grade TEXT NOT NULL
+    )""",
+    "CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)",
 )
 RUN_COLUMNS = "id, ran_at, summary, note, form, outcome"
 
@@ -92,6 +106,46 @@ def write_lock(path: Path, champion_id: int, level: int) -> None:
             " ON CONFLICT (champion_id) DO UPDATE SET level = excluded.level",
             (champion_id, level),
         )
+
+
+def read_glyphs(path: Path) -> dict[str, str]:
+    """Glyph kind -> the grade assumed."""
+    if not path.exists():
+        return {}
+
+    with connect(path) as db:
+        return dict(db.execute("SELECT kind, grade FROM glyphs").fetchall())
+
+
+def write_glyph(path: Path, kind: str, grade: str | None) -> None:
+    """Assumes `grade` for the kind; None stops assuming one."""
+    with connect(path) as db:
+        if grade is None:
+            db.execute("DELETE FROM glyphs WHERE kind = ?", (kind,))
+            return
+
+        db.execute(
+            "INSERT INTO glyphs (kind, grade) VALUES (?, ?)"
+            " ON CONFLICT (kind) DO UPDATE SET grade = excluded.grade",
+            (kind, grade),
+        )
+
+
+def read_flags(path: Path) -> set[str]:
+    """The flags that are on."""
+    if not path.exists():
+        return set()
+
+    with connect(path) as db:
+        return {name for (name,) in db.execute("SELECT name FROM flags").fetchall()}
+
+
+def write_flag(path: Path, name: str, on: bool) -> None:
+    with connect(path) as db:
+        if on:
+            db.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
+        else:
+            db.execute("DELETE FROM flags WHERE name = ?", (name,))
 
 
 def save_run(path: Path, run: NewRun, ran_at: datetime) -> Run:

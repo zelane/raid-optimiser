@@ -2,29 +2,36 @@
 forms.py - the request form's fields into a `Request`, or the reasons they can't be one.
 The boundary: past here the solver sees only valid, typed requests.
 
-Fields: `min_<STAT>`/`max_<STAT>` (C.RATE and C.DMG in %), `set_<n>` with `pieces_<n>`,
-`rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` with `damage_skill` (skill id) and
-`enemy_def`, `slack` (%), `builds`, `pool` (a `pool_name`), `above_level`. The equip button
-posts `artifact_ids`, comma-separated; the champion list's lock picker posts `level`.
+Fields: `min_<STAT>`/`max_<STAT>` (C.RATE and C.DMG in %), `set_<n>` with `pieces_<n>` (any
+number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` with
+`damage_skill` (skill id) and `enemy_def`, `slack` (%), `builds`, `pool` (a `pool_name`),
+`above_level`. The equip button posts `artifact_ids`, comma-separated; the champion list's lock
+picker posts `level`; the assumptions page posts `kind` (a `kind_key`) and `grade` (a
+`grade_key`, empty for none) for a glyph, and `flag` (a `Flag`) with `on` (present when ticked)
+for the rest.
 
-- `SET_ROWS`, `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
+- `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
 - `parse_request`: the boundary
 - `parse_equip`: the equip button's pieces
 - `parse_lock`: the lock picker's level
+- `parse_glyph`: a glyph kind and the grade to assume for it
+- `parse_flag`: an assumption, on or off
 - `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`, `parse_number`: its steps
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, Stat, Stats
+from optimiser.account import Account, Champion, GlyphGrade, GlyphKind, Stat, Stats, Tables
+from optimiser.assume import Flag
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
+from optimiser.glyphs import parse_grade, parse_kind
 from optimiser.labels import PERCENT_STATS, STAT_LABELS, parse_pool
 from optimiser.solve import Goal, Request
 from optimiser.store import LOCK_LEVELS, Locks
 
-SET_ROWS = 3
 MAX_PIECES = 9  # one per slot
 DEFAULT_ENEMY_DEF = 6000
 DEFAULT_ABOVE_LEVEL = 8
@@ -102,6 +109,35 @@ def parse_lock(form: Mapping[str, str]) -> int | FormErrors:
     return int(text)
 
 
+def parse_glyph(
+    form: Mapping[str, str], tables: Tables
+) -> tuple[GlyphKind, GlyphGrade | None] | FormErrors:
+    """The grade is None when none is to be assumed."""
+    kind = parse_kind(form.get("kind", ""))
+
+    if kind is None or kind not in tables.glyphs:
+        return FormErrors(["no such glyph"])
+
+    text = form.get("grade", "")
+    if not text:
+        return kind, None
+
+    grade = parse_grade(text)
+    if grade is None or grade not in tables.glyphs[kind]:
+        return FormErrors([f"no such glyph grade: {text}"])
+
+    return kind, grade
+
+
+def parse_flag(form: Mapping[str, str]) -> tuple[Flag, bool] | FormErrors:
+    name = form.get("flag", "")
+
+    if name not in Flag:
+        return FormErrors([f"no such assumption: {name}"])
+
+    return Flag(name), "on" in form
+
+
 def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Stats:
     limits: Stats = {}
 
@@ -117,10 +153,12 @@ def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Sta
 
 
 def parse_sets(form: Mapping[str, str], account: Account, errors: list[str]) -> dict[int, int]:
+    """Rows are numbered however the page numbered them; reported by position."""
     minimums: dict[int, int] = {}
+    numbers = [key.removeprefix("set_") for key in form if re.fullmatch(r"set_\d+", key)]
 
-    for row in range(SET_ROWS):
-        if not (set_field := form.get(f"set_{row}", "").strip()):
+    for row, number in enumerate(numbers):
+        if not (set_field := form.get(f"set_{number}", "").strip()):
             continue
 
         set_id = int(set_field) if set_field.isdigit() else -1
@@ -128,7 +166,7 @@ def parse_sets(form: Mapping[str, str], account: Account, errors: list[str]) -> 
             errors.append(f"unknown set in row {row + 1}")
             continue
 
-        pieces = parse_number(form, f"pieces_{row}", f"pieces in set row {row + 1}", errors)
+        pieces = parse_number(form, f"pieces_{number}", f"pieces in set row {row + 1}", errors)
         if not 1 <= pieces <= 9:
             errors.append(f"set row {row + 1}: pieces must be 1 to 9")
 

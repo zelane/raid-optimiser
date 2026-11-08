@@ -2,7 +2,7 @@
 
     python3 -I tools/static_export.py static-raw.json schema/schema.json out/ [--full]
 
-Writes out/sets.json and out/hero_types.json (and out/static.json with --full).
+Writes out/{sets,hero_types,bonuses,skills,glyphs,gear}.json (and out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
 older than the game version: re-dump and re-run tools/gen_schema.py.
 """
@@ -168,6 +168,42 @@ def cumulative(levels):
     return out
 
 
+RANKS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6}
+
+
+def build_glyphs(market):
+    """Glyphs (the game's power-up stones, sold in the black market's item table): each
+    stat, rank and rarity with its roll range. Percentages are fractions, as on gear.
+    Stones with no stat (StatId 0) are left out."""
+    glyphs = []
+    for item in market["Items"]:
+        g = item.get("PowerUpData")
+        if not g or g["StatId"] not in STAT_KINDS:
+            continue
+        glyphs.append({"stat": g["StatId"], "absolute": g["IsAbsolute"],
+                       "rank": RANKS[g["RankId"]], "rarity": g["Rarity"],
+                       "min": round(g["MinValue"], 6), "max": round(g["MaxValue"], 6)})
+    return sorted(glyphs, key=lambda g: (g["stat"], not g["absolute"], g["rank"], g["max"]))
+
+
+def build_gear(art):
+    """Gear stats by level: `primary` (main stat at levels 0..max_level, by rank) and
+    `ascension` (the ascension bonus at ascension levels 1..rank, ranks 4-6), each per stat
+    and the slots it applies to. Rarity doesn't change either."""
+    def tables(infos):
+        return [{"stat": i["StatKey"]["KindId"], "absolute": i["StatKey"]["IsAbsolute"],
+                 "slots": i["ApplicableKindIds"],
+                 "values": {RANKS[r]: [round(v, 6) for v in vs]
+                            for r, vs in i["ValuesByLevelByRankId"].items()}}
+                for i in infos]
+    return {"max_level": art["MaxArtifactLevel"], "primary": tables(art["PrimaryBonusInfos"]),
+            "ascension": tables(art["AscendBonusInfos"])}
+
+
+STAT_KINDS = {"Health", "Attack", "Defence", "Speed", "Resistance", "Accuracy",
+              "CriticalChance", "CriticalDamage"}
+
+
 def build_bonuses(data, strings):
     """Non-gear stat bonuses. Percentages apply to base stats.
 
@@ -298,6 +334,10 @@ def main(raw_path, schema_path, out_dir, full=False):
     json.dump(heroes, open(out / "hero_types.json", "w"), indent=1, ensure_ascii=False)
     bonuses = build_bonuses(data, raw.get("ca") or {})
     json.dump(bonuses, open(out / "bonuses.json", "w"), indent=1, ensure_ascii=False)
+    gear = build_gear(data["ArtifactData"])
+    json.dump(gear, open(out / "gear.json", "w"), indent=1, ensure_ascii=False)
+    glyphs = build_glyphs(data["BlackMarketData"])
+    json.dump(glyphs, open(out / "glyphs.json", "w"), indent=1, ensure_ascii=False)
     if full:
         json.dump(data, open(out / "static.json", "w"), ensure_ascii=False)
 

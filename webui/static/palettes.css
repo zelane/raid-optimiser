@@ -1,0 +1,143 @@
+/*
+ * Colour palettes (from ~/repo/demeter's palettes.css: its default and Hana), picked with the
+ * switcher in the nav (base.html, palette.js), which sets <html data-palette="...">. "default"
+ * is Pico's own look and needs nothing here. Each palette defines its colours as --m-*
+ * variables for light and dark (following the system setting, like Pico), then one block maps
+ * Pico's variables onto them, so every page picks them up (--m-heading is optional: headings,
+ * else the text colour). Loaded after Pico and app.css so these win.
+ */
+
+/* --- Hana ----------------------------------------------------------------- */
+
+:root[data-palette='hana'] {
+  --pico-font-family-sans-serif:
+    'P22 Underground CY Pro', 'GDS Transport', 'Noto Sans', sans-serif; /* installed locally */
+  --m-primary: #6d4b49;
+  --m-on-primary: #f3f5f7;
+  --m-secondary: #624d64;
+  --m-on-secondary: #f3f5f7;
+  --m-tertiary: #345d61;
+  --m-error: #6d4b49;
+  --m-surface: #f3f5f7;
+  --m-on-surface: #1a150f;
+  --m-surface-variant: #e6e8ea;
+  --m-on-surface-variant: #3e3a34;
+  --m-outline: #b6aaa9;
+  --m-shadow: #0f0a09;
+  --m-hover: #efe0df;
+  --m-selection: #9e8988;
+  --m-green: #465c44;
+  --m-yellow: #625337;
+  --m-mix: #000; /* hovers darken in light mode */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='hana'] {
+    --m-primary: #d5aca9;
+    --m-on-primary: #1a1d20;
+    --m-secondary: #c7aeca;
+    --m-on-secondary: #1a1d20;
+    --m-tertiary: #94c1c5;
+    --m-error: #d5aca9;
+    --m-surface: #1a1d20;
+    --m-on-surface: #e3d4c3;
+    --m-surface-variant: #282b2f;
+    --m-on-surface-variant: #a5998d;
+    --m-outline: #5d5251;
+    --m-shadow: #010000;
+    --m-hover: #3d3231;
+    --m-selection: #8a7573;
+    --m-green: #a6c0a4;
+    --m-yellow: #c7b595;
+    --m-mix: #fff; /* ...and lighten in dark mode */
+  }
+}
+
+/* --- Palette -> Pico variables (shared by every palette) ------------------ */
+
+:root[data-palette]:not([data-palette='default']) {
+  --pico-background-color: var(--m-surface);
+  --pico-color: var(--m-on-surface);
+  --pico-text-selection-color: color-mix(in srgb, var(--m-selection) 45%, transparent);
+  --pico-muted-color: var(--m-on-surface-variant);
+  --pico-muted-border-color: color-mix(in srgb, var(--m-outline) 55%, var(--m-surface));
+
+  --pico-primary: var(--m-primary);
+  --pico-primary-background: var(--m-primary);
+  --pico-primary-border: var(--m-primary);
+  --pico-primary-underline: color-mix(in srgb, var(--m-primary) 50%, transparent);
+  --pico-primary-hover: color-mix(in srgb, var(--m-primary) 80%, var(--m-mix));
+  --pico-primary-hover-background: color-mix(in srgb, var(--m-primary) 85%, var(--m-mix));
+  --pico-primary-hover-border: var(--pico-primary-hover-background);
+  --pico-primary-hover-underline: var(--pico-primary-hover);
+  --pico-primary-focus: color-mix(in srgb, var(--m-primary) 40%, transparent);
+  --pico-primary-inverse: var(--m-on-primary);
+
+  --pico-secondary: var(--m-secondary);
+  --pico-secondary-background: var(--m-secondary);
+  --pico-secondary-border: var(--m-secondary);
+  --pico-secondary-underline: color-mix(in srgb, var(--m-secondary) 50%, transparent);
+  --pico-secondary-hover: color-mix(in srgb, var(--m-secondary) 80%, var(--m-mix));
+  --pico-secondary-hover-background: color-mix(in srgb, var(--m-secondary) 85%, var(--m-mix));
+  --pico-secondary-hover-border: var(--pico-secondary-hover-background);
+  --pico-secondary-hover-underline: var(--pico-secondary-hover);
+  --pico-secondary-focus: color-mix(in srgb, var(--m-secondary) 40%, transparent);
+  --pico-secondary-inverse: var(--m-on-secondary);
+
+  --pico-contrast: var(--m-on-surface);
+  --pico-contrast-background: var(--m-on-surface);
+  --pico-contrast-border: var(--m-on-surface);
+  --pico-contrast-inverse: var(--m-surface);
+
+  --pico-h1-color: var(--m-heading, var(--m-on-surface));
+  --pico-h2-color: var(--m-heading, var(--m-on-surface));
+  --pico-h3-color: var(--m-heading, var(--m-on-surface));
+  --pico-h4-color: var(--m-heading, var(--m-on-surface));
+  --pico-h5-color: var(--m-heading, var(--m-on-surface));
+  --pico-h6-color: var(--m-heading, var(--m-on-surface));
+
+  --pico-ins-color: var(--m-green);
+  --pico-del-color: var(--m-error);
+  --pico-mark-background-color: color-mix(in srgb, var(--m-yellow) 30%, transparent);
+  --pico-mark-color: var(--m-on-surface);
+  --pico-code-background-color: var(--m-surface-variant);
+  --pico-code-color: var(--m-on-surface-variant);
+
+  --pico-form-element-background-color: var(--m-surface);
+  --pico-form-element-selected-background-color: var(--m-hover);
+  --pico-form-element-border-color: var(--m-outline);
+  --pico-form-element-color: var(--m-on-surface);
+  --pico-form-element-placeholder-color: var(--m-on-surface-variant);
+  --pico-form-element-active-background-color: var(--m-surface);
+  --pico-form-element-active-border-color: var(--m-primary);
+  --pico-form-element-focus-color: var(--pico-primary-focus);
+  --pico-switch-background-color: var(--m-outline);
+  --pico-switch-checked-background-color: var(--m-primary);
+  --pico-switch-color: var(--m-surface);
+
+  --pico-card-background-color: color-mix(in srgb, var(--m-surface-variant) 45%, var(--m-surface));
+  --pico-card-border-color: var(--m-outline);
+  --pico-card-sectioning-background-color: var(--m-surface-variant);
+  --pico-card-box-shadow: 0 0.25rem 1.25rem color-mix(in srgb, var(--m-shadow) 12%, transparent);
+  --pico-box-shadow: var(--pico-card-box-shadow);
+
+  --pico-dropdown-background-color: var(--m-surface-variant);
+  --pico-dropdown-border-color: var(--m-outline);
+  --pico-dropdown-color: var(--m-on-surface);
+  --pico-dropdown-hover-background-color: var(--m-hover);
+
+  --pico-table-border-color: color-mix(in srgb, var(--m-outline) 45%, var(--m-surface));
+  --pico-table-row-stripped-background-color: color-mix(
+    in srgb,
+    var(--m-surface-variant) 60%,
+    transparent
+  );
+
+  --pico-tooltip-background-color: var(--m-on-surface);
+  --pico-tooltip-color: var(--m-surface);
+
+  --pico-accordion-border-color: var(--m-outline);
+  --pico-accordion-close-summary-color: var(--m-on-surface);
+  --pico-accordion-open-summary-color: var(--m-on-surface-variant);
+  --pico-accordion-active-summary-color: var(--m-primary);
+}

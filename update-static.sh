@@ -1,5 +1,5 @@
 #!/bin/sh
-# Re-export the game's cached static data into static/sets.json + static/hero_types.json.
+# Re-export the game's cached static data into static/{sets,hero_types,bonuses,skills,glyphs,gear}.json.
 # Run after a game update. Pass --full to also write the whole named static.json (~100MB).
 # If validation fails, the dump is stale: re-dump the game, then
 #   python3 -I tools/gen_schema.py <dump.cs> schema/schema.json

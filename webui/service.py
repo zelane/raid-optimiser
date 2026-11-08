@@ -8,6 +8,9 @@ API (for a Vue front end, say) can return the same objects with `dataclasses.asd
   `RunView`, `ChampionPage`: what a page is made of
 - `current_account`: the account, reloaded when a new capture lands
 - `current_locks`, `lock_champion`: champion locks, kept in the store
+- `FlagView`, `AssumptionsPage`, `assumptions_page`, `flag_view`, `set_assumption`,
+  `GlyphChoice`, `GlyphRow`, `glyph_row`, `plan_glyph_for`: what solves
+  assume (top levels, full ascension, glyphs), kept in the store
 - `record_run`, `run_history`, `saved_run`, `forget_run`: a champion's runs, kept in the store
 - `search_champions`, `champion_page`, `solve`: what the pages ask for
 - `RARITY_ORDER`, `AFFINITY_ORDER`, `game_order`: the game's default champion order
@@ -30,17 +33,23 @@ from optimiser.account import (
     Account,
     Artifact,
     Champion,
+    GlyphGrade,
+    GlyphKind,
     Slot,
     Stat,
     StatLine,
     Stats,
     load_account,
 )
+from optimiser.assume import FLAG_LABELS, Flag, assume, read_assumptions, set_flag
 from optimiser.damage import DamageGoal, Unsupported, damage_goal, estimate_damage
+from optimiser.glyphs import grade_key, kind_key, plan_glyph
 from optimiser.labels import (
     PERCENT_STATS,
     STAT_LABELS,
     format_stat,
+    glyph_grade_label,
+    glyph_kind_label,
     line_amount,
     line_label,
     pool_choices,
@@ -130,11 +139,16 @@ class StatCell:
 
 @dataclass(frozen=True)
 class LineView:
+    """`planned_glyph` is an assumed glyph, better than the one on it now (`glyph`)."""
+
     label: str
     amount: str
     glyph: str | None
     rolls: int
     optimised: bool  # False for stats the optimiser ignores (damage dealt/taken)
+    # The defaults are for runs saved before these existed.
+    planned_glyph: str | None = None
+    planned_amount: str | None = None  # once levelled or ascended further
 
 
 @dataclass(frozen=True)
@@ -159,6 +173,8 @@ class PieceView:
     # The defaults are for runs saved before these existed.
     stars: list[StarView] = field(default_factory=list)
     ascend_level: int = 0
+    planned_level: int | None = None  # assumed levelled to this
+    planned_ascend_level: int | None = None  # assumed ascended to this
 
 
 @dataclass(frozen=True)
@@ -172,6 +188,10 @@ class BuildView:
     artifact_ids: list[int]
     from_others: int
     equipped: int
+    # The defaults are for runs saved before these existed.
+    glyphs_to_apply: int = 0
+    to_level: int = 0
+    to_ascend: int = 0
 
 
 @dataclass(frozen=True)
@@ -182,6 +202,36 @@ class ResultsView:
     current: list[StatCell]
     builds: list[BuildView]
     seconds: float
+    champion_level_note: str | None = None  # "at L60 (now L52)"; the default is for old runs
+
+
+@dataclass(frozen=True)
+class FlagView:
+    name: str
+    label: str
+    on: bool
+
+
+@dataclass(frozen=True)
+class GlyphChoice:
+    key: str  # `grade_key`; "" for none
+    label: str  # "6★ Legendary (+12)"
+
+
+@dataclass(frozen=True)
+class GlyphRow:
+    """A glyph kind and the grade assumed for it ("" for none)."""
+
+    key: str  # `kind_key`
+    label: str
+    choices: list[GlyphChoice]
+    chosen: str
+
+
+@dataclass(frozen=True)
+class AssumptionsPage:
+    flags: list[FlagView]
+    glyphs: list[GlyphRow]
 
 
 @dataclass(frozen=True)
@@ -256,6 +306,46 @@ def lock_champion(champion: Champion, level: int) -> ListedChampion:
     """Locks the champion at `level` (0 unlocks them)."""
     write_lock(STORE, champion.id, level)
     return listed_champion(champion, level)
+
+
+def assumptions_page(account: Account) -> AssumptionsPage:
+    assumptions = read_assumptions(STORE, account)
+    planned = assumptions.glyphs
+    return AssumptionsPage(
+        flags=[flag_view(flag, flag in assumptions.flags) for flag in Flag],
+        glyphs=[glyph_row(account, kind, planned.get(kind)) for kind in account.tables.glyphs],
+    )
+
+
+def flag_view(flag: Flag, on: bool) -> FlagView:
+    return FlagView(flag.value, FLAG_LABELS[flag], on)
+
+
+def set_assumption(flag: Flag, on: bool) -> FlagView:
+    set_flag(STORE, flag, on)
+    return flag_view(flag, on)
+
+
+def glyph_row(account: Account, kind: GlyphKind, chosen: GlyphGrade | None) -> GlyphRow:
+    tops = account.tables.glyphs[kind]
+    choices = [
+        GlyphChoice(
+            grade_key(grade), f"{glyph_grade_label(grade)} (+{line_amount(top, kind.absolute)})"
+        )
+        for grade, top in reversed(tops.items())
+    ]
+    return GlyphRow(
+        key=kind_key(kind),
+        label=glyph_kind_label(kind),
+        choices=[GlyphChoice("", "None"), *choices],
+        chosen=grade_key(chosen) if chosen else "",
+    )
+
+
+def plan_glyph_for(account: Account, kind: GlyphKind, grade: GlyphGrade | None) -> GlyphRow:
+    """None stops assuming the kind."""
+    plan_glyph(STORE, kind, grade)
+    return glyph_row(account, kind, grade)
 
 
 def record_run(
@@ -498,9 +588,10 @@ def form_options(account: Account, locks: Locks) -> FormOptions:
 
 
 def solve(account: Account, request: Request) -> Outcome:
+    assumed, request = assume(account, request, read_assumptions(STORE, account))
     champion = request.champion
     started = time.monotonic()
-    outcome = find_builds(account, request)
+    outcome = find_builds(assumed, request)
     seconds = time.monotonic() - started
 
     if isinstance(outcome, Shortfall):
@@ -530,6 +621,11 @@ def solve(account: Account, request: Request) -> Outcome:
             for n, build in enumerate(outcome, 1)
         ],
         seconds=seconds,
+        champion_level_note=(
+            f"at L{champion.level} (now L{account.champions[champion.id].level})"
+            if champion.level != account.champions[champion.id].level
+            else None
+        ),
     )
 
 
@@ -576,6 +672,9 @@ def build_view(
         artifact_ids=[artifact.id for artifact in build.artifacts],
         from_others=sum(1 for p in pieces if p.worn_by),
         equipped=sum(1 for p in pieces if p.equipped),
+        glyphs_to_apply=sum(1 for p in pieces for line in p.substats if line.planned_glyph),
+        to_level=sum(1 for p in pieces if p.planned_level),
+        to_ascend=sum(1 for p in pieces if p.planned_ascend_level),
     )
 
 
@@ -607,6 +706,8 @@ def piece_view(artifact: Artifact, account: Account, champion: Champion) -> Piec
             )
         ],
         ascend_level=artifact.ascend_level,
+        planned_level=artifact.planned_level,
+        planned_ascend_level=artifact.planned_ascend_level,
         faction=artifact.faction,
         worn_by=owner.name if owner else None,
         worn_by_portrait=champion_row(wearer).portrait_url if wearer else None,
@@ -621,6 +722,14 @@ def line_view(line: StatLine) -> LineView:
         glyph=f"+{line_amount(line.glyph, line.absolute)}" if line.glyph else None,
         rolls=line.rolls,
         optimised=line.stat is not None,
+        planned_glyph=(
+            f"+{line_amount(line.planned_glyph, line.absolute)}" if line.planned_glyph else None
+        ),
+        planned_amount=(
+            line_amount(line.planned_value, line.absolute)
+            if line.planned_value is not None
+            else None
+        ),
     )
 
 

@@ -21,6 +21,7 @@ import sys
 from pathlib import Path
 
 from optimiser.account import Account, Artifact, Champion, Slot, Stat, Stats, load_account
+from optimiser.assume import assume, read_assumptions
 from optimiser.damage import DamageGoal, Unsupported, damage_goal, estimate_damage
 from optimiser.labels import (
     PERCENT_STATS,
@@ -42,8 +43,9 @@ def main() -> None:
     args = parse_args(sys.argv[1:])
     account = load_account(args.captures, args.static, args.schema)
     request = parse_request(args, account)
+    assumed, request = assume(account, request, read_assumptions(args.store, account))
 
-    match find_builds(account, request):
+    match find_builds(assumed, request):
         case Shortfall() as shortfall:
             print_shortfall(shortfall, request)
             sys.exit(1)
@@ -265,8 +267,11 @@ def describe(artifact: Artifact, account: Account, champion: Champion) -> str:
     set_name = artifact_set.name if artifact_set else "no set"
     owner_id = account.owners.get(artifact.id)
     owner = "" if owner_id in (None, champion.id) else f"  (on {account.champions[owner_id].name})"
+    level = (
+        f"{artifact.level}->{artifact.planned_level}" if artifact.planned_level else artifact.level
+    )
     return (
-        f"{artifact.slot.value:7} {set_name:14} {artifact.rank}* L{artifact.level:<3}"
+        f"{artifact.slot.value:7} {set_name:14} {artifact.rank}* L{level:<6}"
         f"{format_line(artifact.primary)}  #{artifact.id}{owner}"
     )
 

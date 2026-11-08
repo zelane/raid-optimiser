@@ -4,14 +4,16 @@ once at the boundary into the shapes the stat model and solver use.
 
 - `Stat`, `Stats`, `Bonus`: stats, and the bonuses that raise them
 - `Slot`, `ARMOUR`, `StatLine`, `Artifact`, `Champion`: what can be worn, and by whom
+- `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
+- `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
 - `Hit`, `Skill`: champion skills, as far as damage goes
 - `LoreOfSteel`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
-- `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`: what the capture's words mean
+- `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
 - `load_account`: the loader
 - `arena_league`, `parse_tables`, `parse_sets` (`parse_ignore`), `parse_skills`,
-  `parse_relics` (`relic_stats`),
+  `parse_relics` (`relic_stats`), `parse_glyphs`, `parse_gear` (`by_line`),
   `great_hall_by_affinity`, `parse_champion`, `parse_artifact` (`parse_line`): its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
 """
@@ -65,7 +67,9 @@ ARMOUR = (Slot.WEAPON, Slot.HELMET, Slot.SHIELD, Slot.GLOVES, Slot.CHEST, Slot.B
 @dataclass(frozen=True)
 class StatLine:
     """A stat line as the game shows it. `stat` is None for lines gear optimising ignores
-    (damage dealt/taken); `kind` is the game's name either way."""
+    (damage dealt/taken); `kind` is the game's name either way. `glyph` is the glyph on it
+    now; `planned_glyph` one assumed applied, set only when it beats `glyph`. `planned_value`
+    is the value assumed once the piece is levelled or ascended further."""
 
     kind: str
     stat: Stat | None
@@ -73,9 +77,15 @@ class StatLine:
     absolute: bool
     glyph: float = 0
     rolls: int = 0
+    planned_glyph: float = 0
+    planned_value: float | None = None
 
     def bonus(self) -> Bonus | None:
-        return Bonus(self.stat, self.value + self.glyph, self.absolute) if self.stat else None
+        if self.stat is None:
+            return None
+
+        value = self.value if self.planned_value is None else self.planned_value
+        return Bonus(self.stat, value + max(self.glyph, self.planned_glyph), self.absolute)
 
 
 @dataclass(frozen=True)
@@ -93,6 +103,8 @@ class Artifact:
     ascension: StatLine | None
     ascend_level: int  # stars ascended, 0 to `rank`
     faction: str | None
+    planned_level: int | None = None  # assumed levelled to this (main stat only)
+    planned_ascend_level: int | None = None  # assumed ascended to this
 
     def lines(self) -> tuple[StatLine, ...]:
         return (self.primary, *self.substats, *([self.ascension] if self.ascension else []))
@@ -115,6 +127,41 @@ class Champion:
     relics: tuple[Bonus, ...]  # the stats of the relics it wears
     great_hall: tuple[Bonus, ...]  # the account's Great Hall, for the champion's affinity
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
+
+
+@dataclass(frozen=True)
+class GlyphKind:
+    """What a glyph raises: HP flat and HP % are different glyphs."""
+
+    stat: Stat
+    absolute: bool
+
+
+@dataclass(frozen=True)
+class GlyphGrade:
+    """How strong a glyph is: ranks 1-5 come in Uncommon only, 6 in Uncommon to Legendary."""
+
+    rank: int
+    rarity: str
+
+
+@dataclass(frozen=True)
+class GearLine:
+    """A main stat or ascension bonus, by the slot it's on."""
+
+    slot: Slot
+    stat: Stat
+    absolute: bool
+
+
+@dataclass(frozen=True)
+class GearTables:
+    """`primary`: main stat at each level (0 first), by rank. `ascension`: the ascension
+    bonus at each ascension level (1 first), by rank. Rarity changes neither."""
+
+    max_level: int
+    primary: dict[GearLine, dict[int, tuple[float, ...]]]
+    ascension: dict[GearLine, dict[int, tuple[float, ...]]]
 
 
 @dataclass(frozen=True)
@@ -198,6 +245,8 @@ class Tables:
     sets: dict[int, ArtifactSet]
     skills: dict[int, Skill]
     hero_skills: dict[int, tuple[int, ...]]  # hero type id -> its skill ids (first form)
+    glyphs: dict[GlyphKind, dict[GlyphGrade, float]]  # each grade's top roll, weakest first
+    gear: GearTables
 
 
 @dataclass(frozen=True)
@@ -220,6 +269,7 @@ GRADES = {
     "FiveStars": 5,
     "SixStars": 6,
 }
+GLYPH_RARITIES = ("Uncommon", "Rare", "Epic", "Legendary")
 
 
 def load_account(captures: Path, static: Path, schema: Path) -> Account:
@@ -437,7 +487,44 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),
         skills=parse_skills(static),
         hero_skills={t["id"]: tuple(t["forms"][0]["skills"]) for t in hero_types if t["forms"]},
+        glyphs=parse_glyphs(read_json(static / "glyphs.json")),
+        gear=parse_gear(read_json(static / "gear.json")),
     )
+
+
+def parse_gear(raw: dict) -> GearTables:
+    return GearTables(
+        max_level=raw["max_level"],
+        primary=by_line(raw["primary"]),
+        ascension=by_line(raw["ascension"]),
+    )
+
+
+def by_line(tables: list[dict]) -> dict[GearLine, dict[int, tuple[float, ...]]]:
+    """Each table under every slot it applies to; stats gear optimising ignores are left out."""
+    return {
+        GearLine(Slot(slot), Stat(table["stat"]), table["absolute"]): {
+            int(rank): tuple(values) for rank, values in table["values"].items()
+        }
+        for table in tables
+        if table["stat"] in Stat
+        for slot in table["slots"]
+    }
+
+
+def parse_glyphs(glyphs: list[dict]) -> dict[GlyphKind, dict[GlyphGrade, float]]:
+    """Kinds in the game's stat order, flat before %; each kind's grades weakest first."""
+    by_kind: dict[GlyphKind, dict[GlyphGrade, float]] = {}
+
+    def order(raw: dict) -> tuple:
+        stat = list(Stat).index(Stat(raw["stat"]))
+        return stat, not raw["absolute"], raw["rank"], GLYPH_RARITIES.index(raw["rarity"])
+
+    for raw in sorted(glyphs, key=order):
+        kind = GlyphKind(Stat(raw["stat"]), raw["absolute"])
+        by_kind.setdefault(kind, {})[GlyphGrade(raw["rank"], raw["rarity"])] = raw["max"]
+
+    return by_kind
 
 
 def parse_levels(by_rarity: dict) -> dict[str, list[tuple[Bonus, ...]]]:

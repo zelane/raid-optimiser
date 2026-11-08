@@ -90,20 +90,24 @@
       </fieldset>
       <fieldset>
         <legend>Sets (at least)</legend>
-        {% for row in set_rows %}
-          <fieldset role="group">
-            <select name="set_{{ row }}" aria-label="Set">
+        <div id="set-rows"></div>
+        <button type="button" class="secondary outline add-set">Add set</button>
+        {# A set row, numbered by app.js as it adds them (`__n__`). #}
+        <template id="set-row">
+          <fieldset role="group" class="set-row">
+            <select name="set___n__" aria-label="Set" required>
               <option value="">—</option>
               {% for set_id, name in page.options.sets %}<option value="{{ set_id }}">{{ name }}</option>{% endfor %}
             </select>
             <input type="number"
-                   name="pieces_{{ row }}"
+                   name="pieces___n__"
                    min="1"
                    max="9"
                    value="4"
                    aria-label="Pieces">
+            <button type="button" class="secondary outline remove-set" aria-label="Remove set" title="Remove set">×</button>
           </fieldset>
-        {% endfor %}
+        </template>
       </fieldset>
       <div class="grid">
         <label>

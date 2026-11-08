@@ -20,7 +20,7 @@ its upload. Game tables come from the game's own data.
 - `update-static.sh`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
-  IL2CPP dump, `tools/gen_schema.py`) into `static/{sets,hero_types,bonuses,skills}.json`.
+  IL2CPP dump, `tools/gen_schema.py`) into `static/{sets,hero_types,bonuses,skills,glyphs,gear}.json`.
 - `tools/oracle_request.py` / `tools/oracle_import.py`: base stats via the raider oracle
   (below) into `static/{base_stats_6_60,level_curve}.json`.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
@@ -30,12 +30,22 @@ its upload. Game tables come from the game's own data.
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list. A solve's gear pool
   (`AnyGear | UpToLock(level) | Unequipped`) decides whose worn gear it may take; the
   champion's own gear is always allowed.
+  Also what solves assume (account-wide, `/assumptions` page; `optimiser/assume.py`): flags for
+  the champion at their rank's top level, gear at +16 (main stat only) and ascended gear fully
+  ascended (`planned_*` fields; `static/gear.json` tables, checked exact against every piece),
+  and glyphs to assume (a grade per kind): `optimiser/glyphs.py` gives solves a copy of the account whose substats of those kinds carry the grade's top roll
+  (`StatLine.planned_glyph`), capped below 6* at the best glyph of the piece's rank, where it
+  beats the real glyph; current stats use the real gear. Only stats the request wants more of
+  are glyphed (`solve.directions` > 0: minimums, ranked stats, the damage skill's stats + C.DMG).
   Also each champion's run history: the submitted form and the outcome view
   (`dataclasses.asdict` JSON, rebuilt by `service.revive`; a run whose shape no longer fits
   shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service.py` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.
+  Colour palettes (Pico's default and Hana, from `~/repo/demeter`'s `palettes.css`) live in
+  `static/palettes.css`: the nav's switcher (`palette.js`) sets `<html data-palette>` and a
+  `raid_palette` cookie, which `base.html` reads so pages render in it from the start.
 
 ## Commands
 
@@ -86,6 +96,10 @@ Anaxia's in-game stats matched exactly.
 - **Relics:** a type's stats unlock at levels 0/9/15; a stat's value is
   `values[stat][level - unlock level]`. Stones add skills only.
 - **Gear:** substat value + glyph (`Enhancement`); artifact ascension adds `AscendBonus`.
+  Main stat by slot/rank/level is `ArtifactData.PrimaryBonusInfos`, ascension bonus by
+  slot/rank/ascend level `AscendBonusInfos` (ranks 4-6); rarity changes neither.
+  Glyphs are `BlackMarketData` items' `PowerUpData` (stat, rank, rarity, min/max roll): ranks
+  1–5 Uncommon only, 6 in Uncommon–Legendary; substats only, no C.RATE/C.DMG glyphs.
   Accessories may be faction-locked. Sets: fixed (per N pieces) or variable (cumulative total
   at each piece count, accessories count).
 - HH names sets differently from the game (HH `AttackPowerAndIgnoreDefence` = Cruel); join by

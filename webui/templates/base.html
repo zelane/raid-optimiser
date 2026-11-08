@@ -1,18 +1,32 @@
 <!doctype html>
-<html lang="en">
+{%- set palette = request.cookies.get("raid_palette", "default") %}
+{%- if palette not in palettes %}{% set palette = "default" %}{% endif %}
+<html lang="en" data-palette="{{ palette }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Raid optimiser{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
   <link rel="stylesheet" href="{{ static_url('app.css') }}">
+  <link rel="stylesheet" href="{{ static_url('palettes.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
 <body>
   <main class="container">
-    <nav><ul><li><a href="/"><strong>Raid optimiser</strong></a></li></ul></nav>
+    <nav>
+      <ul><li><a href="/"><strong>Raid optimiser</strong></a></li></ul>
+      <ul>
+        <li><a href="/assumptions">Assumptions</a></li>
+        <li>
+          <select class="palette" aria-label="Colour palette">
+            {% for key, label in palettes.items() %}<option value="{{ key }}" {% if key == palette %}selected{% endif %}>{{ label }}</option>{% endfor %}
+          </select>
+        </li>
+      </ul>
+    </nav>
     {% block content %}{% endblock %}
   </main>
+  <script src="{{ static_url('palette.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

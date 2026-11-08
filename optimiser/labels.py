@@ -3,13 +3,14 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 
 - `STAT_LABELS`, `PERCENT_STATS`: stat names as the game shows them, and which read in %
 - `format_stat`, `format_line`, `line_label`, `line_amount`: the formatting
+- `glyph_kind_label`, `glyph_grade_label`: glyphs, "HP%", "6★ Legendary"
 - `pool_choices`, `pool_name`, `pool_label`, `parse_pool`: gear pools, as offered, as a
   word ("all", "lock-3", "free") and as read
 """
 
 import re
 
-from optimiser.account import Stat, StatLine
+from optimiser.account import GlyphGrade, GlyphKind, Stat, StatLine
 from optimiser.solve import AnyGear, Pool, Unequipped, UpToLock
 from optimiser.store import LOCK_LEVELS, Locks
 
@@ -32,9 +33,21 @@ def format_stat(stat: Stat, value: float) -> str:
 
 
 def format_line(line: StatLine) -> str:
-    """ "HP 60%", "SPD 17 (+3)": the line's amount, glyph included in brackets."""
-    glyph = f" (+{line_amount(line.glyph, line.absolute)})" if line.glyph else ""
-    return f"{line_label(line)} {line_amount(line.value, line.absolute)}{glyph}"
+    """ "HP 60%", "SPD 17 (+3)", "SPD 17 (+12 to glyph)", "HP 2631->4080": the line's amount,
+    glyph included in brackets (an assumed one if it's better), and any assumed value."""
+    if line.planned_glyph:
+        glyph = f" (+{line_amount(line.planned_glyph, line.absolute)} to glyph)"
+    elif line.glyph:
+        glyph = f" (+{line_amount(line.glyph, line.absolute)})"
+    else:
+        glyph = ""
+
+    amount = line_amount(line.value, line.absolute)
+
+    if line.planned_value is not None:
+        amount += "->" + line_amount(line.planned_value, line.absolute)
+
+    return f"{line_label(line)} {amount}{glyph}"
 
 
 def line_label(line: StatLine) -> str:
@@ -46,6 +59,15 @@ def line_label(line: StatLine) -> str:
 
 def line_amount(value: float, absolute: bool) -> str:
     return f"{value:g}" if absolute else f"{value * 100:.3g}%"
+
+
+def glyph_kind_label(kind: GlyphKind) -> str:
+    return STAT_LABELS[kind.stat] + ("" if kind.absolute else "%")
+
+
+def glyph_grade_label(grade: GlyphGrade) -> str:
+    """Ranks 1-5 only come in Uncommon, so only 6★ names its rarity."""
+    return f"{grade.rank}★" + (f" {grade.rarity}" if grade.rank == 6 else "")
 
 
 def pool_choices(locks: Locks) -> list[Pool]:

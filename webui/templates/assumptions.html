@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Assumptions · Raid optimiser{% endblock %}
+{% block content %}
+  <h2>Assumptions</h2>
+  <p>
+    What solves take as done beyond the gear as it is now. Builds mark each assumed value, so
+    you can see what still needs doing. Current stats keep the gear as it is.
+  </p>
+  <fieldset>
+    {% for flag in page.flags %}{% include "_flag.html" %}{% endfor %}
+  </fieldset>
+
+  <h3>Glyphs</h3>
+  <p>
+    Every substat of a kind chosen here is taken as carrying that glyph at its top roll, unless
+    the glyph already on it is better. Gear below 6★ takes glyphs up to its own rank, so there
+    it's capped at that rank's top roll. A solve only glyphs stats it wants more of: a minimum,
+    a priority, or a stat the ranked skill's damage uses (and C.DMG); a stat with only a
+    maximum isn't glyphed. Main stats can't be glyphed, and the game has no C.RATE or C.DMG
+    glyphs.
+  </p>
+  <table class="glyphs">
+    <thead><tr><th>Stat</th><th>Assume</th></tr></thead>
+    <tbody>{% for row in page.glyphs %}{% include "_glyph_row.html" %}{% endfor %}</tbody>
+  </table>
+{% endblock %}
