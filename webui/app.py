@@ -5,7 +5,7 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `app`, `templates`: the FastAPI app and its Jinja templates
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`, `champion`,
   `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
-  `accessory_target`, `protect_accessory`, `sell_accessories`: the routes
+  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`: the routes
 - `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 """
@@ -39,6 +39,7 @@ from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
 from webui.service import champions as champion_pages
 from webui.service import current, results, runs
+from webui.service import empower as empower_pages
 
 HERE = Path(__file__).resolve().parent
 
@@ -175,6 +176,16 @@ async def sell_accessories(request: Request):
         "done": "Selected in game: check them and confirm the sale there.",
     }
     return templates.TemplateResponse(request, "_equip_result.html", context)
+
+
+@app.get("/empower", response_class=HTMLResponse)
+def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
+    account = current.current_account()
+    if rarity not in empower_pages.empowerable_rarities(account):
+        raise HTTPException(404, f"{rarity} champions can't be empowered")
+
+    page = empower_pages.empower_page(account, rarity)
+    return templates.TemplateResponse(request, "empower.html", {"page": page})
 
 
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)

@@ -10,7 +10,7 @@ once at the boundary into the shapes the stat model and solver use.
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
 - `Hit`, `Effect`, `Skill`: champion skills, as far as damage (and what else scales) goes
-- `HeroForm`, `LoreOfSteel`, `Tables`: the game's fixed tables
+- `HeroForm`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
 - `load_account`: the loader
@@ -281,12 +281,23 @@ class LoreOfSteel:
 
 
 @dataclass(frozen=True)
+class EmpowerSubstitute:
+    """The champion whose copies empower one only obtainable once (`Tables`)."""
+
+    type_id: int  # ascension 0
+    name: str
+
+
+@dataclass(frozen=True)
 class Tables:
     """The game's fixed tables. The arena bonus is the account's league."""
 
     great_hall: dict[Stat, tuple[Bonus, ...]]  # stat -> the bonus at each level (1 first)
     arena: tuple[Bonus, ...]  # the account's classic arena league
     empower: dict[str, list[tuple[Bonus, ...]]]
+    # Champions only obtainable once (hero type id, ascension 0) -> the champion whose copies
+    # empower them instead of duplicates.
+    empower_substitutes: dict[int, EmpowerSubstitute]
     awakening: dict[str, list[tuple[Bonus, ...]]]
     masteries: dict[int, Bonus]
     lore_of_steel: LoreOfSteel
@@ -541,6 +552,7 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         if "set_bonus_multiplier" in m
     )
     hero_types = read_json(static / "hero_types.json")
+    names = {t["id"]: t["name"] for t in hero_types}
 
     return Tables(
         great_hall={
@@ -550,6 +562,10 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         },
         arena=parse_bonuses(bonuses["arena"][league]),
         empower=parse_levels(bonuses["empower"]),
+        empower_substitutes={
+            int(type_id): EmpowerSubstitute(substitute, names[substitute])
+            for type_id, substitute in bonuses["empower_substitutes"].items()
+        },
         awakening=parse_levels(bonuses["awakening"]),
         masteries={
             int(mastery_id): bonus

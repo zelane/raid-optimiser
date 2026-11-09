@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tile, faction %}
+
+{# A champion card; `note` (HTML) goes under the name, the caller's content beside it. #}
+{% macro card(champion, note="") %}
+  <article class="champion-card rarity-{{ champion.rarity | lower }}">
+    <a href="/champions/{{ champion.id }}" class="card-tile" tabindex="-1">{{ tile(champion) }}</a>
+    <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span>{{ champion.name }}</span>{{ caller() if caller }}</a>
+    {{ note }}
+  </article>
+{% endmacro %}
+
+{% macro small_tiles(champions) %}
+  <div class="empower-dupes">
+    {% for copy in champions %}<a href="/champions/{{ copy.id }}" class="card-tile">{{ tile(copy, "small") }}</a>{% endfor %}
+  </div>
+{% endmacro %}
+
+{% block title %}Empower: Raid optimiser{% endblock %}
+{% block content %}
+  <h1>Empower</h1>
+  <nav class="tabs">
+    <ul>
+      {% for rarity in page.rarities %}
+        <li><a href="/empower?rarity={{ rarity }}"{% if page.rarity == rarity %} aria-current="page"{% endif %}>{{ rarity }}</a></li>
+      {% endfor %}
+    </ul>
+  </nav>
+
+  <h2>Safe to feed ({{ page.spare | sum(attribute="count") }})</h2>
+  <p class="lede">
+    Spare copies of {{ page.rarity }} champions you already have at +{{ page.max_empower }},
+    with how many there are. Mind any you've levelled, geared or empowered, and any marked as
+    feeding a champion you can only get once.
+  </p>
+  {% if page.spare %}
+    <div class="champion-grid">
+      {% for group in page.spare %}
+        {% set note %}{% if group.needed_by %}<small class="empower-note">feeds {{ group.needed_by | join(", ") }}</small>{% endif %}{% endset %}
+        {% call card(group.copy, note) %}<strong class="spare-count">×{{ group.count }}</strong>{% endcall %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>None: no fully empowered {{ page.rarity }} champion has a second copy.</p>
+  {% endif %}
+
+  <h2>Not fully empowered, with fodder ({{ page.with_fodder | length }})</h2>
+  <p class="lede">
+    {{ page.rarity }} champions below +{{ page.max_empower }} you can feed: the most empowered
+    copy, then the other copies that aren't empowered themselves. A champion you can only get once is empowered with copies of
+    another champion instead, shown under its name.
+  </p>
+  {% if page.with_fodder %}
+    <div class="empower-list">
+      {% for group in page.with_fodder %}
+        <article class="empower-group">
+          <a href="/champions/{{ group.champion.id }}" class="card-tile">{{ tile(group.champion) }}</a>
+          <div class="empower-copies">
+            <a href="/champions/{{ group.champion.id }}" class="card-name">{{ faction(group.champion) }}<span>{{ group.champion.name }}</span></a>
+            {% if group.copies %}{{ small_tiles(group.copies) }}{% endif %}
+            {% if group.substitutes %}
+              <small class="empower-note">With {{ group.substitute }}:</small>
+              {{ small_tiles(group.substitutes) }}
+            {% endif %}
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>None: no {{ page.rarity }} champion below +{{ page.max_empower }} has fodder.</p>
+  {% endif %}
+
+  {% if page.full %}
+    <details class="section">
+      <summary><h2>Fully empowered ({{ page.full | length }})</h2></summary>
+      <div class="champion-grid">
+        {% for champion in page.full %}{{ card(champion) }}{% endfor %}
+      </div>
+    </details>
+  {% else %}
+    <h2>Fully empowered (0)</h2>
+    <p>No {{ page.rarity }} champion is at +{{ page.max_empower }} yet.</p>
+  {% endif %}
+
+  {% if page.left %}
+    <details class="section">
+      <summary><h2>Left to empower ({{ page.left | length }})</h2></summary>
+      <p class="lede">
+        Every {{ page.rarity }} champion below +{{ page.max_empower }}, with the copies you have
+        to feed them. One you can only get once takes copies of the champion named.
+      </p>
+      <div class="champion-grid">
+        {% for item in page.left %}
+          {% set note -%}
+            <small class="empower-note">
+              {%- if item.substitute %}with {{ item.substitute }}: {{ item.fodder }} owned
+              {%- elif item.fodder %}{{ item.fodder }} cop{{ "y" if item.fodder == 1 else "ies" }} to feed
+              {%- else %}no duplicate{% endif -%}
+            </small>
+          {%- endset %}
+          {{ card(item.champion, note) }}
+        {% endfor %}
+      </div>
+    </details>
+  {% else %}
+    <h2>Left to empower (0)</h2>
+    <p>Every {{ page.rarity }} champion you have is at +{{ page.max_empower }}.</p>
+  {% endif %}
+{% endblock %}

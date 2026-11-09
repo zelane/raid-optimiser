@@ -210,7 +210,9 @@ def build_bonuses(data, strings):
     great_hall[stat][level-1]: the bonus at each level (not cumulative). arena[league]: classic arena league bonus.
     relics: each type's stats unlock at opening_levels[i]; values[stat][level - opening].
     empower[rarity][level-1] and
-    awakening[rarity][AwakenedGrade-1] are cumulative totals. Empower stacking was
+    awakening[rarity][AwakenedGrade-1] are cumulative totals. empower_substitutes: for
+    champions only obtainable once (hero type id, ascension 0), the type whose copies empower
+    them instead of duplicates (`StaticAcademyEmpowerData.HeroRecipes`). Empower stacking was
     verified against the game's CalcEmpowerBonus; awakening stacking confirmed by the user.
     Ascension (0-6) is not here: it is the last digit of TypeId, and each ascended
     type has its own base stats (see base_stats_6_60.json).
@@ -245,8 +247,9 @@ def build_bonuses(data, strings):
         "types": {str(t["Id"]): {"name": t["Name"], "stats": t["StatsBonus"] or []}
                   for t in relic_data["RelicTypes"]},
     }
+    substitutes = {str(k): v for k, v in academy["HeroRecipes"].items()}
     return {"great_hall": great_hall, "arena": arena, "relics": relics, "empower": empower, "awakening": awakening,
-            "masteries": masteries}
+            "empower_substitutes": substitutes, "masteries": masteries}
 
 
 ENEMY_TARGETS = {"Target", "AllEnemies", "Boss", "EnemyWithHighestStamina", "MostInjuredEnemy",

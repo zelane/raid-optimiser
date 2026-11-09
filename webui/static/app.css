@@ -54,12 +54,22 @@ td, th { font-variant-numeric: tabular-nums lining-nums; }
 /* --- Ornament ------------------------------------------------------------------ */
 
 /* Section headings: the wordmark's diamond, then a brass rule fading out. */
-.page-section > h2, main > h2, #cleanup > h2 { display: flex; align-items: center; gap: 0.6rem; }
-.page-section > h2::before, main > h2::before, #cleanup > h2::before { content: "◆"; color: var(--accent); font-size: 0.55em; }
-.page-section > h2::after, main > h2::after, #cleanup > h2::after {
+.page-section > h2, main > h2, #cleanup > h2, details.section > summary > h2 { display: flex; align-items: center; gap: 0.6rem; }
+.page-section > h2::before, main > h2::before, #cleanup > h2::before,
+details.section > summary > h2::before { content: "◆"; color: var(--accent); font-size: 0.55em; }
+.page-section > h2::after, main > h2::after, #cleanup > h2::after,
+details.section > summary > h2::after {
   content: ""; flex: 1; height: 1px;
   background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 60%, transparent), transparent);
 }
+
+/* A collapsible section: its heading as above, the diamond turning when it opens. */
+details.section > summary { list-style: none; margin-bottom: 0; color: inherit; }
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::after { display: none; }  /* Pico's caret */
+details.section > summary > h2 { margin-bottom: var(--pico-typography-spacing-vertical); }
+details.section > summary > h2::before { display: inline-block; transition: transform 0.2s ease; }
+details.section[open] > summary > h2::before { transform: rotate(45deg); }
 
 /* --- The top bar ------------------------------------------------------------- */
 
@@ -88,6 +98,7 @@ select.palette {
    scale with the tile's font size. */
 .tile { --tile-width: 5rem; width: var(--tile-width); margin: 0; font-size: calc(var(--tile-width) / 4.5); }
 .tile.large { --tile-width: 8.5rem; }
+.tile.small { --tile-width: 3.5rem; }
 .tile-frame {
   position: relative; aspect-ratio: 140 / 182; overflow: hidden; background: #000;
   border: solid var(--rarity); border-width: 0.4em 0.4em 0.5em;
@@ -365,3 +376,14 @@ button.equip-swap { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
+
+/* Empower: a champion's most empowered copy, then its duplicates. */
+.empower-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.empower-group { display: flex; gap: 1rem; align-items: flex-start; margin: 0; padding: 0.75rem 1rem; }
+.empower-group .card-tile { text-decoration: none; }
+.empower-copies { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.empower-dupes { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.spare-count { flex: none; margin-left: auto; }
+.empower-note { color: var(--pico-muted-color); font-size: 0.75rem; line-height: 1.2; }
+.champion-card .empower-note { display: block; text-align: center; }
+details.section > .lede { margin-top: 0; }
