@@ -19,10 +19,15 @@ static class StaticData
         return 0;
     }
 
-    // HHDir is <prefix>/drive_c/hh, so the game's cache is under <prefix>/drive_c.
+    // The game's cache is under <prefix>/drive_c: RAID_PREFIX names the prefix, else HHDir is
+    // taken to be <prefix>/drive_c/hh.
     static string FindNewest(string hhDir)
     {
-        var root = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(hhDir))!, CacheRel);
+        var prefix = Environment.GetEnvironmentVariable("RAID_PREFIX");
+        var driveC = prefix != null
+            ? Path.Combine(prefix, "drive_c")
+            : Path.GetDirectoryName(Path.GetFullPath(hhDir))!;
+        var root = Path.Combine(driveC, CacheRel);
         var newest = Directory.Exists(root)
             ? Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                 .OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault()

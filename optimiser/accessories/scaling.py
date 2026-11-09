@@ -41,8 +41,10 @@ from optimiser.accessories.roles import (
 from optimiser.account import Account, Champion, HeroForm, Slot, Stat
 from optimiser.damage import STAT_NAMES
 from optimiser.labels import STAT_LABELS
+from optimiser.levels import base_stats
 
 BODY = (Stat.ATK, Stat.HP, Stat.DEF)
+MAX_GRADE, MAX_LEVEL = 6, 60  # the roster it reads: 6★ champions
 TYPICAL = {Stat.ACC: 250.0, Stat.RES: 250.0, Stat.SPD: 250.0}  # flat stats, geared
 GEARED = 2.2  # ATK/HP/DEF geared, against base
 MIXED = 0.3  # a second stat pulling this much of the first makes a mixed type
@@ -170,8 +172,7 @@ def wearer_type(wearer: Wearer, account: Account) -> ChampionType | None:
 
 def wearer_pull(wearer: Wearer, account: Account) -> Pull:
     tables = account.tables
-    first_form = tables.hero_forms[wearer.champion.type_id][0]
-    base = wearer.form.base_6_60 or first_form.base_6_60
+    base = base_stats(wearer.form.unscaled, MAX_GRADE, MAX_LEVEL)
     damage: dict[Stat, float] = {}
     support: dict[Stat, float] = {}
 

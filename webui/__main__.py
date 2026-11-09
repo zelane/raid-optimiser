@@ -1,12 +1,12 @@
 """
-__main__.py - `python -m webui`: the web UI on http://127.0.0.1:8000, restarting itself when
-the Python under `optimiser/` or `webui/` changes (`--no-reload` to turn that off).
+__main__.py - `python -m webui`: the web UI on http://127.0.0.1:8000 (`--port N`), restarting
+itself when the Python under `optimiser/` or `webui/` changes (`--no-reload` to turn that off).
 
 - `ROOT`, `WATCHED`: what the reloader watches
 - `main`: the entry point
 """
 
-import sys
+import argparse
 from pathlib import Path
 
 import uvicorn
@@ -16,11 +16,15 @@ WATCHED = [ROOT / "optimiser", ROOT / "webui"]
 
 
 def main() -> None:
-    reload = "--no-reload" not in sys.argv[1:]
+    parser = argparse.ArgumentParser(prog="python -m webui")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--no-reload", action="store_true")
+    args = parser.parse_args()
+    reload = not args.no_reload
     uvicorn.run(
         "webui.app:app",
         host="127.0.0.1",
-        port=8000,
+        port=args.port,
         reload=reload,
         reload_dirs=[str(path) for path in WATCHED] if reload else None,
     )

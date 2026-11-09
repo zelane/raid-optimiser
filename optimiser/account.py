@@ -264,13 +264,12 @@ class Skill:
 @dataclass(frozen=True)
 class HeroForm:
     """One of a champion type's forms (mythicals have two): its role as the game names it
-    (Attack, Defense, Health, Support), its skills, its base stats as the static data holds
-    them (HP / 15, crit in %), and its exact 6★ L60 base stats if known (else empty)."""
+    (Attack, Defense, Health, Support), its skills, and its base stats as the static data
+    holds them (HP / 15, crit in %; `levels` scales them)."""
 
     role: str
     skills: tuple[int, ...]
     unscaled: Stats
-    base_6_60: Stats
 
 
 @dataclass(frozen=True)
@@ -283,10 +282,8 @@ class LoreOfSteel:
 
 @dataclass(frozen=True)
 class Tables:
-    """The game's fixed tables. `level_curve` scales a form's unscaled stats for ranks below
-    6* L60. The arena bonus is the account's league."""
+    """The game's fixed tables. The arena bonus is the account's league."""
 
-    level_curve: dict[tuple[int, int], float]
     great_hall: dict[Stat, tuple[Bonus, ...]]  # stat -> the bonus at each level (1 first)
     arena: tuple[Bonus, ...]  # the account's classic arena league
     empower: dict[str, list[tuple[Bonus, ...]]]
@@ -544,19 +541,8 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         if "set_bonus_multiplier" in m
     )
     hero_types = read_json(static / "hero_types.json")
-    base_by_form = {
-        int(type_id): [
-            {STAT_NAMES[k]: v for k, v in form.items() if k in STAT_NAMES} for form in forms
-        ]
-        for type_id, forms in read_json(static / "base_stats_6_60.json").items()
-    }
 
     return Tables(
-        level_curve={
-            (int(grade), int(level)): multiplier
-            for grade, levels in read_json(static / "level_curve.json").items()
-            for level, multiplier in levels.items()
-        },
         great_hall={
             Stat(stat): tuple(Bonus(Stat(stat), x["value"], x["absolute"]) for x in levels)
             for stat, levels in bonuses["great_hall"].items()
@@ -573,24 +559,20 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         lore_of_steel=LoreOfSteel(*lore),
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),
         skills=parse_skills(static),
-        hero_forms={
-            t["id"]: parse_forms(t["forms"], base_by_form.get(t["id"], [])) for t in hero_types
-        },
+        hero_forms={t["id"]: parse_forms(t["forms"]) for t in hero_types},
         glyphs=parse_glyphs(read_json(static / "glyphs.json")),
         gear=parse_gear(read_json(static / "gear.json")),
     )
 
 
-def parse_forms(forms: list[dict], bases: list[Stats]) -> tuple[HeroForm, ...]:
-    """6★ L60 base stats pair with forms by position; a form without them gets none."""
+def parse_forms(forms: list[dict]) -> tuple[HeroForm, ...]:
     return tuple(
         HeroForm(
             role=form["role"],
             skills=tuple(form["skills"]),
             unscaled={STAT_NAMES[k]: v for k, v in form["base_stats"].items() if k in STAT_NAMES},
-            base_6_60=bases[number] if number < len(bases) else {},
         )
-        for number, form in enumerate(forms)
+        for form in forms
     )
 
 

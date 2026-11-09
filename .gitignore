@@ -14,3 +14,6 @@ data/
 
 # Game art (Plarium's): regenerate with extract_assets.py
 webui/static/assets/
+
+# Machine-specific paths (see .env.example)
+.env

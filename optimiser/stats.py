@@ -15,6 +15,7 @@ what lets the solver treat a build as a sum.
 from collections import Counter
 from collections.abc import Iterable
 
+from optimiser import levels
 from optimiser.account import (
     Artifact,
     ArtifactSet,
@@ -28,10 +29,6 @@ from optimiser.account import (
 )
 
 ADDITIVE = (Stat.CR, Stat.CD)
-
-# Static data holds HP divided by 15 and crit in %.
-UNSCALED_HP = 15
-PERCENT = 100
 
 
 def build_stats(champion: Champion, artifacts: Iterable[Artifact], tables: Tables) -> Stats:
@@ -53,22 +50,8 @@ def build_stats(champion: Champion, artifacts: Iterable[Artifact], tables: Table
 
 
 def base_stats(champion: Champion, tables: Tables) -> Stats:
-    """The form's: exact at 6* L60; below that, the unscaled stats on the game's level curve."""
-    form = tables.form_of(champion)
-
-    if (champion.grade, champion.level) == (6, 60) and form.base_6_60:
-        return form.base_6_60
-
-    unscaled = form.unscaled
-    curve = tables.level_curve[(champion.grade, champion.level)]
-    scaled = {
-        Stat.HP: unscaled[Stat.HP] * UNSCALED_HP * curve,
-        Stat.ATK: unscaled[Stat.ATK] * curve,
-        Stat.DEF: unscaled[Stat.DEF] * curve,
-        Stat.CR: unscaled.get(Stat.CR, 0) / PERCENT,
-        Stat.CD: unscaled.get(Stat.CD, 0) / PERCENT,
-    }
-    return {stat: scaled.get(stat, unscaled.get(stat, 0)) for stat in Stat}
+    """The form's at the champion's rank and level, as the game scales them."""
+    return levels.base_stats(tables.form_of(champion).unscaled, champion.grade, champion.level)
 
 
 def constant_stats(champion: Champion, tables: Tables) -> Stats:

@@ -26,8 +26,12 @@ its upload. Game tables come from the game's own data.
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
   IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear}.json`.
-- `tools/oracle_request.py` / `tools/oracle_import.py`: base stats via the raider oracle
-  (below) into `data/game/{base_stats_6_60,level_curve}.json`.
+- `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
+  `tools/check_levels.py` checks its table is still in the game's metadata (`update-static.sh`)
+  and, given a raider oracle table, compares results. `tools/oracle_request.py` /
+  `tools/oracle_import.py` drive the oracle (below), now for checking only.
+- `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
+  (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
   (UnityPy) into `webui/static/assets/`.
 - `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
@@ -91,7 +95,8 @@ its upload. Game tables come from the game's own data.
 ## Commands
 
 The `justfile` wraps these (`just` lists recipes: `proxy`, `static`, `web`,
-`web-restart`, `assets`, `check`, `schema`, `oracle-request`, `oracle-import`, …).
+`web-restart`, `assets`, `check`, `dump`, `schema`, `check-levels`, …; `configure` and
+`install` set a machine up, paths in `.env`).
 
 ```
 ./run-proxy.sh                                   # capture (extractor + game running)
@@ -121,9 +126,11 @@ percentages applying to **base** stats except crit (C.RATE/C.DMG percentages add
 Anaxia's in-game stats matched exactly.
 
 - **Base:** static data holds unscaled stats with HP ÷ 15 and crit in %. Rank/level scaling
-  is in code (`SharedModel.Meta.Heroes.HeroExtensions.GetBaseStats`); one multiplier per
-  (grade, level) for HP/ATK/DEF shared by all types (1.0 at 1★ L1, 11.01 at 6★ L60).
-  `base_stats_6_60.json` has exact values for every type.
+  is in code (`HeroExtensions.GetBaseStats` → `BattleStats.BuildFromBase` → `CalcValue`):
+  HP/ATK/DEF = `Round(base × a × b^((L−1)/(10g−1)))`, (a, b) per rank from the static
+  `BattleStats.Multipliers` (filled from metadata; 1.0 at 1★ L1, 11.01 at 6★ L60), in Q32.32
+  `Fixed` (doubles truncate, products floor, round half to even); HP then × 15, crit ÷ 100.
+  `optimiser/levels.py` reproduces it; no oracle data is needed.
 - **Ascension** (0–6) is the last digit of `TypeId`; each ascended type has its own base stats.
   **Awakening** (`AwakenedGrade`, "double ascend") is a separate thing: flat bonuses per rarity,
   cumulative per star (`bonuses.json` `awakening`).
@@ -175,6 +182,9 @@ the user is fine with that.
 
 ## Raider oracle (game-code calls)
 
+No longer needed for base stats (`optimiser/levels.py`); kept for checking formulas against
+the running game (`just check-levels` compares with its 6★ L60 table).
+
 `~/repo/raider`: a Rust DLL injected into Raid.exe that calls IL2CPP methods. **Only ever inject
 into the throwaway account's prefix `~/tmp/inject-test`, never the user's main install.**
 The payload dumps hero stats (`/tmp/raider-stats.json`) and answers
@@ -184,11 +194,13 @@ pass value types to `il2cpp_runtime_invoke` by pointer (`Nullable<int>` as
 {bool hasValue; int value}), unbox struct enumerators for `this`, and release the
 `AppModel.ReadUser` guard.
 
-IL2CPP dump for the current game (11.85.5, metadata v39): `~/repo/raider/dump-11.85.5`, made
-with the roytu fork of Il2CppDumper (`~/repo/Il2CppDumper`, built with
-`dotnet build … -f net8.0 -p:RollForward=Major`, `RequireAnyKey: false`). Method bodies:
+IL2CPP dump for the current game (11.85.5, metadata v39): `just dump` into `data/dump/11.85.5`,
+with the roytu fork of Il2CppDumper (`~/repo/Il2CppDumper` from github.com/roytu/Il2CppDumper,
+built with `dotnet build Il2CppDumper/Il2CppDumper.csproj -c Release -f net8.0
+-p:RollForward=Major`; set `RequireAnyKey: false` in the output's `config.json`). Method bodies:
 disassemble `GameAssembly.dll` at the dump's RVAs (capstone), labelling calls from
-`script.json`.
+`script.json`. Static array initialisers (`<PrivateImplementationDetails>` fields) show their
+data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.cs`.
 
 ## Assets
 

@@ -9,19 +9,20 @@ decoder/                C# decoder (references DLLs in the HH install dir)
 run-proxy.sh            starts mitmdump on 127.0.0.1:8080, MITMs only *.hellhades.com
 data/                   everything that isn't code (gitignored):
   captures/latest/      newest export: account.json, champions.json, artifacts.json, set_ids.json
-  game/                 the game's tables (update-static.sh, the oracle)
+  game/                 the game's tables (update-static.sh)
+  dump/<version>/       IL2CPP dump of the installed game (just dump)
   state/                the optimiser's store (locks, assumptions, runs)
   cache/                the decoder's hero-type list
 ```
 
 ## One-time setup
 
-1. `./run-proxy.sh` once. It builds the decoder and creates `~/.mitmproxy/` with the CA.
-2. Trust the CA so Wine/Proton accepts it (Wine's crypt32 picks up host roots):
-   `sudo trust anchor ~/.mitmproxy/mitmproxy-ca-cert.pem`
-   This trusts it system-wide. Undo with `sudo trust anchor --remove ~/.mitmproxy/mitmproxy-ca-cert.pem`.
-   Keep `~/.mitmproxy/` private while it's trusted.
-3. Steam → extractor shortcut → Properties → Launch options:
+1. `just configure` (paths into `.env`), then `just ca`: creates mitmproxy's CA in
+   `~/.mitmproxy/` and adds it to the prefix's user root store (`tools/wine_trust_ca.py`;
+   close the game and the extractor first). Trusting it on the host (`trust anchor`) isn't
+   enough under umu: Proton runs in the Steam Linux Runtime, whose Wine syncs its machine root
+   store from the runtime's certificates. Keep `~/.mitmproxy/` private while it's trusted.
+2. Steam → extractor shortcut → Properties → Launch options:
    `HTTPS_PROXY=http://127.0.0.1:8080 HTTP_PROXY=http://127.0.0.1:8080 %command%`
 
 ## Use
@@ -44,15 +45,21 @@ Lz4BlockArray) and writes:
 - `data/game/hero_types.json` – names, faction, rarity, and per-form element/role/unscaled base stats
 
 Key names and types come from `schema/schema.json`, generated from an IL2CPP dump:
-`python3 -I tools/gen_schema.py ~/repo/raider/dump/dump.cs schema/schema.json`.
+`just dump` (Il2CppDumper over the installed game, offline), then `just schema`.
 The export validates itself (e.g. set bonuses must match the in-game description text) and
 exits non-zero if the schema no longer fits; notes about unknown keys elsewhere are harmless.
 
-## Scaled base stats (raider oracle, throwaway account only)
+## Scaled base stats
 
-Static data holds unscaled stats; the rank/level scaling lives in game code. `~/repo/raider`'s
-payload calls the game's own `GetBaseStats` on temporary in-memory heroes (never added to the
-account) for each line of `/tmp/raider-oracle-request.txt`:
+Static data holds unscaled stats; the rank/level scaling lives in game code
+(`BattleStats.CalcValue`), which `optimiser/levels.py` reproduces from its disassembly,
+with the game's multiplier table. `update-static.sh` checks the table is still in the game's
+metadata (`tools/check_levels.py`); if a game update changes it, re-dump and read it again.
+
+### Checking against the game (raider oracle, throwaway account only)
+
+`~/repo/raider`'s payload calls the game's own `GetBaseStats` on temporary in-memory heroes
+(never added to the account) for each line of `/tmp/raider-oracle-request.txt`:
 
 ```
 python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-request.txt
@@ -60,9 +67,9 @@ python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-
 python3 -I tools/oracle_import.py /tmp/raider-oracle.json data/game/hero_types.json data/game/
 ```
 
-- `data/game/base_stats_6_60.json`: exact base stats at 6* L60 for every type/form
-- `data/game/level_curve.json`: ATK/DEF multiplier per grade/level (HP = static × 15 × m);
-  shared by all types to within rounding. SPD/RES/ACC/crit don't scale (crit is % in static data).
+- `data/game/base_stats_6_60.json`: exact base stats at 6* L60 for every type/form;
+  `just check-levels` compares the formula with it
+- `data/game/level_curve.json`: ATK/DEF multiplier per grade/level (no longer used)
 
 An optional 5th request column sets the empower level and adds the game's `CalcEmpowerBonus`.
 
@@ -77,7 +84,7 @@ to base stats:
 - `empower[rarity][level-1]`: cumulative; verified against the game's `CalcEmpowerBonus`
 - `awakening[rarity][AwakenedGrade-1]`: cumulative flat bonuses.
   Ascension (0-6) is the last digit of `TypeId`; each ascended type has its own base
-  stats, already covered by `base_stats_6_60.json`.
+  stats (`hero_types.json`).
 - `masteries[id]`: the 13 stat masteries; Lore of Steel is `set_bonus_multiplier: 1.15`
   (applied to artifact set stat bonuses). Per-champion mastery ids, `AwakenedGrade` and
   `EmpowerLevel` come from `data/captures/latest/champions.json`.
