@@ -5,7 +5,8 @@ extract_assets.py - icons and portraits from the game's Unity bundles, for the w
 
 Writes webui/static/assets/:
   portraits/<type id with the ascension digit 0>.png  (HeroAvatars, HeroAvatarsLocal,
-                                                     FuseAvatarsLocal bundles)
+                                                     FuseAvatarsLocal bundles; the sprite
+                                                     the type's "avatar" names, if another)
   sets/<set id>.png                                   (ArtifactSets)
   pieces/<set id>_<slot>.png, pieces/<faction>_<slot>.png  (Artifacts: the piece art the
                                                        game shows; faction accessories)
@@ -32,6 +33,7 @@ one game set name matches it too. Anything unmatched is listed, and the UI shows
 import json
 import os
 import re
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -121,6 +123,14 @@ def main() -> None:
     for name, sprite in placeholders.items():
         if name not in written["portraits"]:
             save(sprite, "portraits", name, written)
+
+    # Types whose portrait is another sprite (`hero_types.json` "avatar") get that one, as the
+    # game shows it, even where a sprite has their own id.
+    for hero_type in json.load(open(TABLES / "hero_types.json")):
+        key, avatar = str(hero_type["id"]), hero_type.get("avatar")
+        if avatar and avatar != key and avatar in written["portraits"]:
+            shutil.copyfile(OUT / "portraits" / f"{avatar}.png", OUT / "portraits" / f"{key}.png")
+            written["portraits"].add(key)
 
     # 2. Set icons.
     for sprite in sprites("ArtifactSets"):

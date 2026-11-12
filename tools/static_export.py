@@ -149,12 +149,21 @@ def build_hero_types(hero):
     for h in hero["HeroTypes"]:
         out.append({
             "id": h["Id"], "name": h["Name"], "fraction": h["Fraction"], "rarity": h["Rarity"],
+            "avatar": avatar_name(h),
             "forms": [{"element": f["Element"], "role": f["Role"],
                        "skills": f.get("SkillTypeIds") or [],
                        "base_stats": {k: round(v, 6) for k, v in (f.get("BaseStats") or {}).items()}}
                       for f in h.get("Forms") or []],
         })
     return out
+
+
+def avatar_name(h):
+    """The portrait sprite the game shows: the first form's default (lowest id) skin's. Mostly the
+    type id; old champions that were bosses first use their boss portraits (Big 'Un: 21090)."""
+    forms = h.get("Forms") or []
+    visuals = (forms[0].get("VisualInfosBySkinId") or {}) if forms else {}
+    return visuals[min(visuals, key=int)]["AvatarName"] if visuals else None
 
 
 def cumulative(levels):

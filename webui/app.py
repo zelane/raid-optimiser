@@ -8,6 +8,7 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`: the routes
 - `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
+- `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
 
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from webui import extractor
@@ -43,8 +45,27 @@ from webui.service import empower as empower_pages
 
 HERE = Path(__file__).resolve().parent
 
+
+class CachedStatic(StaticFiles):
+    """Static files with a `Cache-Control`: without one the browser revalidates every image on
+    each page (the art's files are new after each extract, so heuristic freshness is short),
+    and the tiles' frames and portraits pop in. A `static_url` (`?v=`) never changes; the art
+    changes only when re-extracted, so a day's staleness is fine (a hard reload clears it)."""
+
+    async def get_response(self, path: str, scope: Scope):
+        response = await super().get_response(path, scope)
+
+        if response.status_code == 200:
+            versioned = b"v=" in scope.get("query_string", b"")
+            response.headers["Cache-Control"] = (
+                "public, max-age=31536000, immutable" if versioned else "public, max-age=86400"
+            )
+
+        return response
+
+
 app = FastAPI(title="Raid optimiser")
-app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
+app.mount("/static", CachedStatic(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.globals["lock_levels"] = LOCK_LEVELS
 # palettes.css; a first visit (no cookie) gets Vault.
