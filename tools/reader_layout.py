@@ -27,9 +27,17 @@ CLASSES = {
         "Arena",
         "Inbox",
         "Relics",
+        "Arena3x3",
     ),
     ("Client.Model.Gameplay.Heroes", "HeroesWrapperReadOnly"): ("HeroData",),
-    ("SharedModel.Meta.Heroes", "UserHeroData"): ("HeroById",),
+    ("SharedModel.Meta.Heroes", "UserHeroData"): ("HeroById", "HeroesAiPresets"),
+    ("SharedModel.Meta.Heroes", "HeroesAiPreset"): (
+        "Id",
+        "Name",
+        "SkillPrioritiesSetups",
+        "TypeRanges",
+    ),
+    ("SharedModel.Meta.Heroes", "SkillPrioritiesSetup"): ("HeroId",),
     ("SharedModel.Meta.Heroes", "Hero"): (
         "Id",
         "TypeId",
@@ -77,7 +85,20 @@ CLASSES = {
     ("SharedModel.Meta.Artifacts", "BonusValue"): ("_isAbsolute", "_value"),
     ("Client.Model.Gameplay.Village", "VillageWrapperReadOnly"): ("VillageData",),
     ("SharedModel.Meta.Village", "UserVillageData"): ("CapitolBonusLevelByStatByElement",),
-    ("Client.Model.Gameplay.Battle", "ArenaWrapperReadOnly"): ("LeagueId",),
+    ("Client.Model.Gameplay.Battle", "ArenaWrapperReadOnly"): ("LeagueId", "ArenaData"),
+    ("SharedModel.Meta.Battle.Arena", "UserArenaData"): ("DefenseHeroIds",),
+    ("Client.Model.Gameplay.Arena3x3", "Arena3x3WrapperReadOnly"): ("Data",),
+    ("SharedModel.Meta.Battle.Arena3x3", "UserArena3X3Data"): ("Arena3X3DefenseTeamSetup",),
+    ("SharedModel.Battle.Core.Setup", "TeamSetup"): ("HeroSlotSetups",),
+    ("SharedModel.Battle.Core.Setup", "HeroSlotSetup"): ("InventoryHeroId",),
+    ("SharedModel", "SharedModelManager"): ("DynamicData",),
+    ("SharedModel.Meta", "DynamicData"): ("StageData",),
+    ("SharedModel.Meta.Stages", "DynamicStageData"): ("AllianceChimeraData",),
+    ("SharedModel.Meta.Stages.Entities", "ChimeraData"): (
+        "RaidStartTime",
+        "RaidNumber",
+        "PrizeOffset",
+    ),
     ("Client.Model.Gameplay.Inbox", "InboxWrapperReadOnly"): ("InboxData",),
     ("SharedModel.Meta.Inbox", "UserInboxData"): ("Items",),
     ("SharedModel.Meta.Inbox", "InboxItem"): ("Id", "TypeId", "Prize"),
@@ -90,6 +111,8 @@ CLASSES = {
 ROOTS = (
     "Client.Model.AppModel",
     "SharedModel.Meta.Artifacts.ArtifactStorage.ArtifactStorageResolver",
+    "SharedModel.SharedModelManager",
+    "SharedModel.Meta.Heroes.HeroesAiPreset",
 )
 ENUMS = {
     ("SharedModel.Battle.Effects", "StatKindId"),
@@ -101,6 +124,7 @@ ENUMS = {
     ("SharedModel.Meta.Heroes", "Element"),
     ("SharedModel.Meta.Battle.Arena", "ArenaLeagueId"),
     ("SharedModel.Meta.Inbox", "InboxTypeId"),
+    ("SharedModel.Meta.Heroes", "HeroesAiPresetType"),
 }
 
 NAMESPACE = re.compile(r"^// Namespace: ?(.*)$")

@@ -12,7 +12,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
-- `Account`: everything a solve needs
+- `Preset`, `ChimeraRaid`: saved teams, and the Chimera's current raid
+- `Account`: everything a solve needs, and the account's saved teams
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
   `faction_name`: what the game's words mean
 - `load_account`: the loader
@@ -20,12 +21,13 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets` (`parse_ignore`),
   `parse_skills`, `parse_relics` (`relic_stats`), `parse_hero_type`, `parse_forms`,
   `parse_glyphs`, `parse_gear` (`by_line`), `great_hall_by_affinity`, `parse_champion`,
-  `parse_artifact` (`parse_line`): its steps
+  `parse_artifact` (`parse_line`), `parse_preset`, `parse_raid`, `team`: its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
 from pathlib import Path
@@ -371,9 +373,32 @@ class Tables:
 
 
 @dataclass(frozen=True)
+class Preset:
+    """A saved team: `area` is the game's preset type (Pvp for arena attack, Chimera, Hydra,
+    DoomTower, …)."""
+
+    id: int
+    name: str
+    area: str
+    champion_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class ChimeraRaid:
+    """The Chimera's current raid; its prize offset decides which trials give which rewards
+    (`optimiser.chimera.rotation`)."""
+
+    start: datetime
+    number: int
+    prize_offset: int
+
+
+@dataclass(frozen=True)
 class Account:
     """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed;
-    `relic_types`: the relic types the account has (worn or not)."""
+    `relic_types`: the relic types the account has (worn or not); `presets`, the arena
+    defenses (classic, and 3v3's three teams) and `chimera_raid`: what the game holds besides
+    gear."""
 
     user_id: int  # the Raid account
     champions: dict[int, Champion]
@@ -382,6 +407,10 @@ class Account:
     tables: Tables
     mailbox: tuple[Artifact, ...] = ()
     relic_types: frozenset[int] = frozenset()
+    presets: tuple[Preset, ...] = ()
+    arena_defense: tuple[int, ...] = ()
+    arena3x3_defense: tuple[tuple[int, ...], ...] = ()
+    chimera_raid: ChimeraRaid | None = None
 
 
 DEFAULT_LEAGUE = "GoldV"  # if the game doesn't say
@@ -428,6 +457,10 @@ def load_account(snapshot: Path, static: Path, schema: Path) -> Account:
         tables=tables,
         mailbox=mailbox,
         relic_types=frozenset(relic["type_id"] for relic in account["relics"]),
+        presets=tuple(parse_preset(raw) for raw in account["presets"]),
+        arena_defense=team(account["arena_defense"]),
+        arena3x3_defense=tuple(team(raw) for raw in account["arena3x3_defense"]),
+        chimera_raid=parse_raid(account["chimera"]) if account["chimera"] else None,
     )
 
 
@@ -536,6 +569,20 @@ def parse_line(raw: dict) -> StatLine:
         glyph=raw["glyph"],
         rolls=raw["rolls"],
     )
+
+
+def parse_preset(raw: dict) -> Preset:
+    return Preset(raw["id"], raw["name"], raw["area"], team(raw["heroes"]))
+
+
+def parse_raid(raw: dict) -> ChimeraRaid:
+    start = datetime.fromtimestamp(raw["start"], UTC)
+    return ChimeraRaid(start=start, number=raw["number"], prize_offset=raw["prize_offset"])
+
+
+def team(champion_ids: list[int]) -> tuple[int, ...]:
+    """A team's champions, without its empty slots (the game marks them 0 or -1)."""
+    return tuple(champion_id for champion_id in champion_ids if champion_id > 0)
 
 
 def parse_sets(static: Path, set_numbers: dict[str, int]) -> dict[int, ArtifactSet]:

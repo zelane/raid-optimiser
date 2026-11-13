@@ -6,26 +6,31 @@ column's nine trials (Ram, Lion and Snake; Easy, Normal and Hard), each highligh
 team shown can clear it in one Ultra Nightmare fight.
 
 - `MORE`: how many more teams "show more" lists
-- `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `TrialView`, `FormRow`,
-  `OptionView`, `WantView`, `WantGroup`, `GearView`, `GearGroup`, `AssumedView`,
+- `ColumnView`, `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `TrialView`,
+  `FormRow`, `OptionView`, `WantView`, `WantGroup`, `GearView`, `GearGroup`, `AssumedView`,
   `ChimeraPage`: the views
 - `chimera_page`: what the page asks for
-- `slot_view`, `option_view`, `form_rows`, `trial_view`, `need_view`, `waits_on`,
-  `WANT_GROUPS`, `want_groups`, `want_view`, `gear_groups`, `gear_view`, `assumed_views`,
-  `assumed_view`, `choice_label`, `percent`: its pieces
+- `rotation_column`: the column the game's current raid puts the mythical materials in
+- `column_views`, `easy_ram_trials`, `trial_terms`, `slot_view`, `option_view`, `form_rows`,
+  `trial_view`, `need_view`, `waits_on`, `WANT_GROUPS`, `want_groups`, `want_view`,
+  `gear_groups`, `gear_view`, `assumed_views`, `assumed_view`, `choice_label`, `percent`: its
+  pieces
 - `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
   effects
 """
 
+import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from optimiser.account import Account, Champion
 from optimiser.chimera.cover import Lineup, Member, NeedCover, TrialCover
 from optimiser.chimera.gear import Assumed, Gear, Loadout
 from optimiser.chimera.plan import Brief, check_lineup, fill_lineup
+from optimiser.chimera.rotation import mythical_column
 from optimiser.chimera.tags import Side, Tag, only_in, plain_label
-from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS
-from optimiser.enemies import Enemies
+from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS, PLAN_DIFFICULTY
+from optimiser.enemies import Enemies, Trial
 from webui.forms import (
     FIRST_SHOWN,
     GRADES,
@@ -38,6 +43,16 @@ from webui.forms import (
 from webui.service.views import ChampionRow, asset_url, champion_row
 
 MORE = 9  # teams each "show more" adds
+
+
+@dataclass(frozen=True)
+class ColumnView:
+    """A trial column: the game doesn't name them, so `hint` names its Easy Ram trial's
+    statuses; `mythical`: the game's current raid puts the mythical materials in it."""
+
+    part: str
+    hint: str
+    mythical: bool
 
 
 @dataclass(frozen=True)
@@ -179,7 +194,7 @@ class AssumedView:
 @dataclass(frozen=True)
 class ChimeraPage:
     column: str
-    columns: tuple[str, ...]
+    columns: list[ColumnView]
     min_grade: int
     grades: tuple[int, ...]
     gear: list[GearGroup]  # sets, relics
@@ -228,7 +243,7 @@ def chimera_page(
     champions = sorted(account.champions.values(), key=lambda c: (c.name, -c.grade, -c.level))
     return ChimeraPage(
         column=request.column,
-        columns=PARTS,
+        columns=column_views(enemies, rotation_column(account, enemies, datetime.now(UTC))),
         min_grade=request.min_grade,
         grades=GRADES,
         gear=gear_groups(offers.gear, allowed),
@@ -255,6 +270,28 @@ def chimera_page(
         rows=form_rows(lineup),
         problems=list(plan.problems),
     )
+
+
+def rotation_column(account: Account, enemies: Enemies, now: datetime) -> str | None:
+    """None when the snapshot has no raid (the game hadn't loaded the Chimera)."""
+    raid = account.chimera_raid
+    return mythical_column(enemies.chimera, raid, now) if raid else None
+
+
+def column_views(enemies: Enemies, mythical: str | None) -> list[ColumnView]:
+    easy_ram = {t.part: t for t in easy_ram_trials(enemies)}
+    return [ColumnView(part, trial_terms(easy_ram[part]), part == mythical) for part in PARTS]
+
+
+def easy_ram_trials(enemies: Enemies) -> list[Trial]:
+    """The trial each column starts with, as the game lists them."""
+    tier = next(t for t in enemies.chimera.tiers if t.difficulty == PLAN_DIFFICULTY)
+    return [t for t in tier.trials if (t.form, t.level) == (ANIMAL_FORMS[0], LEVELS[0])]
+
+
+def trial_terms(trial: Trial) -> str:
+    """The statuses a trial's text names ("[Decrease DEF]", …), in order, once each."""
+    return " + ".join(dict.fromkeys(re.findall(r"\[([^\]]+)\]", trial.description)))
 
 
 def slot_view(member: Member | None, pick: SlotPick) -> SlotView:

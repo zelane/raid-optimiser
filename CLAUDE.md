@@ -28,9 +28,13 @@ the game itself.
   Reads it out of the running game's memory from outside the process (`OpenProcess` VM_READ +
   `ReadProcessMemory`; nothing injected or written), run in the game's prefix via
   `plarium-umu`, into `data/captures/snapshot.json` (`paths.SNAPSHOT`, `account.load_account`
-  parses it; the web UI reloads when it changes). Only what the optimiser uses: champions
-  (static facts come from `hero_types.json`), pieces, who wears what, relics, Great Hall,
-  arena league, inbox pieces. Values are the game's: ids, enums by name (the faction's game
+  parses it; the web UI reloads when it changes; the nav's Sync button runs `just read` through
+  `webui/reader.py`, and a successful Equip syncs after). Only what the optimiser uses:
+  champions (static facts come from `hero_types.json`), pieces, who wears what, relics, Great
+  Hall, arena league, inbox pieces, saved teams (`teams`: presets with their area, from
+  `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3
+  arena defenses; empty slots are 0 or -1) and the Chimera's raid (`chimera`:
+  `SharedModelManager.DynamicData.StageData.AllianceChimeraData`). Values are the game's: ids, enums by name (the faction's game
   name: `account.faction_name` gives the display name), Fixed rounded to 6 decimals. A
   module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
   object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
@@ -61,8 +65,8 @@ the game itself.
   a battle starts (no in-battle passives). `just enemies` (`optimiser/enemy_report.py`) prints it.
   The co-op event world boss (Tainted Demon Lord) is area `CooperationEventWorldBoss`.
 - Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
-  column (Wing/Tail/Paw: where this rotation's mythical materials are; the user picks, the
-  snapshot doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
+  column (Wing/Tail/Paw: where this raid's mythical materials are; the game doesn't name its
+  columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
   only count for trials cleared in the same fight). Judged on what champions can place and do,
   not damage (targets are shown, not checked), nor turn order, nor ACC against the RES.
   - `tags`: `Tag` (debuff/buff status kind with strengths merged by `status_kind`, a skill
@@ -100,6 +104,14 @@ the game itself.
     gives the best partial ones.
   - `plan`: `check_lineup` (the slots alone) and `fill_lineup`, from a `Brief` (column,
     wanted, loadout).
+  - `rotation`: which trial gives what this raid, read from the game's code
+    (`ChimeraExtensions.GetChimeraChallengeRewardWithOffset`, `GetPrizeOffset`): a tier's 9
+    reward lists (`enemies.json`, game order Ram/Lion/Snake × Wing/Tail/Paw) shift over the
+    trials, trial i getting list `(i + offset) % 9` at its level. The offset is the raid's
+    `PrizeOffset` from 24 h after its start (`hours_between_raids - activity_hours`), the
+    previous one's before. Offset 0 puts the Mythical materials on Tail, so the column is
+    Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
+    2, Paw). The page's default column.
   - Page (`webui/service/chimera.py`; `forms.parse_chimera` is its boundary, `ChimeraRequest`
     with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from a datalist,
     or part of a name), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &

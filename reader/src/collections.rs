@@ -1,7 +1,9 @@
-//! .NET's collections as IL2CPP lays them out (the dump shows generic types' offsets as 0x0).
-//! A null collection reads as empty.
+//! .NET's collections and strings as IL2CPP lays them out (the dump shows generic types'
+//! offsets as 0x0). A null collection reads as empty, a null string as "".
 //!
 //! - `list_refs`, `list_i32`: a `List<T>`'s items, of a reference `T` or an int
+//! - `array_i32`: an `int[]` (or an array of int-sized enums, or pairs of them, flattened)
+//! - `string`: a `System.String`
 //! - `dict_refs`, `dict_i32`: a `Dictionary<K, V>`'s live entries, with an int-sized key
 //!   (int or enum) and a reference or int value
 
@@ -9,6 +11,11 @@ use crate::process::Process;
 
 const ARRAY_LENGTH: u64 = 0x18;
 const ARRAY_DATA: u64 = 0x20;
+
+const STRING_LENGTH: u64 = 0x10;
+const STRING_CHARS: u64 = 0x14;
+/// Longer than any name the game lets a player type, so a bad read can't ask for gigabytes
+const STRING_MAX: i32 = 4096;
 
 const LIST_ITEMS: u64 = 0x10;
 const LIST_SIZE: u64 = 0x18;
@@ -61,6 +68,37 @@ pub fn dict_i32(process: &Process, dict: u64) -> Result<Vec<(i32, i32)>, String>
         .iter()
         .map(|e| (i32_at(e, ENTRY_KEY), i32_at(e, INT_ENTRY.value)))
         .collect())
+}
+
+/// Every int in the array; `per_item` ints per element (2 for a `ValueTuple<int, int>`).
+pub fn array_i32(process: &Process, array: u64, per_item: usize) -> Result<Vec<i32>, String> {
+    if array == 0 {
+        return Ok(Vec::new());
+    }
+
+    let length = process.read::<u64>(array + ARRAY_LENGTH)? as usize;
+    let bytes = array_bytes(process, array, length, 4 * per_item)?;
+    Ok(bytes.chunks_exact(4).map(|c| i32_at(c, 0)).collect())
+}
+
+pub fn string(process: &Process, string: u64) -> Result<String, String> {
+    if string == 0 {
+        return Ok(String::new());
+    }
+
+    let length = process.read::<i32>(string + STRING_LENGTH)?;
+
+    if !(0..=STRING_MAX).contains(&length) {
+        return Err(format!("string of length {length} at {string:#x}"));
+    }
+
+    let mut bytes = vec![0u8; 2 * length as usize];
+    process.read_bytes(string + STRING_CHARS, &mut bytes)?;
+    let units: Vec<u16> = bytes
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    Ok(String::from_utf16_lossy(&units))
 }
 
 fn list_bytes(process: &Process, list: u64, item: usize) -> Result<Vec<u8>, String> {

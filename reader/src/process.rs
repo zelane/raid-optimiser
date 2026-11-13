@@ -3,6 +3,7 @@
 //! - `Process::open`: find a process and one of its modules by name
 //! - `Process::read`, `read_bytes`, `ptr`, `cstr`: copy values out of its memory
 //! - `Process::block`, `Block`: an object's bytes in one read, its fields decoded from them
+//!   (ints, pointers, `Nullable<int>`, `Fixed`, `DateTime`)
 
 use std::ffi::c_void;
 use std::mem::{size_of, MaybeUninit};
@@ -103,6 +104,10 @@ impl Process {
 }
 
 const FIXED_DECIMALS: f64 = 1e6;
+/// `DateTime`: ticks of 100 ns since 0001-01-01 in the low 62 bits (the top two are its kind)
+const DATETIME_TICKS: u64 = 0x3FFF_FFFF_FFFF_FFFF;
+const TICKS_AT_UNIX_EPOCH: i64 = 621_355_968_000_000_000;
+const TICKS_PER_SECOND: i64 = 10_000_000;
 
 /// An object's bytes, read at once; offsets are from the object's start.
 pub struct Block {
@@ -141,6 +146,12 @@ impl Block {
     pub fn fixed(&self, offset: u64) -> f64 {
         let value = self.i64(offset) as f64 / 4294967296.0;
         (value * FIXED_DECIMALS).round() / FIXED_DECIMALS
+    }
+
+    /// A `DateTime`, as Unix seconds (the game keeps its times in UTC).
+    pub fn unix_seconds(&self, offset: u64) -> i64 {
+        let ticks = (self.ptr(offset) & DATETIME_TICKS) as i64;
+        (ticks - TICKS_AT_UNIX_EPOCH) / TICKS_PER_SECOND
     }
 }
 

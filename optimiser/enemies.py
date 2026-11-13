@@ -2,18 +2,19 @@
 enemies.py - the game's enemies (`enemies.json`, base stats from `hero_types.json`): each
 stage's teams, the restrictions on the player's team, and the enemies' stats as a battle
 starts: base at their rank and level (`levels`), then the stage's and the slot's modifiers.
-The boss modes' own tables come with them: the clan boss's difficulties, the Chimera's forms
-and trials, and the areas' shield caps.
+The boss modes' own tables come with them: the clan boss's difficulties, the Chimera's forms,
+trials, reward lists and raid timing, and the areas' shield caps.
 
 - `Modifier`, `Restriction`, `Placement`, `Stage`, `EnemyType`, `Skill`: stages and who's in them
-- `ClanBossTier`, `Trial`, `ChimeraTier`, `Chimera`: the boss modes' tables
+- `ClanBossTier`, `Trial`, `Reward`, `TrialRewards`, `RaidTiming`, `ChimeraTier`, `Chimera`: the
+  boss modes' tables
 - `Enemies`: all of it
 - `CHIMERA_FORMS`: the Chimera's forms, in its type's order
 - `load_enemies`: the loader
 - `enemy_stats`: an enemy's stats in a stage
 - `modifier_applies`, `is_boss`: what the stats depend on
 - `parse_stage`, `parse_placement`, `parse_modifier`, `parse_restriction`, `parse_type`,
-  `parse_skill`, `parse_chimera`, `parse_trial`: the loader's steps
+  `parse_skill`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's steps
 """
 
 from dataclasses import dataclass
@@ -135,21 +136,48 @@ class Trial:
 
 
 @dataclass(frozen=True)
+class Reward:
+    item: str  # the game's resource (RelicCraftMaterial_Chimera_Mythical, …) or reward type
+    count: int
+
+
+@dataclass(frozen=True)
+class TrialRewards:
+    """One of a tier's reward lists: whose it is when the prize offset is 0, and what it gives
+    at each level (`optimiser.chimera.rotation` shifts the lists over the trials)."""
+
+    form: str
+    part: str
+    by_level: dict[str, tuple[Reward, ...]]
+
+
+@dataclass(frozen=True)
+class RaidTiming:
+    """When a raid's prize offset applies (`rotation.prize_offset`)."""
+
+    hours_between_raids: float
+    activity_hours: float
+    max_prize_offset: int
+
+
+@dataclass(frozen=True)
 class ChimeraTier:
     difficulty: str
     health: int
     stages: tuple[int, ...]  # one per rotation
     trials: tuple[Trial, ...]
+    rewards: tuple[TrialRewards, ...]  # in the game's order
 
 
 @dataclass(frozen=True)
 class Chimera:
     """The Chimera: its form by turn (a form holds until its turn number, then the next one
-    takes over), and its difficulties."""
+    takes over), its difficulties and its raids' timing."""
 
     forms_by_turn: dict[int, str]
     turns_between_forms: int
     tiers: tuple[ChimeraTier, ...]
+    timing: RaidTiming
 
 
 @dataclass(frozen=True)
@@ -295,6 +323,7 @@ def parse_chimera(raw: dict) -> Chimera:
             health=tier["health"],
             stages=tuple(tier["stages"]),
             trials=tuple(parse_trial(t) for t in tier["trials"]),
+            rewards=tuple(parse_rewards(r) for r in tier["rewards"]),
         )
         for tier in raw["tiers"]
     )
@@ -302,6 +331,18 @@ def parse_chimera(raw: dict) -> Chimera:
         forms_by_turn={int(turn): form for turn, form in raw["forms"].items()},
         turns_between_forms=raw["turns_between_forms"],
         tiers=tiers,
+        timing=RaidTiming(**raw["timing"]),
+    )
+
+
+def parse_rewards(raw: dict) -> TrialRewards:
+    return TrialRewards(
+        form=raw["form"],
+        part=raw["part"],
+        by_level={
+            level: tuple(Reward(r["item"], r["count"]) for r in rewards)
+            for level, rewards in raw["by_level"].items()
+        },
     )
 
 

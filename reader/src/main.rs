@@ -11,6 +11,7 @@
 
 mod account;
 mod artifacts;
+mod chimera;
 mod collections;
 mod heroes;
 mod il2cpp;
@@ -18,6 +19,7 @@ mod layout;
 mod process;
 mod relics;
 mod roots;
+mod teams;
 
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -44,6 +46,10 @@ struct Snapshot {
     /// champion id → the relics they wear
     worn_relics: relics::Worn,
     inbox: Vec<account::InboxItem>,
+    presets: Vec<teams::Preset>,
+    arena_defense: Vec<i32>,
+    arena3x3_defense: Vec<Vec<i32>>,
+    chimera: Option<chimera::Raid>,
 }
 
 fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
@@ -65,6 +71,10 @@ fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
         relics,
         worn_relics,
         inbox: account::inbox(process, layout, &reader, user)?,
+        presets: teams::presets(process, layout, user)?,
+        arena_defense: teams::arena_defense(process, layout, user)?,
+        arena3x3_defense: teams::arena3x3_defense(process, layout, user)?,
+        chimera: chimera::read(process, layout)?,
     })
 }
 

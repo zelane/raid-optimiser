@@ -29,6 +29,10 @@
         {%- set current = here == path or (path == "/" and here.startswith("/champions")) or (path != "/" and here.startswith(path)) %}
         <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a></li>
         {%- endfor %}
+        <li class="sync">
+          <button class="outline secondary" hx-post="/sync" hx-target="next .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
+          <small class="sync-status">{{ synced_ago() }}</small>
+        </li>
         <li>
           <select class="palette" aria-label="Colour palette">
             {% for key, label in palettes.items() %}<option value="{{ key }}" {% if key == palette %}selected{% endif %}>{{ label }}</option>{% endfor %}

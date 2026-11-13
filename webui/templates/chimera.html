@@ -67,9 +67,10 @@
       <h2><span class="step-number">1</span> Rotation</h2>
       <fieldset role="group" class="chimera-columns">
         {% for column in page.columns %}
-          <label class="chimera-column">
-            <input type="radio" name="column" value="{{ column }}" {% if column == page.column %}checked{% endif %} onchange="this.form.submit()">
-            Mythicals in {{ column }}
+          <label class="chimera-column" title="Its Easy Ram trial: {{ column.hint }}">
+            <input type="radio" name="column" value="{{ column.part }}" {% if column.part == page.column %}checked{% endif %} onchange="this.form.submit()">
+            Mythicals in {{ column.part }}{% if column.mythical %} <mark>this raid</mark>{% endif %}
+            <small class="chimera-column-hint">{{ column.hint }}</small>
           </label>
         {% endfor %}
       </fieldset>

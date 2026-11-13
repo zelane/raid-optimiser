@@ -1,6 +1,7 @@
 //! Where the walks start: objects held in static fields.
 //!
 //! - `app_model`: the `AppModel` singleton (`SingleInstance<AppModel>._instance`)
+//! - `statics`: a root class's static fields block
 //! - `artifact_storage`: the artifact storage the game is configured with, and its class name
 
 use crate::il2cpp::{object_class, Class};
@@ -26,10 +27,15 @@ pub fn app_model(process: &Process, layout: &Layout) -> Result<u64, String> {
     Ok(instance)
 }
 
+/// The static fields of a class the layout has as a root (by full name).
+pub fn statics(process: &Process, layout: &Layout, class: &str) -> Result<u64, String> {
+    let rva = layout.type_info(class)?;
+    Class::from_type_info(process, rva, class)?.static_fields(process)
+}
+
 /// `ArtifactStorageResolver._implementation` and its class's full name.
 pub fn artifact_storage(process: &Process, layout: &Layout) -> Result<(u64, String), String> {
-    let rva = layout.type_info(STORAGE_RESOLVER)?;
-    let statics = Class::from_type_info(process, rva, STORAGE_RESOLVER)?.static_fields(process)?;
+    let statics = statics(process, layout, STORAGE_RESOLVER)?;
     let offset = layout.field("ArtifactStorageResolver._implementation")?;
     let storage = process.ptr(statics + offset, "artifact storage")?;
     Ok((storage, object_class(process, storage)?.full_name(process)?))

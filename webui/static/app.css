@@ -395,7 +395,9 @@ details.section > .lede { margin-top: 0; }
 .chimera-step h2 { display: flex; align-items: center; gap: 0.6rem; font-size: 1.15rem; margin-bottom: 0.75rem; }
 .step-number { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 50%; background: var(--pico-primary-background); color: var(--pico-primary-inverse); font-size: 0.85rem; }
 .chimera-columns { margin: 0; width: auto; display: inline-flex; }
-.chimera-column { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.9rem; margin: 0; }
+.chimera-column { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.9rem; margin: 0; flex-wrap: wrap; max-width: 16rem; }
+.chimera-column-hint { flex-basis: 100%; color: var(--pico-muted-color); font-size: 0.75rem; line-height: 1.2; }
+.chimera-column mark { font-size: 0.75rem; padding: 0 0.3rem; }
 .chimera-problems { border-left: 4px solid var(--pico-del-color); }
 .cleared-all { color: var(--pico-ins-color); }
 .cleared-some { color: var(--pico-del-color); }
@@ -518,3 +520,9 @@ details.section > .lede { margin-top: 0; }
   .trial + .trial::before { display: none; }
 }
 
+
+/* The nav's sync button: the account read from the running game, and how old it is */
+.topbar li.sync { display: inline-flex; align-items: center; gap: 0.4rem; }
+.topbar li.sync button { padding: 0.2rem 0.7rem; margin: 0; font-size: 0.85rem; }
+.topbar li.sync button[disabled]::after { content: "…"; }
+.topbar .sync-status { color: var(--pico-muted-color); white-space: nowrap; }

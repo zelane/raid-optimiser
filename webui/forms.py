@@ -168,7 +168,9 @@ def parse_lock(form: Mapping[str, str]) -> int | FormErrors:
     return int(text)
 
 
-DEFAULT_COLUMN = "Tail"  # where the game's data puts Ultra Nightmare's mythical materials
+DEFAULT_COLUMN = (
+    "Tail"  # where the mythical materials are at prize offset 0, if the game doesn't say
+)
 GRADES = (6, 5, 4)
 FIRST_SHOWN = 3  # teams a run lists at first
 MAX_LISTED = 300  # most a page lists
@@ -225,14 +227,15 @@ class Unknown:
 
 
 def parse_chimera(
-    query: Mapping[str, list[str]], account: Account, offers: Offers
+    query: Mapping[str, list[str]], account: Account, offers: Offers, rotation: str | None
 ) -> ChimeraRequest | Unknown | FormErrors:
-    """The query's fields (each name's values, in order; a single value is the last)."""
+    """The query's fields (each name's values, in order; a single value is the last). Without
+    a column, the rotation's (the game's current raid's), else `DEFAULT_COLUMN`."""
 
     def last(name: str, default: str) -> str:
         return (query.get(name) or [default])[-1]
 
-    column = last("column", DEFAULT_COLUMN)
+    column = last("column", rotation or DEFAULT_COLUMN)
     if column not in PARTS:
         return Unknown(f"no {column} column: {', '.join(PARTS)}")
 

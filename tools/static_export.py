@@ -710,6 +710,7 @@ def build_enemies(data, skills):
         "chimera": {
             "forms": {k: v for k, v in alliance["ChimeraSequenceForms"].items()},
             "turns_between_forms": alliance["ChimeraTurnsCountBetweenForm"],
+            "timing": build_raid_timing(alliance["Settings"]["AllianceChimeraSettings"]),
             "tiers": [
                 {
                     "difficulty": t["DifficultyId"],
@@ -719,9 +720,38 @@ def build_enemies(data, skills):
                         build_trial(c, skills.get(c["SkillTypeId"]), trial_ids)
                         for c in t["Challenges"]
                     ],
+                    "rewards": [build_trial_rewards(r) for r in t["ChimeraChallengeRewards"]],
                 }
                 for t in chimera_tiers
             ],
+        },
+    }
+
+
+def build_raid_timing(settings):
+    """What the prize offset's rule needs (`ChimeraExtensions.GetPrizeOffset`)."""
+    return {
+        "hours_between_raids": settings["HoursBetweenRaids"],
+        "activity_hours": settings["RaidActivityHours"],
+        "max_prize_offset": settings["MaxChimeraPrizeOffset"],
+    }
+
+
+def build_trial_rewards(raw):
+    """One of a tier's reward lists, in the game's order: the prize offset shifts which trial
+    gets which (`optimiser.chimera.rotation`)."""
+    return {
+        "form": raw["Form"],
+        "part": raw["Part"],
+        "by_level": {
+            level: [
+                {
+                    "item": r.get("ResourceTypeId") or r.get("BlackMarketItemId") or r["Type"],
+                    "count": r["MinCount"],
+                }
+                for r in reward["Rewards"] or []
+            ]
+            for level, reward in raw["RewardsByChallengeDifficulty"].items()
         },
     }
 

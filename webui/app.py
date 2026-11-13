@@ -5,13 +5,15 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `app`, `templates`: the FastAPI app and its Jinja templates
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`, `champion`,
   `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
-  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`, `chimera`: the routes
+  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`, `chimera`, `sync`: the
+  routes
 - `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,7 +25,7 @@ from starlette.types import Scope
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.chimera.gear import gear_options
 from optimiser.chimera.kits import wantable
-from webui import extractor
+from webui import extractor, reader
 from webui.forms import (
     FlagSetting,
     FormErrors,
@@ -78,6 +80,7 @@ templates.env.globals["lock_levels"] = LOCK_LEVELS
 templates.env.globals["palettes"] = {"vault": "Vault", "default": "Pico", "hana": "Hana"}
 templates.env.globals["default_palette"] = "vault"
 templates.env.globals["static_url"] = lambda path: static_url(path)
+templates.env.globals["synced_ago"] = reader.synced_ago
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -221,14 +224,16 @@ def chimera(request: Request):
     sets, relics = current.current_effect_sources()
     offers = Offers(wantable(account), gear_options(account, sets, relics))
     query = {name: request.query_params.getlist(name) for name in request.query_params}
+    enemies = current.current_enemies()
+    rotation = chimera_pages.rotation_column(account, enemies, datetime.now(UTC))
 
-    match parse_chimera(query, account, offers):
+    match parse_chimera(query, account, offers, rotation):
         case Unknown(reason=reason):
             raise HTTPException(404, reason)
         case FormErrors(messages=messages):
             raise HTTPException(400, "; ".join(messages))
         case asked:
-            page = chimera_pages.chimera_page(account, current.current_enemies(), asked, offers)
+            page = chimera_pages.chimera_page(account, enemies, asked, offers)
 
     return templates.TemplateResponse(request, "chimera.html", {"page": page})
 
@@ -282,13 +287,33 @@ def delete_run(request: Request, champion_id: int, run_id: int):
     return templates.TemplateResponse(request, "_history.html", context)
 
 
+@app.post("/sync", response_class=HTMLResponse)
+def sync(request: Request):
+    """Reads the account; on success the page reloads with it (htmx's HX-Refresh)."""
+    outcome = reader.sync()
+    context = {"error": outcome.reason if reader.failed(outcome) else None, "done": "Synced"}
+    response = templates.TemplateResponse(request, "_equip_result.html", context)
+
+    if not reader.failed(outcome):
+        response.headers["HX-Refresh"] = "true"
+
+    return response
+
+
 @app.post("/champions/{champion_id}/equip", response_class=HTMLResponse)
 async def equip(request: Request, champion_id: int):
     def send(account: Account, champion: Champion, artifact_ids: list[int]):
-        return extractor.equip(champion.id, artifact_ids)
+        match extractor.equip(champion.id, artifact_ids):
+            case extractor.Err() as error:
+                return error
 
-    done = "Equipped. The next read (just read) will show it here."
-    return await send_build(request, champion_id, send, done)
+        match reader.sync():
+            case reader.Err(reason=reason):
+                return extractor.Err(f"equipped, but the sync failed: {reason}")
+
+        return None
+
+    return await send_build(request, champion_id, send, "Equipped and synced.")
 
 
 @app.post("/champions/{champion_id}/preview", response_class=HTMLResponse)
