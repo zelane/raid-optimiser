@@ -2,14 +2,14 @@
 #
 # This file is the one place that knows this machine's paths: `.env` (just configure) names the
 # Proton prefix and the HH install, the rest are the game's own layout under them. Recipes pass
-# them to the tools; RAID_PREFIX and HH_DIR are also exported, for the decoder.
+# them to the tools as arguments.
 
 set positional-arguments
 set dotenv-load
 
 # The game's Proton prefix and the HH extractor inside it (override in .env: RAID_PREFIX, HH_DIR)
-export RAID_PREFIX := env("RAID_PREFIX", env("HOME") / ".local/share/Steam/steamapps/compatdata/2441943673/pfx")
-export HH_DIR := env("HH_DIR", RAID_PREFIX / "drive_c/hh")
+RAID_PREFIX := env("RAID_PREFIX", env("HOME") / ".local/share/Steam/steamapps/compatdata/2441943673/pfx")
+HH_DIR := env("HH_DIR", RAID_PREFIX / "drive_c/hh")
 appdata := RAID_PREFIX / "drive_c/users/steamuser/AppData"
 # The game's install (bundles under it), its build (code, metadata) and its static-data cache
 game_install := appdata / "Local/PlariumPlay/StandAloneApps/raid-shadow-legends"
@@ -41,10 +41,9 @@ hh-patch *args:
 
 # Then checks the level multipliers base stats are computed from (optimiser/levels.py) are the game's.
 # Re-export the game's static data after a game update (--full for the whole static.json)
-static *args: _decoder
+static *args:
     mkdir -p data/game
-    bin/raid-decoder static data/game/static-raw.json
-    uv run python -m tools.static_export data/game/static-raw.json schema/schema.json data/game "$@"
+    uv run python -m tools.static_export "{{static_cache}}" schema/schema.json data/game "$@"
     uv run python -m tools.check_levels metadata "{{metadata}}"
 
 # Ask for this machine's paths (Raid's Proton prefix, the HH extractor) and save them in .env
@@ -89,21 +88,13 @@ install:
     just ca
     just update
 
-# After a pull/game/HH update (Raid can run): deps, decoder, HH patch, game data, assets
+# After a pull/game/HH update (Raid can run): deps, HH patch, game data, assets
 update:
     uv sync --all-groups
-    @if [ -d "$HH_DIR" ]; then just decoder && just hh-patch -q; \
-    else echo "HH extractor not found at $HH_DIR: skipped the decoder and patch (just configure, then just update)"; fi
+    @if [ -d "{{HH_DIR}}" ]; then just hh-patch -q; \
+    else echo "HH extractor not found at {{HH_DIR}}: skipped the patch (just configure, then just update)"; fi
     just static
     just assets
-
-# (Re)build the C# static-data decoder into bin/ (against the HH install's MessagePack: HH_DIR)
-decoder:
-    dotnet build decoder -c Release -o bin
-
-# Build the decoder if it isn't built yet
-_decoder:
-    @[ -x bin/raid-decoder ] || just decoder
 
 # Build the memory reader (Rust, for the game's Wine prefix)
 reader:

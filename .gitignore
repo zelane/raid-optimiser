@@ -4,11 +4,7 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
-# Build output
-bin/
-decoder/obj/
-
-# Your account (captures, the store), the game's tables and the decoder's cache:
+# Your account (the snapshot, the store), the game's tables and caches:
 # data/{captures,state,game,cache}
 data/
 

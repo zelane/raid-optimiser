@@ -1,6 +1,9 @@
-"""Turn raw game static data JSON into named, typed JSON using a dump-derived schema.
+"""Turn the game's cached static data into named, typed JSON using a dump-derived schema.
 
-    uv run python -m tools.static_export static-raw.json schema/schema.json out/ [--full]
+    uv run python -m tools.static_export <static-data dir or file> schema/schema.json out/ [--full]
+
+The cache (`LocalLow/Plarium/Raid_ Shadow Legends/static-data`) is decoded by
+`tools.static_decode`; given the directory, its newest file is read.
 
 Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and
 out/static.json with --full).
@@ -17,6 +20,7 @@ from pathlib import Path
 import click
 
 from optimiser.account import faction_name
+from tools.static_decode import decode, newest
 
 FIXED_ONE = 2**32  # SharedModel Fixed is 32.32 fixed point
 PRIMITIVES = {
@@ -902,12 +906,14 @@ def validate(sets, heroes, conv):
 
 
 @click.command(help=__doc__)
-@click.argument("raw_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("static_data", type=click.Path(exists=True, path_type=Path))
 @click.argument("schema_path", type=click.Path(exists=True, dir_okay=False))
 @click.argument("out_dir", type=click.Path(file_okay=False))
 @click.option("--full", is_flag=True, help="Also write the whole named static.json (~100MB).")
-def main(raw_path: str, schema_path: str, out_dir: str, full: bool) -> None:
-    raw = json.load(open(raw_path))
+def main(static_data: Path, schema_path: str, out_dir: str, full: bool) -> None:
+    source = newest(static_data) if static_data.is_dir() else static_data
+    print(f"static data {source.parent.name} ({source.stat().st_size} bytes)")
+    raw = decode(source)
     schema = json.load(open(schema_path))
     conv = Converter(schema, raw.get("ca") or {})
     data = conv.conv({k: v for k, v in raw.items() if k not in ("ca", "ccl")}, "StaticData")

@@ -1,7 +1,7 @@
 [project]
 name = "raid-optimiser"
 version = "0.1.0"
-description = "Raid account export (HH capture), game static data, and a MILP gear optimiser."
+description = "Raid account reader, game static data, and a MILP gear optimiser."
 requires-python = ">=3.13"
 dependencies = [
     "highspy>=1.15",
@@ -11,6 +11,8 @@ dependencies = [
     "python-multipart>=0.0.20",
     "orjson>=3.13.0",
     "click>=8.5.1",
+    "msgpack>=1.2.4",
+    "lz4>=4.4.5",
 ]
 
 [dependency-groups]

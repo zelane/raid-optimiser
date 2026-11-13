@@ -7,7 +7,6 @@ HellHades Artifact Extractor, whose hub connection the proxy injects commands in
 ```
 reader/                 Rust memory reader, run in the game's prefix (just read)
 capture/hh_capture.py   mitmproxy addon: equip / preview / sell through the extractor
-decoder/                C# static-data decoder (the HH install's MessagePack build)
 optimiser/              the model and solver
 webui/                  the web UI
 tools/                  the game-data, layout, asset, schema, CA and HH-patch tools (python -m tools.<name>)
@@ -38,7 +37,7 @@ With the game running and logged in, `just read` writes the account to
 sell buttons, run `just proxy`, then start the extractor.
 
 After a pull, a game update or an extractor update, run `just update` (Raid can stay open): it
-syncs Python deps, rebuilds the decoder, re-applies the HH patch, re-exports the game data and
+syncs Python deps, re-applies the HH patch, re-exports the game data and
 re-extracts the assets. After a game update also run `just dump` and `just reader-layout`, so
 the reader finds the game's fields. Restart the extractor afterwards if the patch changed. Set
 `HH_DIR` in `.env` if the extractor install moves.
@@ -47,7 +46,7 @@ the reader finds the game's fields. Restart the extractor afterwards if the patc
 
 `just static` decodes the game's own cache
 (`AppData/LocalLow/Plarium/Raid_ Shadow Legends/static-data/<version>/<hash>`, MessagePack +
-Lz4BlockArray) and writes:
+Lz4BlockArray, `tools/static_decode.py`) and writes:
 
 - `data/game/sets.json` – every artifact set: pieces, per-tier stat bonuses (variable sets such as
   Stone Skin list the cumulative bonus at each piece count), names/descriptions

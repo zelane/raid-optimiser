@@ -2,8 +2,9 @@
 
 An experimental, personal gear optimiser for Raid: Shadow Legends: cruder and faster than
 HellHades' (HH) optimiser rather than a copy of it. The user pays for HH and keeps using it;
-**don't use or port HH's source or algorithms**. Its data models are used only to decode
-its upload. Game tables come from the game's own data.
+**don't use or port HH's source or algorithms**. Nothing of HH's is used any more but its
+extractor, driven for in-game commands (below). The account and the game's tables come from
+the game itself.
 
 ## Layout
 
@@ -13,8 +14,7 @@ its upload. Game tables come from the game's own data.
 - `capture/hh_capture.py` (`just proxy`; `~/scripts/hh.sh` finds the proxy by its command
   line, so keep the file name and argument order): mitmproxy, only for the game commands
   below. The extractor's account uploads pass through untouched; the account comes from the
-  reader. `decoder/` (C#) only decodes the game's static data, with the MessagePack build
-  the HH install ships (`just static`).
+  reader.
 - In game: the addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
   `EquipArtifacts`) and `/preview` (`{"account_id", "hero_id", "artifact_ids"}`, `PreviewBuild`,
   the game's build preview: nothing changes, no sync follows). It injects the SignalR
@@ -42,9 +42,11 @@ its upload. Game tables come from the game's own data.
   against HH's capture: the same account, but HH rounds Corrupted pieces' damage-modifier
   lines to two decimals.
 - `just static`: decodes the game's cached static data
-  (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
-  Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
-  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
+  (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, the newest file;
+  MessagePack-CSharp Lz4BlockArray, string keys: `tools/static_decode.py`, `msgpack` + `lz4`,
+  whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
+  `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
+  `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
   `tools/check_levels.py` checks its table is still in the game's metadata (`just static`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
@@ -171,12 +173,11 @@ its upload. Game tables come from the game's own data.
 ## Commands
 
 Use the `justfile` (`just` lists every recipe). It is the only place that knows machine paths
-(`.env` overrides its defaults) and passes them to the tools as arguments; it exports
-`RAID_PREFIX` and `HH_DIR` for the decoder.
+(`.env` overrides its defaults) and passes them to the tools as arguments.
 
 ```
 just install          # set a machine up (paths, mitmproxy's CA, then update)
-just update           # after a pull, game update or HH update: deps, decoder, HH patch, static, assets
+just update           # after a pull, game update or HH update: deps, HH patch, static, assets
 just read             # the account, from the running game's memory (read-only)
 just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
 just static           # re-export the game's tables (part of update)
