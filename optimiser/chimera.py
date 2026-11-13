@@ -3,25 +3,36 @@ chimera.py - the Chimera trial team builder: one team that clears a column of tr
 Tail or Paw: Easy, then Normal, then Hard) in all three of the Chimera's animal forms in a
 single Ultra Nightmare fight, the column holding this rotation's mythical materials. Rewards
 only count for trials cleared in the same fight, and each Normal or Hard trial only starts
-once the one above it is done.
+once the one above it is done. The user puts the champions they want in the team's slots;
+the search fills the open ones.
 
 A team qualifies on what its skills can place and do: the buffs, debuffs and mechanics each
 trial's rules check (`trial_needs`, held against the trial's own list of status effects by
 `check_needs`), with the form's immunities. Damage isn't modelled: a trial's target is shown,
-not checked, nor are skill chances, turn order or who holds a buff when it counts. Gear sets,
-masteries and blessings don't count either (Retaliation, Stoneskin…): skills only.
+not checked, nor are skill chances, turn order or who holds a buff when it counts. Gear counts
+only as the Toxic set, which any champion can wear (Poison, when the page counts it);
+other sets, masteries and blessings don't (Retaliation, Stoneskin…). The debuff-count trials
+count debuffs, not kinds: Poisons stack, so a team placing them can reach the count if it's
+fast enough (Snake moves the Poisons on it to the team each of its turns).
 
-- `PARTS`, `ANIMAL_FORMS`, `PLAN_DIFFICULTY`, `TEAM_SIZE`: what's planned
+- `PARTS`, `ANIMAL_FORMS`, `PLAN_DIFFICULTY`, `TEAM_SIZE`, `SEARCH_CAP`, `SEARCH_SECONDS`,
+  `PARTIAL_OPTIONS`: what's planned
 - `Side`, `Tag`, `Mechanic`: what a champion can bring
-- `AnyOf`, `Distinct`, `Need`: what a trial needs
-- `Kit`, `NeedCover`, `TrialCover`, `Team`, `Plan`: a champion's tags, and the result
-- `plan_teams`: the workflow
-- `column_trials`, `trial_needs`, `check_needs`, `candidates`, `kit_of`, `search`,
-  `cover`, `core_of`: its steps
-- `debuff`, `buff`, `status_kind`, `rule_count`, `tag_label`: what they share
+- `AnyOf`, `Distinct`, `Given`, `Need`: what a trial needs
+- `Gear`, `TOXIC_SET`: artifact sets any champion can wear, that meet needs for any team
+- `Kit`, `NeedCover`, `TrialCover`, `Member`, `Lineup`, `Plan`: a champion's tags, and
+  the result
+- `check_lineup`: what the champions in the slots clear; `fill_lineup`: the workflow that
+  fills the open slots, every way that clears all the trials
+- `column_needs`, `column_trials`, `trial_needs`, `check_needs`, `candidates`, `kit_of`,
+  `every_team` (`Check`, `check_of`, `holds`, `bringing`), `search` (when none clears every
+  trial), `lineup_of`, `core_of`, `cleared_by`: their steps
+- `debuff`, `buff`, `status_kind`, `rule_count`, `tag_label`, `stacking_tags`, `with_gear`:
+  what they share
 """
 
 import re
+import time
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -35,6 +46,9 @@ ANIMAL_FORMS = ("Ram", "Lion", "Snake")  # the trial rows
 LEVELS = ("Easy", "Normal", "Hard")
 PLAN_DIFFICULTY = "UltraNightmare"
 TEAM_SIZE = 5
+SEARCH_CAP = 20_000  # teams found before the search stops
+SEARCH_SECONDS = 1.0  # or time spent
+PARTIAL_OPTIONS = 3  # teams offered when none clears every trial
 
 # What every form of the Chimera is immune to (its Almighty passives: control debuffs), and
 # what each form lets through all the same (Almighty Ram, Almighty Viper).
@@ -56,7 +70,8 @@ BOSS_IMMUNE = frozenset(
 )
 FORM_ALLOWS = {"Ram": frozenset({"Fear"}), "Snake": frozenset({"BlockActiveSkills"})}
 
-# Status effects whose instances stack (Poisons), so several count toward a debuff count.
+# Status effects whose instances stack (Poisons): a team placing one can pile up a debuff
+# count on its own, if it's fast enough (or extends them).
 STACKING = frozenset({"ContinuousDamage"})
 
 # What a status effect kind is called in game, where its name doesn't say.
@@ -120,33 +135,54 @@ class AnyOf:
 
 @dataclass(frozen=True)
 class Distinct:
-    """At least `count` different status effects of a side (debuffs the form isn't immune
-    to, or buffs), `excluded` not counting; `stacking`: Poisons count once per skill that
-    places them."""
+    """At least `count` status effects of a side (debuffs the form isn't immune to, or buffs),
+    `excluded` not counting. Different ones, unless `instances`: the rule counts every debuff
+    on the Chimera, so a team placing Poisons (they stack) meets it too."""
 
     side: Side
     count: int
-    stacking: bool = False
+    instances: bool = False
     excluded: frozenset[str] = frozenset()
 
 
-type Need = AnyOf | Distinct
+@dataclass(frozen=True)
+class Given:
+    """A need every team meets, thanks to `gear` (any champion can wear it)."""
+
+    need: AnyOf | Distinct
+    gear: str
+
+
+type Need = AnyOf | Distinct | Given
+
+
+@dataclass(frozen=True)
+class Gear:
+    """An artifact set any champion can wear, and what it places (the Toxic set: Poison)."""
+
+    name: str
+    tags: frozenset[Tag]
+
+
+# A set any champion can wear that places what trials ask for (75% chance of a Poison a hit).
+TOXIC_SET = Gear("Toxic set", frozenset({Tag(Side.DEBUFF, "ContinuousDamage")}))
 
 
 @dataclass(frozen=True)
 class Kit:
     champion: Champion
     tags: frozenset[Tag]
-    stacking_skills: int  # its skills that place Poison
 
 
 @dataclass(frozen=True)
 class NeedCover:
-    """A need, whether the team meets it, and who in the team brings what it asks."""
+    """A need, whether the team meets it, who in the team brings what it asks, and `notes`:
+    what else does (the gear), or for a count, which effects the team brings."""
 
     label: str
     met: bool
-    by: tuple[str, ...]  # champion names
+    by: tuple[Champion, ...]
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -159,12 +195,20 @@ class TrialCover:
 
 
 @dataclass(frozen=True)
-class Team:
-    """A team: `core` the champions it needs (dropping one clears fewer trials), `flexible`
-    the rest (any champion would do)."""
+class Member:
+    """A champion in a slot: `chosen` by the user (else the search's suggestion), and
+    `needed`: dropping it clears fewer trials."""
 
-    core: tuple[Champion, ...]
-    flexible: tuple[Champion, ...]
+    champion: Champion
+    chosen: bool
+    needed: bool
+
+
+@dataclass(frozen=True)
+class Lineup:
+    """The team's slots (`TEAM_SIZE`, None when open) and the trials it clears."""
+
+    slots: tuple[Member | None, ...]
     trials: tuple[TrialCover, ...]
 
     @property
@@ -174,31 +218,92 @@ class Team:
 
 @dataclass(frozen=True)
 class Plan:
+    """The slots as the user filled them, and (when the search ran) the teams it found
+    keeping them, best first: `found` in all (`complete`: no more exist), `options` the
+    first of them. `partial`: none clears every trial, so these clear the most they can."""
+
     column: str
-    trials: tuple[Trial, ...]  # the column's, form by form, Easy first
-    teams: tuple[Team, ...]  # best first
+    lineup: Lineup
+    options: tuple[Lineup, ...]
+    found: int
+    complete: bool
+    partial: bool
     problems: tuple[str, ...]  # trials whose needs disagree with the game's data
-    candidates: int  # champions considered
+    candidates: int  # champions the search could add (0 when it didn't run)
 
 
-def plan_teams(
-    account: Account, enemies: Enemies, column: str, min_grade: int = 6, teams: int = 5
+def check_lineup(
+    account: Account,
+    enemies: Enemies,
+    column: str,
+    slots: tuple[Champion | None, ...],
+    gear: tuple[Gear, ...],
 ) -> Plan:
-    """Up to `teams` teams, best first, of champions at `min_grade`★ or above, each with a
-    different core."""
-    # 1. The column's nine trials, and what each needs.
+    """What the champions in the slots clear on their own (any of them wearing `gear`)."""
+    trials, needs, problems = column_needs(enemies, column, gear)
+    chosen = [kit_of(account, c) if c else None for c in slots]
+    lineup = lineup_of(chosen, set(), trials, needs)
+    return Plan(column, lineup, (), 0, True, False, problems, 0)
+
+
+def fill_lineup(
+    account: Account,
+    enemies: Enemies,
+    column: str,
+    slots: tuple[Champion | None, ...],
+    min_grade: int,
+    gear: tuple[Gear, ...],
+    shown: int,
+) -> Plan:
+    """The slots' champions kept, the open slots filled with champions at `min_grade`★ or
+    above (any of them wearing `gear`): every smallest team clearing all the trials (up to
+    `SEARCH_CAP`, or what `SEARCH_SECONDS` finds), those needing the fewest champions first,
+    then the strongest; the first `shown` of them as lineups. If none clears them all, a few
+    teams clearing the most."""
+    # 1. The column's nine trials, and what each needs (less what the gear brings).
+    trials, needs, problems = column_needs(enemies, column, gear)
+
+    # 2. Who's in the slots, and who could join them (the best copy of each champion).
+    chosen = [kit_of(account, c) if c else None for c in slots]
+    pinned = [kit for kit in chosen if kit]
+    taken = {kit.champion.type_id // 10 for kit in pinned}
+    others = [
+        kit_of(account, champion)
+        for champion in candidates(account, min_grade)
+        if champion.type_id // 10 not in taken
+    ]
+
+    # 3. Every team clearing all the trials, or failing that the few clearing the most.
+    found, complete = every_team(pinned, others, trials, needs, SEARCH_CAP, SEARCH_SECONDS)
+    partial = not found
+    if partial:
+        found = search(pinned, others, trials, needs, PARTIAL_OPTIONS)
+    else:
+        found.sort(key=lambda added: (len(added), -sum(strength(k.champion) for k in added)))
+
+    # 4. The first of them as lineups, each one's newcomers in the open slots in order.
+    teams = []
+
+    for added in found[:shown]:
+        newcomers = iter(added)
+        filled = [kit if kit else next(newcomers, None) for kit in chosen]
+        teams.append(lineup_of(filled, {id(kit) for kit in added}, trials, needs))
+
+    lineup = lineup_of(chosen, set(), trials, needs)
+    return Plan(column, lineup, tuple(teams), len(found), complete, partial, problems, len(others))
+
+
+def column_needs(
+    enemies: Enemies, column: str, gear: tuple[Gear, ...]
+) -> tuple[list[Trial], dict[int, tuple[Need, ...]], tuple[str, ...]]:
+    """The column's nine trials, what each needs (`Given` where the gear meets it), and where
+    the needs disagree with the game's data."""
     trials = column_trials(enemies, column)
     needs = {trial.skill: trial_needs(trial) for trial in trials}
     problems = tuple(
         problem for trial in trials if (problem := check_needs(trial, needs[trial.skill]))
     )
-
-    # 2. The champions that could take part, and what each brings.
-    kits = [kit_of(account, champion) for champion in candidates(account, min_grade)]
-
-    # 3. Teams, each clearing as many trials as it can; a team's core is never repeated.
-    found = search(kits, trials, needs, teams)
-    return Plan(column, tuple(trials), tuple(found), problems, len(kits))
+    return trials, {skill: with_gear(n, gear) for skill, n in needs.items()}, problems
 
 
 def column_trials(enemies: Enemies, column: str) -> list[Trial]:
@@ -235,7 +340,7 @@ def trial_needs(trial: Trial) -> tuple[Need, ...]:
             return (AnyOf(buff("BlockDebuff", "Negator", "SimpleStoneSkin")),)
         case ("Lion", "Wing", "Easy"):
             count = rule_count(trial, "DEBUFF_COUNT>=")
-            return (AnyOf(buff("IncreaseDefence")), Distinct(Side.DEBUFF, count, stacking=True))
+            return (AnyOf(buff("IncreaseDefence")), Distinct(Side.DEBUFF, count, instances=True))
         case ("Lion", "Wing", "Normal"):
             return (AnyOf(buff("Shield")),)
         case ("Lion", "Wing", "Hard"):
@@ -252,7 +357,10 @@ def trial_needs(trial: Trial) -> tuple[Need, ...]:
             return (AnyOf(debuff("LifeDrainOnDamage")),)
         case ("Lion", "Paw", "Normal"):
             count = int(trial.target)
-            return (AnyOf(debuff("DecreaseResistance")), Distinct(Side.DEBUFF, count, True))
+            return (
+                AnyOf(debuff("DecreaseResistance")),
+                Distinct(Side.DEBUFF, count, instances=True),
+            )
         case ("Lion", "Paw", "Hard"):
             passive = {Tag(Side.MECHANIC, Mechanic.PASSIVE_REFLECT)}
             return (AnyOf(buff("ReflectDamage") | debuff("MirrorDamage") | passive),)
@@ -328,14 +436,12 @@ def kit_of(account: Account, champion: Champion) -> Kit:
         if skill_id in account.tables.skills
     ]
     tags: set[Tag] = set()
-    stacking = 0
 
     for skill in skills:
         tags |= debuff(*map(status_kind, skill.debuffs)) | buff(*map(status_kind, skill.buffs))
         tags |= {Tag(Side.MECHANIC, m) for m in skill_mechanics(skill)}
-        stacking += any(status_kind(s) in STACKING for s in skill.debuffs)
 
-    return Kit(champion, frozenset(tags), stacking)
+    return Kit(champion, frozenset(tags))
 
 
 def skill_mechanics(skill) -> set[Mechanic]:
@@ -361,16 +467,118 @@ def skill_mechanics(skill) -> set[Mechanic]:
     return found
 
 
+@dataclass(frozen=True)
+class Check:
+    """A need ready to test quickly: met when a team has `count` of the `counting` tags, or
+    any of the `stacking` ones (for a count of debuff instances: Poisons)."""
+
+    counting: frozenset[Tag]
+    count: int
+    stacking: frozenset[Tag]
+
+
+def every_team(
+    pinned: list[Kit],
+    others: list[Kit],
+    trials: list[Trial],
+    needs: dict[int, tuple[Need, ...]],
+    cap: int,
+    seconds: float,
+) -> tuple[list[list[Kit]], bool]:
+    """Every smallest set of champions to add to `pinned` so the team clears all the trials
+    (no one in it can be dropped), up to `cap` of them or as many as `seconds` finds, and
+    whether that's all there are.
+    It adds, each time, a champion bringing the unmet need fewest can bring: every such set
+    is reached, once."""
+    open_slots = TEAM_SIZE - len(pinned)
+    checks = [
+        check_of(need, trial.form, pinned + others)
+        for trial in trials
+        for need in needs[trial.skill]
+        if not isinstance(need, Given)
+    ]
+    base_tags = frozenset().union(*(kit.tags for kit in pinned))
+    found: list[list[Kit]] = []
+    visited: set[frozenset[int]] = set()
+    deadline = time.monotonic() + seconds
+    stopped = False
+
+    def clears(members: frozenset[int]) -> bool:
+        tags = base_tags.union(*(others[i].tags for i in members))
+        return all(holds(check, tags) for check in checks)
+
+    def grow(members: frozenset[int], tags: frozenset[Tag]) -> None:
+        nonlocal stopped
+
+        if stopped or members in visited:
+            return
+
+        if len(found) >= cap or time.monotonic() > deadline:
+            stopped = True
+            return
+
+        visited.add(members)
+        unmet = [check for check in checks if not holds(check, tags)]
+        if not unmet:
+            if all(not clears(members - {i}) for i in members):
+                found.append(sorted((others[i] for i in members), key=lambda k: k.champion.name))
+
+            return
+
+        if len(members) == open_slots:
+            return
+
+        choices = [bringing(check, tags, others, members) for check in unmet]
+        for i in min(choices, key=len):
+            grow(members | {i}, tags | others[i].tags)
+
+    grow(frozenset(), base_tags)
+    return found, not stopped
+
+
+def check_of(need: AnyOf | Distinct, form: str, kits: list[Kit]) -> Check:
+    match need:
+        case AnyOf(tags=tags):
+            return Check(tags, 1, frozenset())
+
+        case Distinct(count=count, instances=instances):
+            counting = {tag for kit in kits for tag in kit.tags if counts_toward(tag, need, form)}
+            stacking = stacking_tags(need) if instances else frozenset()
+            return Check(frozenset(counting), count, stacking)
+
+
+def holds(check: Check, tags: frozenset[Tag]) -> bool:
+    return bool(tags & check.stacking) or len(tags & check.counting) >= check.count
+
+
+def bringing(check: Check, tags: frozenset[Tag], others: list[Kit], members) -> list[int]:
+    """The champions not in the team who'd bring the check something it lacks."""
+    return [
+        i
+        for i, kit in enumerate(others)
+        if i not in members and ((kit.tags & check.counting) - tags or kit.tags & check.stacking)
+    ]
+
+
 def search(
-    kits: list[Kit], trials: list[Trial], needs: dict[int, tuple[Need, ...]], teams: int
-) -> list[Team]:
-    """Teams clearing the most trials (then of the strongest champions), each time barring
-    the cores found so far."""
+    pinned: list[Kit],
+    others: list[Kit],
+    trials: list[Trial],
+    needs: dict[int, tuple[Need, ...]],
+    options: int,
+) -> list[list[Kit]]:
+    """Up to `options` sets of champions to add to `pinned`, best first: each the team
+    clearing the most trials, then of the strongest champions, and each changing one of the
+    newcomers a team before it needs (any newcomer, if it needs none)."""
+    kits = pinned + others
     highs = highspy.Highs()
     highs.setOptionValue("output_flag", False)
     picked = [highs.addBinary() for _ in kits]
     cleared = {trial.skill: highs.addBinary() for trial in trials}
     highs.addConstr(highs.qsum(picked) <= TEAM_SIZE)
+
+    for x in picked[: len(pinned)]:
+        highs.addConstr(x == 1)
 
     for trial in trials:
         if trial.requires in cleared:
@@ -383,37 +591,44 @@ def search(
     objective = 10 * TEAM_SIZE * highs.qsum(cleared.values()) + highs.qsum(
         strength(kit.champion) * x for kit, x in zip(kits, picked, strict=True)
     )
-    found: list[Team] = []
+    newcomer_vars = picked[len(pinned) :]
+    found: list[list[Kit]] = []
 
-    while len(found) < teams:
+    while len(found) < options:
         highs.maximize(objective)
 
         if highs.getModelStatus() != highspy.HighsModelStatus.kOptimal:
             break
 
-        chosen = [kit for kit, x in zip(kits, picked, strict=True) if highs.val(x) > 0.5]
-        team = cover(chosen, trials, needs)
-        if found and team.cleared == 0:
+        chosen = zip(others, newcomer_vars, strict=True)
+        added = sorted((k for k, x in chosen if highs.val(x) > 0.5), key=lambda k: k.champion.name)
+        if not added:
             break
 
-        found.append(team)
-        core_vars = [picked[kits.index(k)] for k in chosen if k.champion in team.core]
-        if not core_vars:
-            break
-
-        highs.addConstr(highs.qsum(core_vars) <= len(core_vars) - 1)
+        found.append(added)
+        core = core_of(pinned + added, trials, needs, cleared_by(pinned + added, trials, needs))
+        changeable = [kit for kit in added if kit in core] or added
+        bar = [newcomer_vars[others.index(kit)] for kit in changeable]
+        highs.addConstr(highs.qsum(bar) <= len(bar) - 1)
 
     return found
+
+
+def cleared_by(kits: list[Kit], trials: list[Trial], needs: dict[int, tuple[Need, ...]]) -> int:
+    return sum(cover.met for cover in trial_covers(kits, trials, needs))
 
 
 def add_need(highs: highspy.Highs, need: Need, form: str, kits: list[Kit], picked, on) -> None:
     """Holds the need whenever `on` (the trial cleared) is 1."""
     match need:
+        case Given():
+            pass
+
         case AnyOf(tags=tags):
             bringing = [x for kit, x in zip(kits, picked, strict=True) if kit.tags & tags]
             highs.addConstr(highs.qsum(bringing) >= on)
 
-        case Distinct(side=side, count=count, stacking=stacking):
+        case Distinct(side=side, count=count, instances=instances):
             pool = sorted(
                 {tag.name for kit in kits for tag in kit.tags if counts_toward(tag, need, form)}
             )
@@ -426,36 +641,41 @@ def add_need(highs: highspy.Highs, need: Need, form: str, kits: list[Kit], picke
                 highs.addConstr(placed <= highs.qsum(bringing))
                 present.append(placed)
 
-            extra = []
+            # A Poison on the team meets a count of debuff instances on its own.
+            if instances:
+                poisoning = highs.addBinary()
+                stacks = stacking_tags(need)
+                bringing = [x for kit, x in zip(kits, picked, strict=True) if kit.tags & stacks]
+                highs.addConstr(poisoning <= highs.qsum(bringing))
+                present.append(count * poisoning)
 
-            if stacking:
-                extra = [kit.stacking_skills * x for kit, x in zip(kits, picked, strict=True)]
-
-            highs.addConstr(highs.qsum(present) + highs.qsum(extra) >= count * on)
+            highs.addConstr(highs.qsum(present) >= count * on)
 
 
 def counts_toward(tag: Tag, need: Distinct, form: str) -> bool:
-    """Whether the tag is one of the distinct effects the need counts; a Poison counts as its
-    skills when they stack (`Kit.stacking_skills`) instead of once."""
-    if tag.side != need.side:
-        return False
-
-    if need.stacking and tag.name in STACKING or tag.name in need.excluded:
+    """Whether the tag is one of the effects the need counts."""
+    if tag.side != need.side or tag.name in need.excluded:
         return False
 
     return tag.side != Side.DEBUFF or tag.name not in immune_to(form)
 
 
-def cover(kits: list[Kit], trials: list[Trial], needs: dict[int, tuple[Need, ...]]) -> Team:
-    """The trials the team clears, who brings each need, and its core."""
+def lineup_of(
+    slots: list[Kit | None],
+    suggested: set[int],
+    trials: list[Trial],
+    needs: dict[int, tuple[Need, ...]],
+) -> Lineup:
+    """The slots as members (`suggested`: the ids of the kits the search added), and what
+    the team clears."""
+    kits = [kit for kit in slots if kit]
     covers = trial_covers(kits, trials, needs)
     core = core_of(kits, trials, needs, sum(c.met for c in covers))
-    flexible = [kit.champion for kit in kits if kit not in core]
-    return Team(
-        core=tuple(sorted((k.champion for k in core), key=lambda c: c.name)),
-        flexible=tuple(sorted(flexible, key=lambda c: c.name)),
-        trials=covers,
+    members = tuple(
+        Member(kit.champion, id(kit) not in suggested, kit in core) if kit else None
+        for kit in slots
     )
+    return Lineup(members, covers)
 
 
 def trial_covers(
@@ -475,19 +695,35 @@ def trial_covers(
 
 def need_cover(need: Need, form: str, kits: list[Kit]) -> NeedCover:
     match need:
+        case Given(need=inner, gear=gear):
+            label = need_cover(inner, form, kits).label
+            return NeedCover(label, True, (), (f"{gear} (any champion)",))
+
         case AnyOf(tags=tags):
-            by = tuple(kit.champion.name for kit in kits if kit.tags & tags)
+            by = tuple(kit.champion for kit in kits if kit.tags & tags)
             label = " or ".join(sorted(tag_label(tag) for tag in tags))
             return NeedCover(label, bool(by), by)
 
-        case Distinct(side=side, count=count, stacking=stacking):
-            names = {tag.name for kit in kits for tag in kit.tags if counts_toward(tag, need, form)}
-            stacks = sum(kit.stacking_skills for kit in kits) if stacking else 0
-            by = tuple(sorted(STATUS_LABELS.get(n, spaced(n)) for n in names))
+        case Distinct(side=side, count=count, instances=instances):
+            counted = [k for k in kits if any(counts_toward(t, need, form) for t in k.tags)]
+            names = {t.name for k in counted for t in k.tags if counts_toward(t, need, form)}
+            effects = tuple(sorted(STATUS_LABELS.get(n, spaced(n)) for n in names))
             where = "on the Chimera" if side == Side.DEBUFF else "on the team"
-            poison = f" (Poisons count per skill: {stacks})" if stacking else ""
-            label = f"{count} different {side}s {where}{poison}"
-            return NeedCover(label, len(names) + stacks >= count, by)
+
+            if instances:
+                poisoners = tuple(k.champion for k in kits if k.tags & stacking_tags(need))
+                label = f"{count} {side}s {where} (Poisons stack: any Poison will do, if fast)"
+
+                if poisoners:
+                    return NeedCover(label, True, poisoners, ("Poison",))
+
+                by = tuple(k.champion for k in counted)
+                return NeedCover(label, len(names) >= count, by, effects)
+
+            label = f"{count} different {side}s {where}"
+            return NeedCover(
+                label, len(names) >= count, tuple(k.champion for k in counted), effects
+            )
 
 
 def core_of(
@@ -508,6 +744,27 @@ def core_of(
 def strength(champion: Champion) -> float:
     """Under 1: rank first, then awakening, then level."""
     return (champion.grade * 1000 + champion.awakening * 100 + champion.level) / 7000
+
+
+def stacking_tags(need: Distinct) -> frozenset[Tag]:
+    return frozenset(Tag(need.side, name) for name in STACKING)
+
+
+def with_gear(needs: tuple[Need, ...], gear: tuple[Gear, ...]) -> tuple[Need, ...]:
+    """The needs, those the gear meets for any team made `Given`."""
+    return tuple(geared(need, gear) for need in needs)
+
+
+def geared(need: Need, gear: tuple[Gear, ...]) -> Need:
+    for piece in gear:
+        match need:
+            case AnyOf(tags=tags) if tags & piece.tags:
+                return Given(need, piece.name)
+
+            case Distinct(instances=True) if stacking_tags(need) & piece.tags:
+                return Given(need, piece.name)
+
+    return need
 
 
 def immune_to(form: str) -> frozenset[str]:

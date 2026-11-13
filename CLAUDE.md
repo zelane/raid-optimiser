@@ -45,12 +45,25 @@ its upload. Game tables come from the game's own data.
   count for trials cleared in the same fight). Effects only: a champion's tags are the status
   kinds its skills place (`skills.json` `debuffs`/`buffs`, strengths merged: `status_kind`)
   and mechanics (`effect_kinds`, `target_hp_damage`), all forms of a mythical; damage, chances,
-  turn order and gear sets aren't modelled. `trial_needs` (a `match` per trial, counts from
+  turn order and gear sets aren't modelled, except the Toxic set (`TOXIC_SET`, a
+  page toggle, on by default): any champion can wear one, so needs Poison meets become
+  `Given` for every team (`with_gear`). The debuff-count trials (`DEBUFF_COUNT>=`: Lion Wing
+  Easy, Lion Paw Normal, Snake Wing Hard) count instances, not kinds (`Distinct.instances`):
+  Poisons stack, so any Poison source meets them (given speed), else enough different debuffs. `trial_needs` (a `match` per trial, counts from
   the trial's target or `rules`) is checked against the trial's own status list
   (`check_needs`; the page warns on a mismatch). Form immunities: `BOSS_IMMUNE` minus
-  `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills). HiGHS maximises trials cleared,
-  then champion strength; each further team bars the previous one's core (members it can't
-  drop without clearing fewer).
+  `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills). The page is four steps, its
+  state all in the URL (`column`, `slot` ×5 as "Name, 6★ L60 #id" from a datalist,
+  `min_grade`, `run`): rotation, the user's champions in slots (`check_lineup` lights what
+  they clear alone), Run (`fill_lineup`: HiGHS keeps the slotted champions, maximises trials
+  cleared then champion strength over the open slots), the 3×3 grid. Run lists every minimal team clearing all nine
+  (`every_team`: branch on the unmet need fewest champions can bring; a team counts only if
+  no member can be dropped; "any champion" fills the rest) up to `SEARCH_CAP` teams or
+  `SEARCH_SECONDS`, fewest champions first then strongest, 3 at first and 9 more per "show
+  more" (`listed`, at most 300). With nothing pinned there are hundreds of thousands (most
+  from the "N different debuffs/buffs" trials), hence the caps. If none clears all nine, the
+  HiGHS `search` gives the best partial teams instead. The slots stay the user's; `option`
+  picks which team the grid shows, and "Use this team" puts it in the slots.
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles

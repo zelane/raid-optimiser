@@ -11,7 +11,9 @@ the assumptions page posts `kind` (a `kind_key`) and `grade` (a `grade_key`, emp
 for a glyph, and `flag` (a `Flag`) with `on` (present when ticked) for the rest. The
 accessories pages post `key` ("<type>:<stat>", by the store's names) with `weight` for a
 champion type's weight, `target_free` for the spaces to leave, `on` (present when ticked) to
-protect a piece, and `artifact_id` (repeated) for the pieces to sell.
+protect a piece, and `artifact_id` (repeated) for the pieces to sell. The Chimera page's
+`slot` (repeated, one per team slot) is a champion picked from its list, which ends in
+"#<champion id>", or part of a champion's name typed in, or empty for an open slot.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
@@ -25,6 +27,7 @@ protect a piece, and `artifact_id` (repeated) for the pieces to sell.
 - `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
 - `parse_protect`: a piece protected from the clean-up, or not
 - `parse_sell`: the pieces to select for selling
+- `Unmatched`, `SlotPick`, `parse_slots` (`parse_slot`): the Chimera team's slots
 - `parse_form`, `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`,
   `parse_number`: its steps
 """
@@ -152,6 +155,58 @@ def parse_lock(form: Mapping[str, str]) -> int | FormErrors:
         return FormErrors([f"lock level must be 0 to {max(LOCK_LEVELS)}"])
 
     return int(text)
+
+
+CHAMPION_ID = re.compile(r"#(\d+)\s*$")
+SHOWN_MATCHES = 3
+
+
+@dataclass(frozen=True)
+class Unmatched:
+    """Text typed in a slot that isn't one champion: kept for the user to fix, and why."""
+
+    text: str
+    reason: str
+
+
+type SlotPick = Champion | Unmatched | None
+
+
+def parse_slots(texts: list[str], account: Account, size: int) -> tuple[SlotPick, ...] | FormErrors:
+    """`size` slots, None where open; extra fields are an error, missing ones are open."""
+    if len(texts) > size:
+        return FormErrors([f"a team has {size} slots"])
+
+    padded = texts + [""] * (size - len(texts))
+    return tuple(parse_slot(text.strip(), account) for text in padded)
+
+
+def parse_slot(text: str, account: Account) -> SlotPick:
+    """A pick from the list ("… #<id>"), or a name typed in part: the best copy of the one
+    champion whose name has it (an exact name wins)."""
+    if not text:
+        return None
+
+    if match := CHAMPION_ID.search(text):
+        champion = account.champions.get(int(match.group(1)))
+        return champion or Unmatched(text, "no such champion")
+
+    wanted = text.casefold()
+    names = {c.name for c in account.champions.values() if wanted in c.name.casefold()}
+    exact = {name for name in names if name.casefold() == wanted}
+
+    match sorted(exact or names):
+        case []:
+            return Unmatched(text, "no champion matches")
+
+        case [name]:
+            copies = [c for c in account.champions.values() if c.name == name]
+            return max(copies, key=lambda c: (c.grade, c.awakening, c.level))
+
+        case several:
+            shown = ", ".join(several[:SHOWN_MATCHES])
+            more = "…" if len(several) > SHOWN_MATCHES else ""
+            return Unmatched(text, f"matches {len(several)}: {shown}{more}")
 
 
 def parse_glyph(form: Mapping[str, str], tables: Tables) -> GlyphPlan | FormErrors:
