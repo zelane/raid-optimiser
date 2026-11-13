@@ -19,6 +19,10 @@ Writes webui/static/assets/:
                                                        form, gold when chosen, else white)
   ui/<name>.png                                       (UIShared: `UI_SPRITES`, the game's panel
                                                        frame and rarity crests)
+  statuses/<sprite name>.png                          (StatusEffectIcons: buff and debuff icons,
+                                                       named by the game's status kind,
+                                                       "StatusReduceDefence"; "…2" the stronger)
+  chimera/<Ram|Lion|Snake>_<Easy|Normal|Hard>.png      (ChimeraChallengeIcons: the trials)
 
 Bundles ship with the install (StreamingAssets) and are downloaded later (resources/); for
 each family the newest version wins. Set sprites are named after the game's set names, the
@@ -104,7 +108,8 @@ def main() -> None:
     written: dict[str, set[str]] = {
         kind: set()
         for kind in (
-            "portraits", "sets", "pieces", "affinities", "factions", "stars", "frames", "forms", "ui"
+            "portraits", "sets", "pieces", "affinities", "factions", "stars", "frames", "forms",
+            "ui", "statuses", "chimera",
         )
     }
 
@@ -177,6 +182,13 @@ def main() -> None:
     for sprite in sprites("MetamorphSwitchButton"):
         if key := FORM_ICONS.get(sprite.m_Name):
             save(sprite, "forms", key, written)
+
+    # 8. Buff and debuff icons, and the Chimera's trial icons, under the game's names.
+    for sprite in sprites("StatusEffectIcons"):
+        save(sprite, "statuses", sprite.m_Name, written)
+
+    for sprite in sprites("ChimeraChallengeIcons"):
+        save(sprite, "chimera", sprite.m_Name, written)
 
     print(", ".join(f"{len(keys)} {kind}" for kind, keys in written.items()), f"-> {OUT}")
     if missing := factions - written["factions"]:

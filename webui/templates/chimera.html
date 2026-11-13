@@ -1,21 +1,58 @@
 {% extends "base.html" %}
 {% from "_macros.html" import tile %}
 
-{# The page's URL for these slots (texts as the picker holds them), with `extra` appended. #}
-{% macro page_url(slots, extra="") -%}
-  /chimera?column={{ page.column }}&min_grade={{ page.min_grade }}&toxic={{ 'true' if page.toxic else 'false' }}{% for slot in slots %}&slot={{ slot.choice | urlencode }}{% endfor %}{{ extra }}
+{# A buff, debuff or effect: the game's icon, or a glyph where it has none. #}
+{% macro status_icon(url, label, size="") -%}
+  {%- if url %}<img class="status-icon {{ size }}" src="{{ url }}" alt="{{ label }}" title="{{ label }}" loading="lazy">
+  {%- else %}<span class="status-icon glyph {{ size }}" title="{{ label }}" aria-label="{{ label }}">✦</span>{% endif -%}
+{%- endmacro %}
+
+{# A need: met or not, what would do (icons), and who brings it (portraits) or what else does. #}
+{# A score (%) as a small pill, coloured by how far it can be counted on. #}
+{% macro score_pill(score, title="") -%}
+  <span class="score-pill {{ 'high' if score >= 75 else 'mid' if score >= 45 else 'low' }}"{% if title %} title="{{ title }}"{% endif %}>{{ score }}%</span>
+{%- endmacro %}
+
+{% macro need_item(need) -%}
+<li class="{{ 'met' if need.met else 'unmet' }}">
+  <span class="need-mark" aria-label="{{ 'met' if need.met else 'not met' }}">{{ "✓" if need.met else "✗" }}</span>
+  <div class="need-body">
+    <span class="need-head">
+      {%- if need.asks %}<span class="need-icons">{% for icon in need.asks %}{{ status_icon(icon.url, icon.label) }}{% endfor %}</span>{% endif -%}
+      <span class="need-label">{{ need.label }}</span>
+      {% if need.met %}{{ score_pill(need.score, "How far the team can count on it: uptime × reliability × reach") }}{% endif %}
+    </span>
+    {% if need.contributors or need.notes or need.brought %}
+      <div class="need-by">
+        {% for contributor in need.contributors %}
+          {% set champion = contributor.champion %}
+          <a href="/champions/{{ champion.id }}" class="mini-portrait rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}: {{ contributor.score }}% ({{ contributor.detail }})">
+            {% if champion.portrait_url %}<img src="{{ champion.portrait_url }}" alt="{{ champion.name }}" loading="lazy">{% else %}<span>{{ champion.name[:2] }}</span>{% endif %}
+          </a>
+        {% endfor %}
+        {% if need.brought %}<span class="need-brought" title="What the team brings toward it">{% for icon in need.brought %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>{% endif %}
+        {% for note in need.notes %}<span class="need-note">{{ note }}</span>{% endfor %}
+      </div>
+    {% elif not need.met %}
+      <div class="need-by"><span class="need-note missing">nobody brings it</span></div>
+    {% endif %}
+  </div>
+</li>
+{%- endmacro %}
+
+{# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
+   the wanted tag, gear or assumption keyed `without` left out. #}
+{% macro page_url(slots, extra="", without="") -%}
+  /chimera?column={{ page.column }}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}{% endfor %}{{ extra }}
 {%- endmacro %}
 
 {% block title %}Chimera trials: Raid optimiser{% endblock %}
 {% block content %}
   <h1>Chimera trials</h1>
   <p class="lede">
-    Pick the rotation (the column holding its mythical materials), put the champions you want
-    in the team's slots, then fill the open slots. The trials the team can clear in one Ultra
-    Nightmare fight light up: Easy, then Normal, then Hard, in all three forms. A team
-    qualifies on the buffs, debuffs and mechanics its skills can bring, against each trial's
-    rules and each form's immunities. Damage isn't checked (the targets are shown), nor skill
-    chances, turn order or gear sets.
+    Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the buffs,
+    debuffs and effects their skills bring against each trial's rules and each form's
+    immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
   </p>
 
   {% if page.problems %}
@@ -64,18 +101,93 @@
     </section>
 
     <section class="chimera-step">
-      <h2><span class="step-number">3</span> Fill the open slots</h2>
+      <h2><span class="step-number">3</span> Also bring <small>every team must, besides the trials</small></h2>
+      {% if page.ran %}<input type="hidden" name="run" value="true">{% endif %}
+      <div class="wants-chosen">
+        {% for want in page.wanted %}
+          <a class="want-chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', want.key) }}" title="Stop asking for {{ want.label }}">
+            {{ status_icon(want.icon_url, want.label) }}{{ want.label }}<span class="want-remove" aria-hidden="true">×</span>
+          </a>
+        {% else %}
+          <small>Nothing extra: pick from the lists below.</small>
+        {% endfor %}
+      </div>
+      <div class="want-groups">
+        {% for group in page.wants %}
+          <details class="want-group" data-group="{{ group.title }}">
+            <summary>{{ group.title }} <small>{{ group.wants | length }}{% if group.chosen %} · {{ group.chosen }} wanted{% endif %}</small></summary>
+            <div class="want-chips">
+              {% for want in group.wants %}
+                <label class="want-chip {{ 'on' if want.wanted }}" title="{{ want.label }}{% if want.note %} ({{ want.note }}){% endif %}">
+                  <input type="checkbox" name="want" value="{{ want.key }}" {% if want.wanted %}checked{% endif %} onchange="this.form.submit()">
+                  {{ status_icon(want.icon_url, want.label) }}
+                  <span>{{ want.label }}{% if want.note %} <small>{{ want.note }}</small>{% endif %}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </details>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="chimera-step">
+      <h2><span class="step-number">4</span> Gear, relics &amp; assumptions <small>other ways a team brings what it needs</small></h2>
+      <input type="hidden" name="gear_set" value="true">
+      {% for assumed in page.assumed %}<input type="hidden" name="assume" value="{{ assumed.key }}">{% endfor %}
+      <div class="wants-chosen">
+        {% for gear in page.gear_on %}
+          <a class="want-chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', gear.key) }}" title="Stop allowing {{ gear.name }}">
+            {% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label) }}{% endfor %}{{ gear.name }}<span class="want-remove" aria-hidden="true">×</span>
+          </a>
+        {% endfor %}
+        {% for assumed in page.assumed %}
+          <a class="want-chip on assumed" href="{{ page_url(page.slots, '&run=true' if page.ran else '', assumed.key) }}" title="Stop assuming it">
+            {{ status_icon(assumed.icon.url, assumed.icon.label) }}{{ assumed.champion or "Team" }}: {{ assumed.label }} <small>assumed</small><span class="want-remove" aria-hidden="true">×</span>
+          </a>
+        {% endfor %}
+        {% if not page.gear_on and not page.assumed %}<small>Skills only: allow gear or relics below.</small>{% endif %}
+      </div>
+      <div class="want-groups">
+        {% for group in page.gear %}
+          <details class="want-group" data-group="{{ group.title }}">
+            <summary>{{ group.title }} <small>{{ group.gear | length }}{% if group.chosen %} · {{ group.chosen }} allowed{% endif %}</small></summary>
+            <div class="want-chips gear-chips">
+              {% for gear in group.gear %}
+                <label class="want-chip {{ 'on' if gear.on }}" title="{{ gear.name }}: {{ gear.brings | map(attribute='label') | join(', ') }}">
+                  <input type="checkbox" name="gear" value="{{ gear.key }}" {% if gear.on %}checked{% endif %} onchange="this.form.submit()">
+                  <span class="gear-icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
+                  <span>{{ gear.name }}{% if gear.faction %} <small>{{ gear.faction }} only</small>{% endif %}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </details>
+        {% endfor %}
+        <details class="want-group" data-group="Assume">
+          <summary>Assume something else <small>a blessing, a book to come: a champion (or the team) brings it</small></summary>
+          <div class="assume-form">
+            <input type="search" name="assume_who" list="chimera-champions" placeholder="Champion (empty: the team)" autocomplete="off" aria-label="Who brings it">
+            <select name="assume_what" aria-label="What they bring">
+              <option value="">brings…</option>
+              {% for group in page.wants %}
+                <optgroup label="{{ group.title }}">
+                  {% for want in group.wants %}<option value="{{ want.key }}">{{ want.label }}</option>{% endfor %}
+                </optgroup>
+              {% endfor %}
+            </select>
+            <button type="submit" name="run" value="{{ 'true' if page.ran else 'false' }}" class="secondary">Assume</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="chimera-step">
+      <h2><span class="step-number">5</span> Find teams</h2>
       <div class="chimera-run">
         <label>
           From champions at
           <select name="min_grade">
             {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>{{ grade }}★ and up</option>{% endfor %}
           </select>
-        </label>
-        <label title="The Toxic set places Poison: it meets every Poison need, and the debuff counts (Poisons stack)">
-          <input type="hidden" name="toxic" value="false">
-          <input type="checkbox" name="toxic" value="true" {% if page.toxic %}checked{% endif %} onchange="this.form.submit()">
-          Any champion can wear a Toxic set (Poison)
         </label>
         <button type="submit" name="run" value="true">Run</button>
         <a href="{{ page_url([]) }}" class="secondary">Empty all slots</a>
@@ -88,7 +200,7 @@
             No team clears all nine trials: these clear the most.
           {% elif page.found %}
             {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }} teams clear all nine trials{% if not page.complete %} (the search stops there, or after a second: put a champion in a slot to narrow it; the order is among those found){% endif %}.
-            Each lists only the champions it needs; any champion can fill its other slots. Fewest needed first, then the strongest.
+            Each lists only the champions it needs; any champion can fill its other slots. Best scored first: how far a team can count on what the trials need (each effect's uptime × reliability × reach, from your champions' skills and books).
           {% endif %}
         </p>
         <div class="chimera-options">
@@ -96,7 +208,10 @@
             <article class="chimera-option {{ 'shown' if option.number == page.shown }}" id="option-{{ option.number }}">
               <header>
                 <strong>Option {{ option.number }}</strong>
-                <strong class="{{ 'cleared-all' if option.cleared == 9 else 'cleared-some' }}">{{ option.cleared }} / 9</strong>
+                <span class="option-scores">
+                  {{ score_pill(option.score, "Team score: how far it can count on what the trials need") }}
+                  <strong class="{{ 'cleared-all' if option.cleared == 9 else 'cleared-some' }}">{{ option.cleared }} / 9</strong>
+                </span>
               </header>
               <div class="chimera-option-members">
                 {% for slot in option.slots %}
@@ -135,14 +250,15 @@
 
   <section class="chimera-step">
     <h2>
-      <span class="step-number">4</span> Trials{% if page.shown %}: option {{ page.shown }}{% endif %}
+      <span class="step-number">6</span> Trials{% if page.shown %}: option {{ page.shown }}{% endif %}
       <strong class="{{ 'cleared-all' if page.cleared == 9 else 'cleared-some' }}">{{ page.cleared }} / 9</strong>
+      {{ score_pill(page.score, "Team score: how far it can count on what the trials need") }}
     </h2>
     <div class="chimera-board">
       {% for row in page.rows %}
         <section class="chimera-row form-{{ row.form | lower }}">
           <header class="chimera-row-head">
-            <span class="form-glyph" aria-hidden="true">{{ row.form[0] }}</span>
+            {% if row.icon_url %}<img class="form-icon" src="{{ row.icon_url }}" alt="" aria-hidden="true">{% else %}<span class="form-glyph" aria-hidden="true">{{ row.form[0] }}</span>{% endif %}
             <h3>{{ row.form }} form</h3>
             <span class="row-score {{ 'all' if row.cleared == row.trials | length }}">{{ row.cleared }} / {{ row.trials | length }}</span>
           </header>
@@ -157,26 +273,7 @@
                 <p class="trial-target"><span>Target</span> <strong>{{ trial.target }}</strong>{% if trial.damage %} damage{% endif %}</p>
                 {% if trial.needs %}
                   <ul class="trial-needs">
-                    {% for need in trial.needs %}
-                      <li class="{{ 'met' if need.met else 'unmet' }}">
-                        <span class="need-mark" aria-label="{{ 'met' if need.met else 'not met' }}">{{ "✓" if need.met else "✗" }}</span>
-                        <div class="need-body">
-                          <span class="need-label">{{ need.label }}</span>
-                          {% if need.champions or need.notes %}
-                            <div class="need-by">
-                              {% for champion in need.champions %}
-                                <a href="/champions/{{ champion.id }}" class="mini-portrait rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}">
-                                  {% if champion.portrait_url %}<img src="{{ champion.portrait_url }}" alt="{{ champion.name }}" loading="lazy">{% else %}<span>{{ champion.name[:2] }}</span>{% endif %}
-                                </a>
-                              {% endfor %}
-                              {% for note in need.notes %}<span class="need-note">{{ note }}</span>{% endfor %}
-                            </div>
-                          {% elif not need.met %}
-                            <div class="need-by"><span class="need-note missing">nobody brings it</span></div>
-                          {% endif %}
-                        </div>
-                      </li>
-                    {% endfor %}
+                    {% for need in trial.needs %}{{ need_item(need) }}{% endfor %}
                   </ul>
                 {% else %}
                   <p class="trial-free">Nothing to bring: it's down to the fight.</p>
@@ -186,6 +283,29 @@
           </div>
         </section>
       {% endfor %}
+      {% if page.extras %}
+        <section class="chimera-row chimera-extras">
+          <header class="chimera-row-head">
+            <span class="form-glyph" aria-hidden="true">+</span>
+            <h3>Also bringing</h3>
+            {% set brought = page.extras | selectattr("met") | list | length %}
+            <span class="row-score {{ 'all' if brought == page.extras | length }}">{{ brought }} / {{ page.extras | length }}</span>
+          </header>
+          <ul class="trial-needs extras-list">
+            {% for need in page.extras %}{{ need_item(need) }}{% endfor %}
+          </ul>
+        </section>
+      {% endif %}
     </div>
   </section>
+  <script>
+    // The "also bring" groups stay as the user left them across the page's reloads.
+    for (const group of document.querySelectorAll("details.want-group")) {
+      const key = "chimera-group:" + group.dataset.group;
+      try { group.open = sessionStorage.getItem(key) === "open"; } catch {}
+      group.addEventListener("toggle", () => {
+        try { sessionStorage.setItem(key, group.open ? "open" : "closed"); } catch {}
+      });
+    }
+  </script>
 {% endblock %}

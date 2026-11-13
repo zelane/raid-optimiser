@@ -433,6 +433,37 @@ details.section > .lede { margin-top: 0; }
 .chimera-glance th { text-align: left; }
 .chimera-glance td.met { color: var(--pico-ins-color); }
 .chimera-glance td.unmet { color: var(--pico-del-color); }
+.chimera-step h2 small { font-size: 0.8rem; font-weight: 400; color: var(--pico-muted-color); }
+.status-icon { flex: none; width: 1.5rem; height: 1.5rem; border-radius: 4px; object-fit: contain; }
+.status-icon.small { width: 1.15rem; height: 1.15rem; }
+.status-icon.glyph { display: inline-grid; place-items: center; font-size: 0.8rem; color: var(--pico-primary); background: color-mix(in srgb, var(--pico-primary-background) 15%, transparent); border: 1px solid color-mix(in srgb, var(--pico-primary-border) 50%, transparent); }
+.status-icon.small.glyph { font-size: 0.65rem; }
+.wants-chosen { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; min-height: 2rem; align-items: center; }
+.wants-chosen small { color: var(--pico-muted-color); }
+.want-groups { display: flex; flex-direction: column; gap: 0.25rem; }
+.want-group { margin: 0; padding: 0.4rem 0.75rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); }
+.want-group[open] { background: color-mix(in srgb, var(--pico-card-background-color) 60%, transparent); }
+.want-group summary { font-size: 0.9rem; font-weight: 600; }
+.want-group summary small { margin-left: 0.4rem; font-weight: 400; color: var(--pico-muted-color); }
+.want-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(12.5rem, 1fr)); gap: 0.35rem; padding: 0.6rem 0 0.2rem; }
+.want-chip { display: flex; align-items: center; gap: 0.45rem; margin: 0; padding: 0.3rem 0.55rem; border-radius: var(--pico-border-radius); border: 1px solid transparent; font-size: 0.82rem; line-height: 1.2; cursor: pointer; text-decoration: none; color: var(--pico-color); }
+.want-chip:hover { border-color: var(--pico-muted-border-color); background: color-mix(in srgb, var(--pico-muted-border-color) 25%, transparent); }
+.want-chip input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.want-chip small { display: block; position: static; margin: 0; font-size: 0.72rem; color: var(--pico-muted-color); }
+.want-chip.on { border-color: var(--pico-primary-border); background: color-mix(in srgb, var(--pico-primary-background) 16%, transparent); }
+.want-chip:focus-within { outline: 2px solid var(--pico-primary-border); }
+.wants-chosen .want-chip { display: inline-flex; padding: 0.2rem 0.4rem 0.2rem 0.3rem; border-radius: 999px; }
+.gear-chips { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+.gear-icons { display: inline-flex; gap: 0.1rem; min-width: 3.6rem; }
+.want-chip.assumed { border-style: dashed; }
+.want-chip.assumed small { display: inline; margin-left: 0.2rem; }
+.assume-form { display: flex; flex-wrap: wrap; gap: 0.5rem; padding: 0.6rem 0 0.2rem; align-items: center; }
+.assume-form input, .assume-form select { width: auto; flex: 1 1 14rem; margin: 0; }
+.assume-form button { width: auto; margin: 0; }
+.want-remove { margin-left: 0.15rem; color: var(--pico-muted-color); font-weight: 700; }
+.wants-chosen .want-chip:hover .want-remove { color: var(--pico-del-color); }
+.chimera-extras { --form: #8fa8ff; }
+.extras-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.6rem 1.25rem; font-size: 0.85rem; }
 /* The trial board: a row per form (its accent colour), Easy → Normal → Hard as cards. */
 .chimera-board { display: flex; flex-direction: column; gap: 1.25rem; }
 .form-ram { --form: #e0803a; }
@@ -441,6 +472,7 @@ details.section > .lede { margin-top: 0; }
 .chimera-row { border-radius: calc(var(--pico-border-radius) * 2); padding: 0.9rem; background: linear-gradient(135deg, color-mix(in srgb, var(--form) 10%, transparent), transparent 60%); border: 1px solid color-mix(in srgb, var(--form) 35%, var(--pico-muted-border-color)); }
 .chimera-row-head { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.75rem; }
 .chimera-row-head h3 { margin: 0; font-size: 1.1rem; color: var(--form); }
+.form-icon { width: 2.4rem; height: 2.4rem; object-fit: contain; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--form) 45%, transparent)); }
 .form-glyph { display: grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 50%; font-family: Alegreya, serif; font-weight: 700; font-size: 1.15rem; color: var(--pico-background-color); background: var(--form); box-shadow: 0 0 0 3px color-mix(in srgb, var(--form) 30%, transparent); }
 .row-score { margin-left: auto; font-weight: 700; padding: 0.1rem 0.6rem; border-radius: 999px; background: color-mix(in srgb, var(--pico-del-color) 18%, transparent); color: var(--pico-del-color); }
 .row-score.all { background: color-mix(in srgb, var(--pico-ins-color) 18%, transparent); color: var(--pico-ins-color); }
@@ -466,6 +498,15 @@ details.section > .lede { margin-top: 0; }
 .need-mark { flex: none; display: grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-top: 0.05rem; border-radius: 50%; font-size: 0.7rem; font-weight: 700; color: var(--pico-background-color); background: var(--pico-del-color); }
 .trial-needs li.met .need-mark { background: var(--pico-ins-color); }
 .need-body { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.need-head { display: flex; align-items: center; gap: 0.4rem; }
+.score-pill { flex: none; font-size: 0.68rem; font-weight: 700; padding: 0.05rem 0.4rem; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.score-pill.high { color: var(--pico-ins-color); background: color-mix(in srgb, var(--pico-ins-color) 16%, transparent); }
+.score-pill.mid { color: #f0b93a; background: color-mix(in srgb, #e3a008 16%, transparent); }
+.score-pill.low { color: var(--pico-del-color); background: color-mix(in srgb, var(--pico-del-color) 16%, transparent); }
+.chimera-step h2 .score-pill, .option-scores .score-pill { font-size: 0.85rem; padding: 0.1rem 0.55rem; }
+.option-scores { display: inline-flex; align-items: center; gap: 0.5rem; }
+.need-icons { display: inline-flex; gap: 0.15rem; flex: none; }
+.need-brought { display: inline-flex; flex-wrap: wrap; gap: 0.15rem; padding: 0.1rem 0.3rem; border-radius: var(--pico-border-radius); background: color-mix(in srgb, var(--pico-muted-border-color) 30%, transparent); }
 .need-by { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
 .mini-portrait { display: grid; place-items: center; width: 1.9rem; height: 1.9rem; border-radius: 50%; overflow: hidden; border: 2px solid var(--rarity); background: var(--pico-muted-border-color); font-size: 0.6rem; text-decoration: none; transition: transform 0.12s; }
 .mini-portrait:hover { transform: scale(1.15); }

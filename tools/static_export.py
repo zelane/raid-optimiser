@@ -2,7 +2,7 @@
 
     python3 -I tools/static_export.py static-raw.json schema/schema.json out/ [--full]
 
-Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies}.json (and out/static.json with --full).
+Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
 older than the game version: re-dump and re-run tools/gen_schema.py.
 """
@@ -276,7 +276,37 @@ SELF_TARGETS = {"Producer", "Owner", "AllAllies", "RelationProducer"}
 TARGET_HP = re.compile(r"TRG_(?:B_|M_|CUR_)?HP(?!_PERC)\b")
 
 
-def build_skills(skills, heroes, status_names):
+# The game's faction names where the capture (HH) names them otherwise.
+CAPTURE_FACTIONS = {"Samurai": "Shadowkin", "Olympians": "Argonites"}
+
+
+def build_effect_sources(data):
+    """What else can bring buffs, debuffs and effects to a team: each artifact set's set
+    skills (the pieces they take), and each relic type's skills, with those only a champion of
+    one faction gets (faction names as the capture has them). The skills are in skills.json."""
+    sets = []
+    for s in data["ArtifactData"]["SetInfos"]:
+        tiers = [s] + (s.get("SubSetInfos") or [])
+        skills = [{"pieces": t.get("ArtifactCount") or s["ArtifactCount"], "skill": t["SkillBonus"]["SkillTypeId"]}
+                  for t in tiers if t.get("SkillBonus")]
+        if skills:
+            sets.append({"id": s["ArtifactSetKindId"], "name": s["Name"], "skills": skills})
+    relics = []
+    for r in data["RelicData"]["RelicTypes"]:
+        by_faction = {CAPTURE_FACTIONS.get(f["FractionId"], f["FractionId"]): f["SkillIds"]
+                      for f in r.get("SkillIdsByFaction") or [] if f.get("SkillIds")}
+        relics.append({"id": r["Id"], "name": r["Name"], "rarity": r["Rarity"],
+                       "skills": r.get("SkillIds") or [], "by_faction": by_faction})
+    return {"sets": sets, "relics": relics}
+
+
+def source_skill_ids(sources):
+    return ({t["skill"] for s in sources["sets"] for t in s["skills"]}
+            | {i for r in sources["relics"] for i in r["skills"]}
+            | {i for r in sources["relics"] for ids in r["by_faction"].values() for i in ids})
+
+
+def build_skills(skills, heroes, status_names, extra_ids=()):
     """The champions' skills: name, whether it's AoE, its unconditional damage hits (formula,
     count, the skill's own DEF modifier), the damage bonus each book adds, and the formulas of
     its other effects that scale with the caster's stats (`scaling`: kind and formula).
@@ -285,6 +315,7 @@ def build_skills(skills, heroes, status_names):
     Revive, TeamAttack, PassiveCounterattack, …) and whether it hits for a share of the
     target's HP (`target_hp_damage`)."""
     wanted = {skill_id for h in heroes for f in h["forms"] for skill_id in f["skills"]}
+    wanted |= set(extra_ids)
     out = {}
     for skill_id in sorted(wanted):
         skill = skills.get(skill_id)
@@ -312,16 +343,32 @@ def build_skills(skills, heroes, status_names):
 
 
 def skill_kit(skill, status_names):
-    debuffs, buffs = set(), set()
+    """What the skill places and does (`debuffs`, `buffs`, `effect_kinds`), and how: each
+    effect's `placements` (status or effect kind, chance, turns, target, whether it happens
+    against a boss: `on_boss`, whether it can be resisted), and its `books` in order (type
+    and value: the chance, cooldown and the rest each adds)."""
+    debuffs, buffs, placements = set(), set(), []
     for effect in skill["Effects"] or []:
         statuses = (effect.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or []
         names = {status_names.get(str(s["TypeId"]), str(s["TypeId"])) for s in statuses}
         target = (effect.get("TargetParams") or {}).get("TargetType")
+        target_condition = (effect.get("TargetParams") or {}).get("Condition")
+        common = {"chance": effect.get("Chance"), "target": target,
+                  "on_boss": on_boss(effect.get("Condition"), target_condition)}
         if effect["KindId"] == "ApplyDebuff" and target not in SELF_TARGETS:
             debuffs |= names
         elif effect["KindId"] == "ApplyBuff":
             buffs |= names
-    return {"debuffs": sorted(debuffs), "buffs": sorted(buffs),
+        for s in statuses:
+            placements.append({"kind": effect["KindId"], "status": status_names.get(str(s["TypeId"]), str(s["TypeId"])),
+                               "turns": s.get("Duration"),
+                               "unresistable": s.get("ApplyMode") in ("Unresistable", "Guaranteed"), **common})
+        if not statuses:
+            placements.append({"kind": effect["KindId"], "status": None, "turns": None,
+                               "unresistable": False, **common})
+    return {"debuffs": sorted(debuffs), "buffs": sorted(buffs), "placements": placements,
+            "books": [{"type": b["SkillBonusType"], "value": round(b["Value"], 6)}
+                      for b in skill.get("SkillLevelBonuses") or []],
             "effect_kinds": sorted({e["KindId"] for e in skill["Effects"] or []}),
             "target_hp_damage": any(e["KindId"] == "Damage" and TARGET_HP.search(e.get("MultiplierFormula") or "")
                                     for e in skill["Effects"] or [])}
@@ -330,6 +377,85 @@ def skill_kit(skill, status_names):
 GRADE_NAMES = {f"Stars{n}": n for n in range(1, 7)}
 TAGS = re.compile(r"<[^>]+>")
 COMPLETED = re.compile(r"challengeCompletedById\((\d+)\)")
+
+
+# Condition atoms that hold in a fight against a lone boss (the Chimera, clan boss, ...).
+BOSS_FACTS = {"targetIsBoss", "relationTargetIsBoss", "thereIsBossInCurrentRound",
+              "ThereIsBossInTeam(enemyTeamId)"}
+CONDITION_TOKEN = re.compile(r"\s*(&&|\|\||!(?!=)|\(|\)|[^&|!()]+(?:\([^()]*\))?(?:!=[^&|()]+)?)")
+
+
+def on_boss(*conditions):
+    """Whether an effect gated by these conditions (the effect's own and its target's) happens
+    against a lone boss: True always, False never ("!targetIsBoss"), None when it depends on
+    something else (or a condition can't be read). Three-valued, `BOSS_FACTS` true, other atoms
+    unknown."""
+    result = True
+    for condition in conditions:
+        if condition:
+            result = and3(result, eval_condition(condition))
+    return result
+
+
+def eval_condition(condition):
+    tokens = [t.strip() for t in CONDITION_TOKEN.findall(condition)]
+    if "".join(tokens) != re.sub(r"\s", "", condition):
+        return None
+    pos = 0
+
+    def peek():
+        return tokens[pos] if pos < len(tokens) else None
+
+    def take():
+        nonlocal pos
+        pos += 1
+        return tokens[pos - 1]
+
+    def either():
+        value = both()
+        while peek() == "||":
+            take()
+            value = or3(value, both())
+        return value
+
+    def both():
+        value = unary()
+        while peek() == "&&":
+            take()
+            value = and3(value, unary())
+        return value
+
+    def unary():
+        token = take()
+        if token == "!":
+            value = unary()
+            return None if value is None else not value
+        if token == "(":
+            value = either()
+            if take() != ")":
+                raise ValueError(condition)
+            return value
+        if token in ("&&", "||", ")"):
+            raise ValueError(condition)
+        return True if token in BOSS_FACTS else None
+
+    try:
+        value = either()
+    except (IndexError, ValueError):
+        return None
+    return value if pos == len(tokens) else None
+
+
+def and3(a, b):
+    if a is False or b is False:
+        return False
+    return None if a is None or b is None else True
+
+
+def or3(a, b):
+    if a is True or b is True:
+        return True
+    return None if a is None or b is None else False
 
 
 def build_enemies(data, skills):
@@ -515,7 +641,10 @@ def main(raw_path, schema_path, out_dir, full=False):
     sets = build_sets(data["ArtifactData"], skills)
     heroes = build_hero_types(data["HeroData"])
     status_names = schema["enums"]["StatusEffectTypeId"]
-    json.dump(build_skills(skills, heroes, status_names), open(out / "skills.json", "w"), ensure_ascii=False)
+    sources = build_effect_sources(data)
+    json.dump(sources, open(out / "effect_sources.json", "w"), indent=1, ensure_ascii=False)
+    built = build_skills(skills, heroes, status_names, source_skill_ids(sources))
+    json.dump(built, open(out / "skills.json", "w"), ensure_ascii=False)
     json.dump(sets, open(out / "sets.json", "w"), indent=1, ensure_ascii=False)
     json.dump(heroes, open(out / "hero_types.json", "w"), indent=1, ensure_ascii=False)
     bonuses = build_bonuses(data, raw.get("ca") or {})

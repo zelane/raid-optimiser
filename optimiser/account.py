@@ -9,8 +9,8 @@ once at the boundary into the shapes the stat model and solver use.
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
-- `Hit`, `Effect`, `Skill`: champion skills, as far as damage (and what else scales) and what
-  they place and do go
+- `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
+  else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
@@ -252,10 +252,36 @@ class Effect:
 
 
 @dataclass(frozen=True)
+class Placement:
+    """One effect of a skill: its kind (ApplyBuff, ApplyDebuff, Revive, …), the status it
+    places (None for other kinds) and for how many turns, its chance (None: always), who it
+    lands on (the game's target type), whether it happens against a boss (`on_boss`: True
+    always, False never, None when a condition decides), and whether it can't be resisted."""
+
+    kind: str
+    status: str | None
+    turns: int | None
+    chance: float | None
+    target: str
+    on_boss: bool | None
+    unresistable: bool
+
+
+@dataclass(frozen=True)
+class Book:
+    """What a skill book adds: its type (Attack, EffectChance, CooltimeTurn, …) and value."""
+
+    type: str
+    value: float
+
+
+@dataclass(frozen=True)
 class Skill:
     """`debuffs` (on enemies) and `buffs` (on its team) are status effect names, whatever the
     chance or condition; `effect_kinds` every effect kind the skill has (Revive, TeamAttack,
-    PassiveCounterattack, …); `target_hp_damage`: it hits for a share of the target's HP."""
+    PassiveCounterattack, …); `target_hp_damage`: it hits for a share of the target's HP;
+    `placements` how each effect lands, `books` what each book adds (level L has the first
+    L-1), `cooldown` in turns (0: every turn)."""
 
     id: int
     name: str
@@ -268,6 +294,9 @@ class Skill:
     buffs: frozenset[str] = frozenset()
     effect_kinds: frozenset[str] = frozenset()
     target_hp_damage: bool = False
+    cooldown: int = 0
+    placements: tuple[Placement, ...] = ()
+    books: tuple[Book, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -328,7 +357,8 @@ class Tables:
 
 @dataclass(frozen=True)
 class Account:
-    """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed."""
+    """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed;
+    `relic_types`: the relic types the account has (worn or not)."""
 
     user_id: int  # the Raid account
     champions: dict[int, Champion]
@@ -336,6 +366,7 @@ class Account:
     owners: dict[int, int]  # artifact id -> id of the champion wearing it
     tables: Tables
     mailbox: tuple[Artifact, ...] = ()
+    relic_types: frozenset[int] = frozenset()
 
 
 DEFAULT_LEAGUE = "GoldV"  # if the capture doesn't say
@@ -379,6 +410,7 @@ def load_account(captures: Path, static: Path, schema: Path) -> Account:
         owners=owners,
         tables=tables,
         mailbox=mailbox,
+        relic_types=frozenset(relic["TypeId"] for relic in account["Relics"]),
     )
 
 
@@ -535,6 +567,20 @@ def parse_skills(static: Path) -> dict[int, Skill]:
             buffs=frozenset(raw["buffs"]),
             effect_kinds=frozenset(raw["effect_kinds"]),
             target_hp_damage=raw["target_hp_damage"],
+            cooldown=raw["cooldown"] or 0,
+            placements=tuple(
+                Placement(
+                    kind=p["kind"],
+                    status=p["status"],
+                    turns=p["turns"],
+                    chance=p["chance"],
+                    target=p["target"] or "",
+                    on_boss=p["on_boss"],
+                    unresistable=p["unresistable"],
+                )
+                for p in raw["placements"]
+            ),
+            books=tuple(Book(b["type"], b["value"]) for b in raw["books"]),
         )
         for skill_id, raw in read_json(static / "skills.json").items()
     }

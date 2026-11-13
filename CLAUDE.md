@@ -25,7 +25,7 @@ its upload. Game tables come from the game's own data.
 - `update-static.sh`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
-  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies}.json`.
+  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
   `tools/check_levels.py` checks its table is still in the game's metadata (`update-static.sh`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
@@ -39,31 +39,54 @@ its upload. Game tables come from the game's own data.
   from their hidden `StartChallenge` skills) and per-area shield caps. `enemy_stats` is stats as
   a battle starts (no in-battle passives). `just enemies` (`optimiser/enemy_report.py`) prints it.
   The co-op event world boss (Tainted Demon Lord) is area `CooperationEventWorldBoss`.
-- Chimera trials (`/chimera`, `optimiser/chimera.py`): one team of five that clears a whole
-  column (the part the user picks: where this rotation's mythical materials are; the capture
-  doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards only
-  count for trials cleared in the same fight). Effects only: a champion's tags are the status
-  kinds its skills place (`skills.json` `debuffs`/`buffs`, strengths merged: `status_kind`)
-  and mechanics (`effect_kinds`, `target_hp_damage`), all forms of a mythical; damage, chances,
-  turn order and gear sets aren't modelled, except the Toxic set (`TOXIC_SET`, a
-  page toggle, on by default): any champion can wear one, so needs Poison meets become
-  `Given` for every team (`with_gear`). The debuff-count trials (`DEBUFF_COUNT>=`: Lion Wing
-  Easy, Lion Paw Normal, Snake Wing Hard) count instances, not kinds (`Distinct.instances`):
-  Poisons stack, so any Poison source meets them (given speed), else enough different debuffs. `trial_needs` (a `match` per trial, counts from
-  the trial's target or `rules`) is checked against the trial's own status list
-  (`check_needs`; the page warns on a mismatch). Form immunities: `BOSS_IMMUNE` minus
-  `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills). The page is four steps, its
-  state all in the URL (`column`, `slot` ×5 as "Name, 6★ L60 #id" from a datalist,
-  `min_grade`, `run`): rotation, the user's champions in slots (`check_lineup` lights what
-  they clear alone), Run (`fill_lineup`: HiGHS keeps the slotted champions, maximises trials
-  cleared then champion strength over the open slots), the 3×3 grid. Run lists every minimal team clearing all nine
-  (`every_team`: branch on the unmet need fewest champions can bring; a team counts only if
-  no member can be dropped; "any champion" fills the rest) up to `SEARCH_CAP` teams or
-  `SEARCH_SECONDS`, fewest champions first then strongest, 3 at first and 9 more per "show
-  more" (`listed`, at most 300). With nothing pinned there are hundreds of thousands (most
-  from the "N different debuffs/buffs" trials), hence the caps. If none clears all nine, the
-  HiGHS `search` gives the best partial teams instead. The slots stay the user's; `option`
-  picks which team the grid shows, and "Use this team" puts it in the slots.
+- Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
+  column (Wing/Tail/Paw: where this rotation's mythical materials are; the user picks, the
+  capture doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
+  only count for trials cleared in the same fight). Judged on what champions can place and do,
+  not damage (targets are shown, not checked), nor turn order, nor ACC against the RES.
+  - `tags`: `Tag` (debuff/buff status kind with strengths merged by `status_kind`, a skill
+    effect from the curated `EFFECT_LABELS`, or a `Mechanic`); immunities: `BOSS_IMMUNE` minus
+    `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills; `NEVER_LANDS`, `only_in`).
+  - `trials`: `trial_needs` (a `match` per trial; counts from the trial's target or `rules`),
+    checked against the trial's own status list (`check_needs`; the page warns on a
+    mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
+    count instances (`Distinct.instances`): any Poison source meets them, given speed.
+    `Goals` (trials' needs + wanted extras) → `Requirement`s (a need and its form).
+  - `kits`: a champion's `Kit` from `skills.json` (`placements`, `books`, `effect_kinds`,
+    `target_hp_damage`), all forms of a mythical, each tag's best `Rating` = uptime (turns ÷
+    cooldown less cooldown books; passives and A1s every turn; instant: 1 ÷ cooldown) ×
+    reliability (chance + chance books, × `CONDITIONAL` if gated) × reach (`REACH_TEAM`/`ALLY`/
+    `SELF`; debuffs, mechanics and enemy-side effects in full), × `OTHER_FORM` for a
+    mythical's other form. Own skill levels count (`Cast`). Each placement's `on_boss`
+    (`static_export.on_boss`: its effect and target conditions read three-valued with the
+    boss atoms, `BOSS_FACTS`, true) drops what never lands on a boss (Lamasu's True Fear goes
+    to non-bosses; bosses get Decrease SPD), and only what depends on more is `CONDITIONAL`.
+  - `gear`: `effect_sources.json` (each set's set skills, each relic type's skills and faction
+    skills, capture faction names) → `Gear` options (every set, relics the account owns,
+    `Account.relic_types`), rated like skills. Allowed ones (`gear=<Gear.key>`, `gear_set`
+    marks the list as sent; default `DEFAULT_GEAR`, Toxic) and team-wide assumptions make needs
+    `Given` (`with_gear`); faction relic skills (Bloatshield Totem's Demonspawn reflect) and
+    per-champion assumptions (`assume=<champion id>@<tag key>`) join those kits (`equip`).
+    Gear doesn't count toward "N different" needs.
+  - `cover`: who covers what (`Lineup`), the members a team needs (`core_of`), the score: a
+    team's sources of a tag combine as 1 − Π(1 − s); a need scores its best tag (a count: its
+    best N's mean; `Given`: the gear's rating); `team_score` is the mean over `Goals`'
+    requirements and ranks the options (`ranking`: then fewest champions, then strength).
+  - `search`: `every_team` lists every minimal team clearing all nine and bringing the extras
+    (branch on the unmet need fewest champions bring; "any champion" fills the rest), within
+    `SEARCH_BUDGET` (20,000 teams or 1 s: with nothing pinned there are hundreds of thousands,
+    mostly from the "N different" trials); if none clears all nine, `partial_teams` (HiGHS)
+    gives the best partial ones.
+  - `plan`: `check_lineup` (the slots alone) and `fill_lineup`, from a `Brief` (column,
+    wanted, loadout).
+  - Page (`webui/service/chimera.py`; `forms.parse_chimera` is its boundary, `ChimeraRequest`
+    with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from a datalist,
+    or part of a name), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
+    assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
+    the grid shows; "Use this team" puts it in the slots), then the 3×3 board. State is all in
+    the URL. Icons: `statuses/` (StatusEffectIcons, by status kind; `service.chimera.icon_name`
+    maps ours, e.g. DecreaseDefence → StatusReduceDefence) and `chimera/<Form>_<Level>`
+    (ChimeraChallengeIcons), from `tools/extract_assets.py`.
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles

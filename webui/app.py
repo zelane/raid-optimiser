@@ -13,22 +13,25 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 
 from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
-from optimiser.chimera import TEAM_SIZE
+from optimiser.chimera.gear import gear_options
+from optimiser.chimera.kits import wantable
 from webui import extractor
 from webui.forms import (
     FlagSetting,
     FormErrors,
     GlyphPlan,
+    Offers,
+    Unknown,
     WeightSetting,
+    parse_chimera,
     parse_equip,
     parse_flag,
     parse_glyph,
@@ -36,7 +39,6 @@ from webui.forms import (
     parse_protect,
     parse_request,
     parse_sell,
-    parse_slots,
     parse_target_free,
     parse_weight,
 )
@@ -214,32 +216,20 @@ def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
 
 
 @app.get("/chimera", response_class=HTMLResponse)
-def chimera(
-    request: Request,
-    column: str = chimera_pages.DEFAULT_COLUMN,
-    min_grade: int = 6,
-    slot: Annotated[list[str], Query()] = [],  # noqa: B006 (FastAPI copies it)
-    run: bool = False,
-    option: int = 1,
-    listed: int = chimera_pages.FIRST_SHOWN,
-    toxic: bool = True,
-):
-    if column not in chimera_pages.PARTS:
-        raise HTTPException(404, f"no {column} column: {', '.join(chimera_pages.PARTS)}")
-
-    if min_grade not in chimera_pages.GRADES:
-        raise HTTPException(404, f"rank {min_grade} isn't offered")
-
+def chimera(request: Request):
     account = current.current_account()
-    slots = parse_slots(slot, account, TEAM_SIZE)
-    if isinstance(slots, FormErrors):
-        raise HTTPException(400, "; ".join(slots.messages))
+    sets, relics = current.current_effect_sources()
+    offers = Offers(wantable(account), gear_options(account, sets, relics))
+    query = {name: request.query_params.getlist(name) for name in request.query_params}
 
-    enemies = current.current_enemies()
-    listed = min(max(listed, chimera_pages.FIRST_SHOWN), chimera_pages.MAX_LISTED)
-    page = chimera_pages.chimera_page(
-        account, enemies, column, min_grade, slots, run, option, listed, toxic
-    )
+    match parse_chimera(query, account, offers):
+        case Unknown(reason=reason):
+            raise HTTPException(404, reason)
+        case FormErrors(messages=messages):
+            raise HTTPException(400, "; ".join(messages))
+        case asked:
+            page = chimera_pages.chimera_page(account, current.current_enemies(), asked, offers)
+
     return templates.TemplateResponse(request, "chimera.html", {"page": page})
 
 

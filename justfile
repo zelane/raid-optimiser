@@ -21,6 +21,10 @@ default:
 proxy *args:
     ./run-proxy.sh "$@"
 
+# Re-apply the HellHades sell/equip fix (after a HellHades update) in RAID's prefix (-q: quiet)
+hh-patch *args:
+    python3 -I hh-patch.py "{{file_name(parent_directory(prefix))}}" "$@"
+
 # Re-export the game's static data after a game update (--full for the whole static.json)
 static *args:
     ./update-static.sh "$@"

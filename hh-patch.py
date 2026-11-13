@@ -11,13 +11,22 @@ every build) and adds CREATE_THREAD to the access constant passed to it.
 
 Safe to run any time: it is a no-op if the DLL is already fixed, keeps the
 unpatched original as <dll>.orig, and replaces the file atomically.
+
+    hh-patch.py <prefix id> [-q]     # the Steam compatdata id of RAID's Proton prefix
+    hh-patch.py <path to dll> [-q]
+
+The DLL is looked for in the prefix's HellHades install: AppData/Roaming (the installer's
+place), then drive_c/hh.
 Exit codes: 0 ok (patched or nothing to do), 1 could not patch, 2 bad input.
 """
 import os, re, shutil, struct, subprocess, sys
 
-DEFAULT = os.path.expanduser(
-    "~/.local/share/Steam/steamapps/compatdata/2441943673/pfx/drive_c/hh/"
-    "HellHades.ArtifactExtractor.Models.Reader.dll")
+DLL = "HellHades.ArtifactExtractor.Models.Reader.dll"
+COMPATDATA = os.path.expanduser("~/.local/share/Steam/steamapps/compatdata")
+INSTALLS = (
+    "drive_c/users/steamuser/AppData/Roaming/HellHades Artifact Extractor",
+    "drive_c/hh",
+)
 CREATE_THREAD, VM_OPERATION, VM_WRITE = 0x2, 0x8, 0x20
 
 
@@ -133,10 +142,26 @@ def notify(msg):
                        stderr=subprocess.DEVNULL, check=False)
 
 
+def dll_in_prefix(prefix_id):
+    """The Reader DLL in the prefix's HellHades install, and every place looked."""
+    pfx = os.path.join(COMPATDATA, prefix_id, "pfx")
+    tried = [os.path.join(pfx, install, DLL) for install in INSTALLS]
+    return next((p for p in tried if os.path.isfile(p)), None), tried
+
+
 def main():
     args = [a for a in sys.argv[1:] if a != "-q"]
-    path = args[0] if args else DEFAULT
     quiet = "-q" in sys.argv[1:]
+    if len(args) != 1:
+        print(__doc__.split("\n\n")[3], file=sys.stderr)
+        return 2
+    if args[0].isdigit():
+        path, tried = dll_in_prefix(args[0])
+        if path is None:
+            notify(f"no HellHades in prefix {args[0]}; looked at: " + "; ".join(tried))
+            return 2
+    else:
+        path = args[0]
     try:
         b = bytearray(open(path, "rb").read())
         meta = Meta(bytes(b))

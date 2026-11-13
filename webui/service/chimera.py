@@ -5,38 +5,39 @@ finds around them (every way to clear all the trials, listed a few at a time), a
 column's nine trials (Ram, Lion and Snake; Easy, Normal and Hard), each highlighted when the
 team shown can clear it in one Ultra Nightmare fight.
 
-- `DEFAULT_COLUMN`, `GRADES`, `FIRST_SHOWN`, `MORE`, `MAX_LISTED`: what the page opens on
-  and offers
-- `ChoiceView`, `SlotView`, `NeedView`, `TrialView`, `FormRow`, `OptionView`, `ChimeraPage`:
-  the views
+- `MORE`: how many more teams "show more" lists
+- `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `TrialView`, `FormRow`,
+  `OptionView`, `WantView`, `WantGroup`, `GearView`, `GearGroup`, `AssumedView`,
+  `ChimeraPage`: the views
 - `chimera_page`: what the page asks for
-- `slot_view`, `option_view`, `form_rows`, `trial_view`, `choice_label`:
-  its pieces
+- `slot_view`, `option_view`, `form_rows`, `trial_view`, `need_view`, `waits_on`,
+  `WANT_GROUPS`, `want_groups`, `want_view`, `gear_groups`, `gear_view`, `assumed_views`,
+  `assumed_view`, `choice_label`, `percent`: its pieces
+- `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
+  effects
 """
 
 from dataclasses import dataclass
 
 from optimiser.account import Account, Champion
-from optimiser.chimera import (
-    ANIMAL_FORMS,
-    LEVELS,
-    PARTS,
-    TOXIC_SET,
-    Lineup,
-    Member,
-    TrialCover,
-    check_lineup,
-    fill_lineup,
-)
+from optimiser.chimera.cover import Lineup, Member, NeedCover, TrialCover
+from optimiser.chimera.gear import Assumed, Gear, Loadout
+from optimiser.chimera.plan import Brief, check_lineup, fill_lineup
+from optimiser.chimera.tags import Side, Tag, only_in, plain_label
+from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS
 from optimiser.enemies import Enemies
-from webui.forms import SlotPick, Unmatched
-from webui.service.views import ChampionRow, champion_row
+from webui.forms import (
+    FIRST_SHOWN,
+    GRADES,
+    ChimeraRequest,
+    Fill,
+    Offers,
+    SlotPick,
+    Unmatched,
+)
+from webui.service.views import ChampionRow, asset_url, champion_row
 
-DEFAULT_COLUMN = "Tail"  # where the game's data puts Ultra Nightmare's mythical materials
-GRADES = (6, 5, 4)
-FIRST_SHOWN = 3  # teams a run shows at first
 MORE = 9  # teams each "show more" adds
-MAX_LISTED = 300  # most a page lists
 
 
 @dataclass(frozen=True)
@@ -60,20 +61,40 @@ class SlotView:
 
 
 @dataclass(frozen=True)
+class IconView:
+    """A buff, debuff or effect as an icon: the game's art, or None (the page draws a glyph)."""
+
+    label: str
+    url: str | None
+
+
+@dataclass(frozen=True)
+class Contributor:
+    """A champion bringing a need, and how far its best source can be counted on."""
+
+    champion: ChampionRow
+    score: int  # %
+    detail: str  # "2 turns, every 3 turns, 75% chance"
+
+
+@dataclass(frozen=True)
 class NeedView:
-    """A need: who on the team brings it, and `notes` (gear that does, or for a count, the
-    effects the team brings)."""
+    """A need: who on the team brings it, `asks` (what would do), `brought` (for a count, the
+    effects the team brings), `notes` (gear that meets it) and its `score` (%)."""
 
     label: str
     met: bool
-    champions: list[ChampionRow]
+    contributors: list[Contributor]
     notes: list[str]
+    asks: list[IconView]
+    brought: list[IconView]
+    score: int
 
 
 @dataclass(frozen=True)
 class TrialView:
-    """A trial; `contributors`: every champion bringing one of its needs, once; `waits_on`:
-    the level that must be cleared first, when the team meets this one's needs but not that's."""
+    """A trial; `waits_on`: the level that must be cleared first, when the team meets this
+    one's needs but not that's."""
 
     level: str
     description: str
@@ -81,7 +102,6 @@ class TrialView:
     damage: bool  # the target is damage (else a count)
     met: bool
     needs: list[NeedView]
-    contributors: list[ChampionRow]
     waits_on: str | None = None
 
 
@@ -90,6 +110,7 @@ class FormRow:
     form: str
     trials: list[TrialView]  # Easy, Normal, Hard
     cleared: int
+    icon_url: str | None  # the game's trial art for the form
 
 
 @dataclass(frozen=True)
@@ -100,7 +121,59 @@ class OptionView:
     number: int  # 1 first
     slots: list[SlotView]
     cleared: int
+    score: int  # % (`chimera.team_score`)
     glance: list[tuple[str, list[bool]]]  # form -> met, by level
+
+
+@dataclass(frozen=True)
+class WantView:
+    """Something the user can ask every team to bring, and whether they have; `note`: where
+    it only lands (Fear: the Ram form; `only_in`)."""
+
+    key: str  # `Tag.key`
+    label: str
+    wanted: bool
+    note: str | None
+    icon_url: str | None
+
+
+@dataclass(frozen=True)
+class WantGroup:
+    """The debuffs, the buffs or the effects on offer; `chosen`: how many are wanted."""
+
+    title: str
+    wants: list[WantView]
+    chosen: int
+
+
+@dataclass(frozen=True)
+class GearView:
+    """A set or relic the user can let any champion wear, what it brings, and whether they
+    have; `faction`: only a champion of it gets the relic's skill."""
+
+    key: str
+    name: str
+    faction: str | None
+    on: bool
+    brings: list[IconView]
+
+
+@dataclass(frozen=True)
+class GearGroup:
+    title: str
+    gear: list[GearView]
+    chosen: int
+
+
+@dataclass(frozen=True)
+class AssumedView:
+    """Something assumed: for the team (`champion` None) or one champion. `key` is how the
+    page's URL names it."""
+
+    key: str
+    label: str
+    champion: str | None
+    icon: IconView
 
 
 @dataclass(frozen=True)
@@ -109,7 +182,12 @@ class ChimeraPage:
     columns: tuple[str, ...]
     min_grade: int
     grades: tuple[int, ...]
-    toxic: bool  # any champion may wear a Toxic set (Poison)
+    gear: list[GearGroup]  # sets, relics
+    gear_on: list[GearView]  # the allowed ones
+    assumed: list[AssumedView]
+    wants: list[WantGroup]  # debuffs, buffs, effects
+    wanted: list[WantView]  # the chosen ones, in that order
+    extras: list[NeedView]  # who in the team shown brings the wanted debuffs
     slots: list[SlotView]
     choices: list[ChoiceView]  # every champion, by name
     ran: bool  # the search filled the open slots
@@ -122,47 +200,48 @@ class ChimeraPage:
     more: int  # how many the page lists after "show more" (0: no more to show)
     shown: int | None  # the option the trials show (its number); None: the slots as they are
     cleared: int  # by what the trials show
+    score: int  # % of what the trials show (`chimera.team_score`)
     rows: list[FormRow]
     problems: list[str]  # where the trial needs disagree with the game's data
 
 
 def chimera_page(
-    account: Account,
-    enemies: Enemies,
-    column: str,
-    min_grade: int,
-    picks: tuple[SlotPick, ...],
-    run: bool,
-    option: int,
-    listed: int,
-    toxic: bool,
+    account: Account, enemies: Enemies, request: ChimeraRequest, offers: Offers
 ) -> ChimeraPage:
-    """`column` must be one of `PARTS`. With `run`, the search fills the open slots (and those
-    whose text isn't a champion) every way it can, the page lists the first `listed` teams,
-    and the trials show option number `option` (the first if there's no such option)."""
+    """With `request.fill`, the search fills the open slots (and those whose text isn't a
+    champion) every way it can; else the slots are shown as they are."""
+    picks, wanted, loadout = request.picks, request.wanted, request.loadout
+    brief = Brief(request.column, wanted, loadout)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in picks)
-    gear = (TOXIC_SET,) if toxic else ()
 
-    if run:
-        plan = fill_lineup(account, enemies, column, slots, min_grade, gear, listed)
-    else:
-        plan = check_lineup(account, enemies, column, slots, gear)
+    match request.fill:
+        case None:
+            plan = check_lineup(account, enemies, brief, slots)
+            listed, option = FIRST_SHOWN, 1
+        case Fill(listed=listed, option=option):
+            plan = fill_lineup(account, enemies, brief, slots, request.min_grade, listed)
 
     shown = option if 1 <= option <= len(plan.options) else (1 if plan.options else None)
     lineup = plan.options[shown - 1] if shown else plan.lineup
+    allowed = {g.key for g in loadout.gear}
 
     champions = sorted(account.champions.values(), key=lambda c: (c.name, -c.grade, -c.level))
     return ChimeraPage(
-        column=column,
+        column=request.column,
         columns=PARTS,
-        min_grade=min_grade,
+        min_grade=request.min_grade,
         grades=GRADES,
-        toxic=toxic,
+        gear=gear_groups(offers.gear, allowed),
+        gear_on=[gear_view(g, True) for g in offers.gear if g.key in allowed],
+        assumed=assumed_views(loadout),
+        wants=want_groups(offers.tags, wanted),
+        wanted=[want_view(tag, True) for tag in wanted],
+        extras=[need_view(need) for need in lineup.extras],
         slots=[
             slot_view(member, pick) for member, pick in zip(plan.lineup.slots, picks, strict=True)
         ],
         choices=[ChoiceView(choice_label(c)) for c in champions],
-        ran=run,
+        ran=request.fill is not None,
         candidates=plan.candidates,
         options=[option_view(number, team) for number, team in enumerate(plan.options, 1)],
         found=plan.found,
@@ -172,6 +251,7 @@ def chimera_page(
         more=min(listed + MORE, plan.found) if plan.found > listed else 0,
         shown=shown,
         cleared=lineup.cleared,
+        score=percent(lineup.score),
         rows=form_rows(lineup),
         problems=list(plan.problems),
     )
@@ -198,6 +278,7 @@ def option_view(number: int, team: Lineup) -> OptionView:
         number=number,
         slots=[slot_view(member, None) for member in team.slots],
         cleared=team.cleared,
+        score=percent(team.score),
         glance=[(row.form, [trial.met for trial in row.trials]) for row in rows],
     )
 
@@ -209,6 +290,7 @@ def form_rows(lineup: Lineup) -> list[FormRow]:
             form,
             [trial_view(c) for c in sorted(covers, key=level_order)],
             sum(c.met for c in covers),
+            asset_url("chimera", f"{form}_Hard"),
         )
         for form, covers in by_form.items()
     ]
@@ -219,20 +301,138 @@ def level_order(cover: TrialCover) -> int:
 
 
 def trial_view(cover: TrialCover) -> TrialView:
-    contributors = {c.id: c for need in cover.needs for c in need.by}
     return TrialView(
         level=cover.trial.level,
         description=cover.trial.description,
         target=f"{cover.trial.target:,.0f}",
         damage=cover.trial.damage,
         met=cover.met,
-        needs=[
-            NeedView(n.label, n.met, [champion_row(c) for c in n.by], list(n.notes))
-            for n in cover.needs
-        ],
-        contributors=[champion_row(c) for c in contributors.values()],
+        needs=[need_view(n) for n in cover.needs],
         waits_on=waits_on(cover),
     )
+
+
+def gear_groups(offered: list[Gear], allowed: set[str]) -> list[GearGroup]:
+    groups = []
+
+    for kind, title in (("set", "Artifact sets"), ("relic", "Relics you own")):
+        views = [gear_view(g, g.key in allowed) for g in offered if g.kind == kind]
+        groups.append(GearGroup(title, views, sum(v.on for v in views)))
+
+    return groups
+
+
+def gear_view(gear: Gear, on: bool) -> GearView:
+    brings = [icon_view(tag) for tag in gear.tags if tag.side != Side.MECHANIC]
+    return GearView(gear.key, gear.name, gear.faction, on, sorted(brings, key=lambda i: i.label))
+
+
+def assumed_views(loadout: Loadout) -> list[AssumedView]:
+    """The team's assumptions (assumed gear) and the single champions'."""
+    team = [
+        AssumedView(tag.key, plain_label(tag), None, icon_view(tag))
+        for gear in loadout.gear
+        if gear.kind == "assumed"
+        for tag in gear.tags
+    ]
+    single = [assumed_view(a) for a in loadout.assumed]
+    return team + single
+
+
+def assumed_view(assumed: Assumed) -> AssumedView:
+    tag = assumed.tag
+    return AssumedView(assumed.key, plain_label(tag), assumed.champion.name, icon_view(tag))
+
+
+WANT_GROUPS = (
+    (Side.DEBUFF, "Debuffs on the Chimera"),
+    (Side.BUFF, "Buffs"),
+    (Side.EFFECT, "Effects"),
+)
+
+
+def want_groups(offered: list[Tag], wanted: tuple[Tag, ...]) -> list[WantGroup]:
+    groups = []
+
+    for side, title in WANT_GROUPS:
+        tags = [tag for tag in offered if tag.side == side]
+        views = [want_view(tag, tag in wanted) for tag in tags]
+        groups.append(WantGroup(title, views, sum(view.wanted for view in views)))
+
+    return groups
+
+
+def want_view(tag: Tag, wanted: bool) -> WantView:
+    forms = only_in(tag)
+    note = f"{' or '.join(forms)} form only" if forms else None
+    return WantView(tag.key, plain_label(tag), wanted, note, icon_url(tag))
+
+
+# Status kinds whose icon (`statuses/`, the game's sprite names) is named otherwise; the rest
+# follow `icon_name`'s rules.
+ICON_NAMES = {
+    "Burn": "AoEContinuousDamage",
+    "SimpleStoneSkin": "StoneSkin",
+    "ReflectiveStoneSkin": "StoneSkin",
+    "Counterattack": "StatusCounterattack",
+    "LesserSeal": "Seal",
+    "GreaterSeal": "Seal2",
+    "NecrosisSource": "Necrosis",
+    "DuelTargetMark": "Duel",
+    "ArtifactSet_Shield": "Shield",
+    # Skill effects with a status of the same sense.
+    "IncreaseStamina": "IncreaseStamina",
+    "Revive": "ReviveOnDeath",
+    "Heal": "ContinuousHeal",
+    "PassiveBlockDebuff": "BlockDebuff",
+    "PassiveCounterattack": "StatusCounterattack",
+    "PassiveReflectDamage": "ReflectDamage",
+    "PassiveUnkillable": "Unkillable",
+}
+STAT_STATUSES = ("Attack", "Defence", "Speed", "Accuracy", "Resistance", "CriticalChance")
+STAT_STATUSES += ("CriticalDamage",)
+
+
+def icon_url(tag: Tag) -> str | None:
+    """The game's icon for a buff, debuff or effect, if it has one."""
+    return asset_url("statuses", icon_name(tag))
+
+
+def icon_name(tag: Tag) -> str:
+    """Stat buffs and debuffs are "StatusIncrease…" / "StatusReduce…"."""
+    if name := ICON_NAMES.get(tag.name):
+        return name
+
+    for prefix, sprite in (("Increase", "StatusIncrease"), ("Decrease", "StatusReduce")):
+        stat = tag.name.removeprefix(prefix)
+        if tag.name.startswith(prefix) and stat in STAT_STATUSES:
+            return sprite + stat
+
+    return tag.name
+
+
+def need_view(need: NeedCover) -> NeedView:
+    contributors = [
+        Contributor(champion_row(champion), percent(rating.score), rating.detail)
+        for champion, rating in zip(need.by, need.ratings, strict=True)
+    ]
+    return NeedView(
+        label=need.label,
+        met=need.met,
+        contributors=sorted(contributors, key=lambda c: -c.score),
+        notes=list(need.notes),
+        score=percent(need.score),
+        asks=[icon_view(tag) for tag in need.asks],
+        brought=[icon_view(tag) for tag in need.brought],
+    )
+
+
+def percent(score: float) -> int:
+    return round(score * 100)
+
+
+def icon_view(tag: Tag) -> IconView:
+    return IconView(plain_label(tag), icon_url(tag))
 
 
 def waits_on(cover: TrialCover) -> str | None:
