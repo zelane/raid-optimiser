@@ -25,11 +25,32 @@ its upload. Game tables come from the game's own data.
 - `update-static.sh`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
-  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear}.json`.
+  IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies}.json`.
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
   `tools/check_levels.py` checks its table is still in the game's metadata (`update-static.sh`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
   `tools/oracle_import.py` drive the oracle (below), now for checking only.
+- `optimiser/enemies.py`: the enemy store (`data/game/enemies.json`, types' base stats from
+  `hero_types.json`): every stage's formations, team restrictions (every champion must match;
+  `MinCount`/`MaxCount` are the team size), stat modifiers (stage-wide and per slot: a relative
+  `value` multiplies base by 1 + value, checked against the Chimera's listed HP; slot modifiers
+  give UNM clan boss its 190 SPD / 225 RES / 225 ACC), boss kinds, enemy skills, clan boss tiers,
+  the Chimera (forms in type order Ultimate/Ram/Lion/Snake, form sequence, trials with targets
+  from their hidden `StartChallenge` skills) and per-area shield caps. `enemy_stats` is stats as
+  a battle starts (no in-battle passives). `just enemies` (`optimiser/enemy_report.py`) prints it.
+  The co-op event world boss (Tainted Demon Lord) is area `CooperationEventWorldBoss`.
+- Chimera trials (`/chimera`, `optimiser/chimera.py`): one team of five that clears a whole
+  column (the part the user picks: where this rotation's mythical materials are; the capture
+  doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards only
+  count for trials cleared in the same fight). Effects only: a champion's tags are the status
+  kinds its skills place (`skills.json` `debuffs`/`buffs`, strengths merged: `status_kind`)
+  and mechanics (`effect_kinds`, `target_hp_damage`), all forms of a mythical; damage, chances,
+  turn order and gear sets aren't modelled. `trial_needs` (a `match` per trial, counts from
+  the trial's target or `rules`) is checked against the trial's own status list
+  (`check_needs`; the page warns on a mismatch). Form immunities: `BOSS_IMMUNE` minus
+  `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills). HiGHS maximises trials cleared,
+  then champion strength; each further team bars the previous one's core (members it can't
+  drop without clearing fewer).
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles

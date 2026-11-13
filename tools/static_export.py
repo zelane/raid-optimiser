@@ -2,7 +2,7 @@
 
     python3 -I tools/static_export.py static-raw.json schema/schema.json out/ [--full]
 
-Writes out/{sets,hero_types,bonuses,skills,glyphs,gear}.json (and out/static.json with --full).
+Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies}.json (and out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
 older than the game version: re-dump and re-run tools/gen_schema.py.
 """
@@ -271,10 +271,19 @@ SCALING_KINDS = {"Heal", "ApplyBuff", "Revive", "ApplyDebuff"}
 OWN_STATS = re.compile(r"(?<![A-Z_])(ATK|DEF|HP|ACC|RES|SPD)(?![A-Z_])")
 
 
-def build_skills(skills, heroes):
+# Who a status effect lands on: debuffs on these targets are the caster's own (or its team's).
+SELF_TARGETS = {"Producer", "Owner", "AllAllies", "RelationProducer"}
+TARGET_HP = re.compile(r"TRG_(?:B_|M_|CUR_)?HP(?!_PERC)\b")
+
+
+def build_skills(skills, heroes, status_names):
     """The champions' skills: name, whether it's AoE, its unconditional damage hits (formula,
     count, the skill's own DEF modifier), the damage bonus each book adds, and the formulas of
-    its other effects that scale with the caster's stats (`scaling`: kind and formula)."""
+    its other effects that scale with the caster's stats (`scaling`: kind and formula).
+    Also what it can place and do, whatever the condition or chance: `debuffs` on enemies and
+    `buffs` on its team (status effect names), every effect kind it has (`effect_kinds`:
+    Revive, TeamAttack, PassiveCounterattack, …) and whether it hits for a share of the
+    target's HP (`target_hp_damage`)."""
     wanted = {skill_id for h in heroes for f in h["forms"] for skill_id in f["skills"]}
     out = {}
     for skill_id in sorted(wanted):
@@ -297,8 +306,161 @@ def build_skills(skills, heroes):
                         for e in skill["Effects"] or []
                         if e["KindId"] in SCALING_KINDS
                         and OWN_STATS.search(e.get("MultiplierFormula") or "")],
+            **skill_kit(skill, status_names),
         }
     return out
+
+
+def skill_kit(skill, status_names):
+    debuffs, buffs = set(), set()
+    for effect in skill["Effects"] or []:
+        statuses = (effect.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or []
+        names = {status_names.get(str(s["TypeId"]), str(s["TypeId"])) for s in statuses}
+        target = (effect.get("TargetParams") or {}).get("TargetType")
+        if effect["KindId"] == "ApplyDebuff" and target not in SELF_TARGETS:
+            debuffs |= names
+        elif effect["KindId"] == "ApplyBuff":
+            buffs |= names
+    return {"debuffs": sorted(debuffs), "buffs": sorted(buffs),
+            "effect_kinds": sorted({e["KindId"] for e in skill["Effects"] or []}),
+            "target_hp_damage": any(e["KindId"] == "Damage" and TARGET_HP.search(e.get("MultiplierFormula") or "")
+                                    for e in skill["Effects"] or [])}
+
+
+GRADE_NAMES = {f"Stars{n}": n for n in range(1, 7)}
+TAGS = re.compile(r"<[^>]+>")
+COMPLETED = re.compile(r"challengeCompletedById\((\d+)\)")
+
+
+def build_enemies(data, skills):
+    """Every stage's enemy teams (types and base stats are in hero_types.json), the restrictions
+    on the player's team, the stages' stat modifiers, which types are bosses, the enemies'
+    skills (text and effects), and the boss modes' own tables: clan boss difficulties,
+    the Chimera's form sequence and trials, and per-area shield caps."""
+    areas, stage_places = build_areas(data["StageData"]["Areas"])
+    stages = {}
+    for stage in data["StageData"]["Stages"]:
+        area, region, difficulty = stage_places.get(stage["Id"], (None, None, None))
+        stages[str(stage["Id"])] = {
+            "area": area, "region": region, "difficulty": difficulty,
+            "scene": stage["SceneName"], "team_size": stage["UserHeroesCount"],
+            "conditions": [build_condition(c) for c in
+                           (stage.get("StartCondition") or {}).get("HeroConditions") or []],
+            "modifiers": [build_modifier(m) for m in stage.get("Modifiers") or []],
+            "formations": [[build_placement(p) for p in f["HeroSlotsSetup"] or []]
+                           for f in stage.get("Formations") or []],
+        }
+    enemy_types = {p["type"] for s in stages.values() for f in s["formations"] for p in f}
+    heroes = {h["Id"]: h for h in data["HeroData"]["HeroTypes"]}
+    bosses = {str(t): {"kind": heroes[t]["BossData"]["Type"],
+                       "unkillable": bool(heroes[t]["BossData"].get("IsUnkillable"))}
+              for t in sorted(enemy_types) if t in heroes and heroes[t].get("BossData")}
+    skill_ids = {s for t in enemy_types if t in heroes
+                 for f in heroes[t].get("Forms") or [] for s in f.get("SkillTypeIds") or []}
+    alliance = data["AllianceData"]
+    chimera_tiers = alliance["ChimeraTypes"]
+    trial_ids = {c["SkillTypeId"] for tier in chimera_tiers for c in tier["Challenges"]}
+    return {
+        "areas": areas,
+        "stages": stages,
+        "bosses": bosses,
+        "skills": {str(i): build_enemy_skill(skills[i]) for i in sorted(skill_ids) if i in skills},
+        "shield_caps": data["GameplayData"].get("SpecificShieldCapByArea") or {},
+        "clan_boss": [{"difficulty": b["Id"], "health": b["Health"], "type": b["HeroTypeId"],
+                       "level": b["Level"], "stages": b["StageIdByElement"]}
+                      for b in alliance["BossTypes"]],
+        "chimera": {
+            "forms": {k: v for k, v in alliance["ChimeraSequenceForms"].items()},
+            "turns_between_forms": alliance["ChimeraTurnsCountBetweenForm"],
+            "tiers": [{"difficulty": t["DifficultyId"], "health": t["Health"], "stages": t["StageIds"],
+                       "trials": [build_trial(c, skills.get(c["SkillTypeId"]), trial_ids)
+                                  for c in t["Challenges"]]}
+                      for t in chimera_tiers],
+        },
+    }
+
+
+def build_areas(raw_areas):
+    """The areas and their regions' stages by difficulty, and each stage's (area, region,
+    difficulty)."""
+    places, areas = {}, []
+    for area in raw_areas:
+        regions = []
+        for region in area.get("Regions") or []:
+            by_difficulty = region.get("StageIdsByDifficulty") or {}
+            for difficulty, ids in by_difficulty.items():
+                for stage_id in ids:
+                    places[stage_id] = (area["Id"], region["Id"], difficulty)
+            regions.append({"id": region["Id"], "name": region["Name"], "stages": by_difficulty})
+        areas.append({"id": area["Id"], "name": area["Name"],
+                      "user_level": (area.get("Condition") or {}).get("UserLevelRequired"),
+                      "regions": regions})
+    return areas, places
+
+
+def build_condition(c):
+    """Which champions a stage admits: every one must match (counts are the team size)."""
+    def listed(one, many):
+        return many or ([one] if one else None)
+
+    return {"min": c["MinCount"], "max": c["MaxCount"],
+            "factions": listed(c["Fraction"], c["Fractions"]), "roles": listed(c["Role"], c["Roles"]),
+            "rarities": listed(c["Rarity"], c["Rarities"]),
+            "affinities": listed(c["Element"], c["Elements"]), "grade": c["Grade"],
+            "race": c["Race"], "required_type": c["RequiredHeroTypeId"]}
+
+
+def build_modifier(m):
+    return {"wave": m["Round"], "stat": m["KindId"], "value": round(m["Value"], 6),
+            "absolute": m["IsAbsolute"], "boss_only": bool(m["BossOnly"])}
+
+
+def build_placement(p):
+    return {"wave": p["Round"], "slot": p["Slot"], "type": p["HeroTypeId"],
+            "grade": GRADE_NAMES[p["Grade"]], "level": p["Level"],
+            "boss": bool(p["IsHeroBoss"] or p["IsMainBoss"]),
+            "modifiers": slot_modifiers(p.get("Modifiers") or {}, p["Round"])}
+
+
+def slot_modifiers(m, wave):
+    """A slot's own modifiers (stat maps of percent and flat bonuses), as stage modifiers."""
+    return [{"wave": wave, "stat": stat, "value": round(value, 6), "absolute": absolute,
+             "boss_only": False}
+            for key, absolute in (("PercentBonus", False), ("FlatBonus", True))
+            for stat, value in (m.get(key) or {}).items() if value]
+
+
+def build_enemy_skill(skill):
+    return {"name": skill["Name"], "group": skill["Group"], "cooldown": skill["Cooldown"],
+            "description": TAGS.sub("", skill["Description"] or "").replace("\r\n", "\n"),
+            "effects": [build_effect(e) for e in skill["Effects"] or []]}
+
+
+def build_effect(e):
+    statuses = ((e.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or [])
+    effect = {"kind": e["KindId"], "target": (e.get("TargetParams") or {}).get("TargetType"),
+              "count": e["Count"], "chance": e.get("Chance"), "formula": e.get("MultiplierFormula"),
+              "condition": e.get("Condition"),
+              "statuses": [{"type": s["TypeId"], "turns": s["Duration"]} for s in statuses] or None,
+              "defence_modifier": (e.get("DamageParams") or {}).get("DefenceModifier") or None,
+              "fixed": (e.get("DamageParams") or {}).get("IsFixed") or None}
+    return {k: v for k, v in effect.items() if v is not None}
+
+
+def build_trial(challenge, skill, trial_ids):
+    """A Chimera trial: its part and level, what it asks, and its target from the trial's
+    hidden skill (damage or a count; `counter_limit`: the counter it must finish within, the
+    Chimera's turns by the text, off by one from it; `requires`: the trial done first;
+    `rules`: the conditions of its hidden skill's effects, which say what counts)."""
+    start = next((e for e in (skill or {}).get("Effects") or [] if e["KindId"] == "StartChallenge"), {})
+    params = start.get("ChallengeParams") or {}
+    requires = [int(i) for i in COMPLETED.findall(start.get("Condition") or "") if int(i) in trial_ids]
+    return {"skill": challenge["SkillTypeId"], "form": challenge["Form"], "part": challenge["Part"],
+            "level": challenge["Difficulty"], "statuses": challenge["Effects"],
+            "description": TAGS.sub("", challenge["Description"] or ""),
+            "target": params.get("TargetProgress"), "counter_limit": params.get("CounterLimit"),
+            "damage": bool(params.get("BasedOnDamage")), "requires": requires[0] if requires else None,
+            "rules": [e["Condition"] for e in (skill or {}).get("Effects") or [] if e.get("Condition")]}
 
 
 def fmt_pct(x):
@@ -352,7 +514,8 @@ def main(raw_path, schema_path, out_dir, full=False):
     skills = {s["Id"]: s for s in data["SkillData"]["SkillTypes"]}
     sets = build_sets(data["ArtifactData"], skills)
     heroes = build_hero_types(data["HeroData"])
-    json.dump(build_skills(skills, heroes), open(out / "skills.json", "w"), ensure_ascii=False)
+    status_names = schema["enums"]["StatusEffectTypeId"]
+    json.dump(build_skills(skills, heroes, status_names), open(out / "skills.json", "w"), ensure_ascii=False)
     json.dump(sets, open(out / "sets.json", "w"), indent=1, ensure_ascii=False)
     json.dump(heroes, open(out / "hero_types.json", "w"), indent=1, ensure_ascii=False)
     bonuses = build_bonuses(data, raw.get("ca") or {})
@@ -361,6 +524,8 @@ def main(raw_path, schema_path, out_dir, full=False):
     json.dump(gear, open(out / "gear.json", "w"), indent=1, ensure_ascii=False)
     glyphs = build_glyphs(data["BlackMarketData"])
     json.dump(glyphs, open(out / "glyphs.json", "w"), indent=1, ensure_ascii=False)
+    enemies = build_enemies(data, skills)
+    json.dump(enemies, open(out / "enemies.json", "w"), ensure_ascii=False)
     if full:
         json.dump(data, open(out / "static.json", "w"), ensure_ascii=False)
 

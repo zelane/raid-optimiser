@@ -9,7 +9,8 @@ once at the boundary into the shapes the stat model and solver use.
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
-- `Hit`, `Effect`, `Skill`: champion skills, as far as damage (and what else scales) goes
+- `Hit`, `Effect`, `Skill`: champion skills, as far as damage (and what else scales) and what
+  they place and do go
 - `HeroForm`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
@@ -252,6 +253,10 @@ class Effect:
 
 @dataclass(frozen=True)
 class Skill:
+    """`debuffs` (on enemies) and `buffs` (on its team) are status effect names, whatever the
+    chance or condition; `effect_kinds` every effect kind the skill has (Revive, TeamAttack,
+    PassiveCounterattack, …); `target_hp_damage`: it hits for a share of the target's HP."""
+
     id: int
     name: str
     group: str  # Active, Passive, ...
@@ -259,6 +264,10 @@ class Skill:
     hits: tuple[Hit, ...]
     book_damage: tuple[float, ...]  # per book, in order; level L has the first L-1
     scaling: tuple[Effect, ...] = ()
+    debuffs: frozenset[str] = frozenset()
+    buffs: frozenset[str] = frozenset()
+    effect_kinds: frozenset[str] = frozenset()
+    target_hp_damage: bool = False
 
 
 @dataclass(frozen=True)
@@ -522,6 +531,10 @@ def parse_skills(static: Path) -> dict[int, Skill]:
             hits=tuple(Hit(h["formula"], h["count"], h["defence_modifier"]) for h in raw["hits"]),
             book_damage=tuple(raw["book_damage"]),
             scaling=tuple(Effect(e["kind"], e["formula"]) for e in raw.get("scaling", ())),
+            debuffs=frozenset(raw["debuffs"]),
+            buffs=frozenset(raw["buffs"]),
+            effect_kinds=frozenset(raw["effect_kinds"]),
+            target_hp_damage=raw["target_hp_damage"],
         )
         for skill_id, raw in read_json(static / "skills.json").items()
     }

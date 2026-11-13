@@ -139,3 +139,8 @@ oracle-import input=oracle_out:
 # Champions (each mythical form apart) that may need a scaling exception (--all, --name X)
 exceptions *args:
     uv run python -m optimiser.accessories.scaling_report "$@"
+
+# The enemy store: areas, an area's or a stage's enemies and restrictions, the Chimera's trials
+# (just enemies area CooperationEventWorldBoss; stage 13019006 --skills; chimera --difficulty Hard)
+enemies *args:
+    uv run python -m optimiser.enemy_report "$@"

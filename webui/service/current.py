@@ -1,8 +1,9 @@
 """
 current.py - the state the pages read: the latest capture (reparsed only when the proxy
-writes a new one), the champion locks, and the roster's faction types.
+writes a new one), the game's enemies, the champion locks, and the roster's faction types.
 
 - `current_account`, `capture_mtime`, `load_for`: the account, reloaded when a new capture lands
+- `current_enemies`, `enemies_for`: the game's enemies, reloaded after a game update
 - `current_locks`: champion locks, kept in the store
 - `roster_types`: the capture's faction types (cached)
 """
@@ -12,8 +13,19 @@ from functools import lru_cache
 from optimiser.accessories.roles import ChampionType
 from optimiser.accessories.scaling import faction_types
 from optimiser.account import Account, Locks, load_account
+from optimiser.enemies import Enemies, load_enemies
 from optimiser.paths import CAPTURES, GAME, SCHEMA, STORE
 from optimiser.store import read_locks
+
+
+def current_enemies() -> Enemies:
+    """The game's enemies; reparsed only after a game update rewrites them."""
+    return enemies_for(GAME.joinpath("enemies.json").stat().st_mtime_ns)
+
+
+@lru_cache(maxsize=1)
+def enemies_for(enemies_mtime: int) -> Enemies:  # the mtime is only the cache key
+    return load_enemies(GAME)
 
 
 def current_account() -> Account:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Re-export the game's cached static data into data/game/{sets,hero_types,bonuses,skills,glyphs,gear}.json
+# Re-export the game's cached static data into data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies}.json
 # and check the level multipliers base stats are computed from are still the game's.
 # Run after a game update. Pass --full to also write the whole named static.json (~100MB).
 # If validation fails, the dump is stale: re-dump the game, then

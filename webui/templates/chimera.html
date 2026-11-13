@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tile %}
+
+{% macro member(champion, note="") %}
+  <a href="/champions/{{ champion.id }}" class="chimera-member" title="{{ champion.name }}">
+    {{ tile(champion, "small") }}
+    <span>{{ champion.name }}</span>
+    {% if note %}<small>{{ note }}</small>{% endif %}
+  </a>
+{% endmacro %}
+
+{% block title %}Chimera trials: Raid optimiser{% endblock %}
+{% block content %}
+  <h1>Chimera trials</h1>
+  <p class="lede">
+    Teams of five that can clear one column of trials (Easy, then Normal, then Hard) in all
+    three of the Chimera's forms in a single Ultra Nightmare fight: pick the column holding
+    this rotation's mythical materials. A team qualifies on the buffs, debuffs and mechanics
+    its skills can bring, against what each trial's rules check and what each form is immune
+    to. Damage isn't checked (the targets are shown), nor skill chances, turn order or gear
+    sets: the plan says who can do each trial, not that they will.
+  </p>
+
+  <form method="get" action="/chimera" class="chimera-controls">
+    <fieldset role="group">
+      {% for column in page.columns %}
+        <label class="chimera-column">
+          <input type="radio" name="column" value="{{ column }}" {% if column == page.column %}checked{% endif %} onchange="this.form.submit()">
+          {{ column }}
+        </label>
+      {% endfor %}
+    </fieldset>
+    <label>
+      Champions at
+      <select name="min_grade" onchange="this.form.submit()">
+        {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>{{ grade }}★ and up</option>{% endfor %}
+      </select>
+    </label>
+    <small>{{ page.candidates }} champions considered (the best copy of each)</small>
+  </form>
+
+  {% if page.problems %}
+    <article class="chimera-problems">
+      <strong>The trial rules no longer match the game's data</strong> (a game update?): these trials may be judged wrongly.
+      <ul>{% for problem in page.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    </article>
+  {% endif %}
+
+  {% for team in page.teams %}
+    <article class="chimera-team">
+      <header>
+        <h2>Team {{ loop.index }}</h2>
+        <strong class="{{ 'cleared-all' if team.cleared == team.total else 'cleared-some' }}">{{ team.cleared }} / {{ team.total }} trials</strong>
+      </header>
+      <div class="chimera-members">
+        {% for champion in team.core %}{{ member(champion) }}{% endfor %}
+        {% for champion in team.flexible %}{{ member(champion, "any champion") }}{% endfor %}
+      </div>
+
+      <div class="chimera-grid">
+        <span></span>
+        {% for trial in team.rows[0].trials %}<strong class="chimera-level">{{ trial.level }}</strong>{% endfor %}
+        {% for row in team.rows %}
+          <strong class="chimera-form">{{ row.form }}</strong>
+          {% for trial in row.trials %}
+            <section class="chimera-trial {{ 'met' if trial.met else 'unmet' }}">
+              <p class="chimera-trial-text">{{ trial.description }}</p>
+              <p class="chimera-target">Target {{ trial.target }}</p>
+              {% if trial.needs %}
+                <ul>
+                  {% for need in trial.needs %}
+                    <li class="{{ 'met' if need.met else 'unmet' }}">
+                      {{ need.label }}{% if need.by %}: <em>{{ need.by | join(", ") }}</em>{% else %}: <em>nobody</em>{% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="chimera-free">Nothing to bring for it.</p>
+              {% endif %}
+            </section>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </article>
+  {% else %}
+    <p>No team found: no champion at {{ page.min_grade }}★ or above brings what the first trials need.</p>
+  {% endfor %}
+{% endblock %}

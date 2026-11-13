@@ -25,7 +25,7 @@
       {%- set here = request.url.path %}
       <ul><li><a href="/" class="wordmark">Raid optimiser</a></li></ul>
       <ul class="menu">
-        {%- for path, label in [("/", "Champions"), ("/accessories", "Accessories"), ("/empower", "Empower"), ("/assumptions", "Assumptions")] %}
+        {%- for path, label in [("/", "Champions"), ("/accessories", "Accessories"), ("/empower", "Empower"), ("/chimera", "Chimera"), ("/assumptions", "Assumptions")] %}
         {%- set current = here == path or (path == "/" and here.startswith("/champions")) or (path != "/" and here.startswith(path)) %}
         <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a></li>
         {%- endfor %}

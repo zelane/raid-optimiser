@@ -5,7 +5,7 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `app`, `templates`: the FastAPI app and its Jinja templates
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`, `champion`,
   `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
-  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`: the routes
+  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`, `chimera`: the routes
 - `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
@@ -40,6 +40,7 @@ from webui.forms import (
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
 from webui.service import champions as champion_pages
+from webui.service import chimera as chimera_pages
 from webui.service import current, results, runs
 from webui.service import empower as empower_pages
 
@@ -207,6 +208,19 @@ def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
 
     page = empower_pages.empower_page(account, rarity)
     return templates.TemplateResponse(request, "empower.html", {"page": page})
+
+
+@app.get("/chimera", response_class=HTMLResponse)
+def chimera(request: Request, column: str = chimera_pages.DEFAULT_COLUMN, min_grade: int = 6):
+    if column not in chimera_pages.PARTS:
+        raise HTTPException(404, f"no {column} column: {', '.join(chimera_pages.PARTS)}")
+
+    if min_grade not in chimera_pages.GRADES:
+        raise HTTPException(404, f"rank {min_grade} isn't offered")
+
+    account = current.current_account()
+    page = chimera_pages.chimera_page(account, current.current_enemies(), column, min_grade)
+    return templates.TemplateResponse(request, "chimera.html", {"page": page})
 
 
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)

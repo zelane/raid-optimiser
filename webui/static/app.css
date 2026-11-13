@@ -388,3 +388,34 @@ button.equip-swap { width: auto; margin: 0; padding: 0.2rem 0.6rem; font-size: 0
 .empower-note { color: var(--pico-muted-color); font-size: 0.75rem; line-height: 1.2; }
 .champion-card .empower-note { display: block; text-align: center; }
 details.section > .lede { margin-top: 0; }
+
+/* Chimera trials: a team's members, then its 3×3 grid (forms down, levels across). */
+.chimera-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.5rem; margin-bottom: 1.5rem; }
+.chimera-controls fieldset { margin: 0; width: auto; }
+.chimera-controls label { margin: 0; }
+.chimera-controls select { width: auto; margin: 0 0 0 0.5rem; }
+.chimera-column { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.4rem 0.9rem; }
+.chimera-problems { border-left: 4px solid var(--pico-del-color); }
+.chimera-team > header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; }
+.chimera-team h2 { margin: 0; }
+.cleared-all { color: var(--pico-ins-color); }
+.cleared-some { color: var(--pico-del-color); }
+.chimera-members { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; margin-bottom: 1rem; }
+.chimera-member { display: flex; flex-direction: column; align-items: center; width: 6rem; text-align: center; text-decoration: none; font-size: 0.8rem; line-height: 1.2; }
+.chimera-member small { color: var(--pico-muted-color); }
+.chimera-grid { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 0.5rem; align-items: stretch; }
+.chimera-level { text-align: center; }
+.chimera-form { writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; }
+.chimera-trial { margin: 0; padding: 0.6rem 0.75rem; border-radius: var(--pico-border-radius); border: 1px solid var(--pico-muted-border-color); border-top: 3px solid var(--pico-del-color); font-size: 0.8rem; line-height: 1.3; }
+.chimera-trial.met { border-top-color: var(--pico-ins-color); }
+.chimera-trial p { margin: 0 0 0.4rem; }
+.chimera-target, .chimera-free { color: var(--pico-muted-color); }
+.chimera-trial ul { margin: 0; padding-left: 1rem; }
+.chimera-trial li { margin: 0 0 0.2rem; list-style: none; position: relative; }
+.chimera-trial li::before { position: absolute; left: -1rem; content: "✗"; color: var(--pico-del-color); }
+.chimera-trial li.met::before { content: "✓"; color: var(--pico-ins-color); }
+@media (max-width: 720px) {
+  .chimera-grid { grid-template-columns: 1fr; }
+  .chimera-grid > span, .chimera-level { display: none; }
+  .chimera-form { writing-mode: horizontal-tb; transform: none; text-align: left; margin-top: 0.5rem; }
+}
