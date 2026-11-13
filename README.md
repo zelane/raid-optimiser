@@ -1,4 +1,4 @@
-# raid-export
+# raid-optimiser
 
 Tees the HellHades Artifact Extractor's account upload (`POST /api/Account/v2`)
 through mitmproxy and decodes it to JSON with HH's own `Models.dll`.
@@ -29,7 +29,7 @@ data/                   everything that isn't code (gitignored):
 
 Run `./run-proxy.sh`, then start the extractor and game. Each account sync saves the raw
 upload as `data/captures/raw/<timestamp>.bin` and replaces `data/captures/latest/`.
-Re-decode a capture manually: `bin/raid-export data/captures/raw/<ts>.bin out/`
+Re-decode a capture manually: `bin/raid-decoder data/captures/raw/<ts>.bin out/`
 
 After an extractor update, rebuild so the decoder picks up the new models:
 `dotnet build decoder -c Release -o bin`. Use `-p:HHDir=...` or `HH_DIR=...` if the install moves.

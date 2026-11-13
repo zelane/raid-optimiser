@@ -1,5 +1,5 @@
 [project]
-name = "raid-export"
+name = "raid-optimiser"
 version = "0.1.0"
 description = "Raid account export (HH capture), game static data, and a MILP gear optimiser."
 requires-python = ">=3.13"

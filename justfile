@@ -1,4 +1,4 @@
-# raid-export tasks. `just` lists them.
+# raid-optimiser tasks. `just` lists them.
 
 set positional-arguments
 set dotenv-load

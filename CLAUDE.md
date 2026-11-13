@@ -1,4 +1,4 @@
-# raid-export
+# raid-optimiser
 
 An experimental, personal gear optimiser for Raid: Shadow Legends: cruder and faster than
 HellHades' (HH) optimiser rather than a copy of it. The user pays for HH and keeps using it;

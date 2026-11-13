@@ -5,7 +5,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <AssemblyName>raid-export</AssemblyName>
+    <AssemblyName>raid-decoder</AssemblyName>
     <RollForward>Major</RollForward>
     <!-- HellHades extractor install dir. Override: dotnet build -p:HHDir=/path/to/hh -->
     <HHDir Condition="'$(HHDir)' == ''">$(HOME)/.local/share/Steam/steamapps/compatdata/2441943673/pfx/drive_c/hh</HHDir>

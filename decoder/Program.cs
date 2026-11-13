@@ -1,8 +1,8 @@
-// raid-export: decode a captured HellHades `api/Account/v2` upload
+// raid-decoder: decode a captured HellHades `api/Account/v2` upload
 // (MessagePack + LZ4Block serialized RaidData) into readable JSON.
 //
-// usage: raid-export <capture.bin> [out-dir]
-//        raid-export --selftest [out-dir]
+// usage: raid-decoder <capture.bin> [out-dir]
+//        raid-decoder --selftest [out-dir]
 // env:   HH_DIR overrides the extractor install dir used to load HH's DLLs.
 
 using System.Reflection;
@@ -34,9 +34,9 @@ static class Entry
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: raid-export <capture.bin> [out-dir]\n" +
-                                    "       raid-export static [out.json] [static-data-file]\n" +
-                                    "       raid-export --selftest [out-dir]");
+            Console.Error.WriteLine("usage: raid-decoder <capture.bin> [out-dir]\n" +
+                                    "       raid-decoder static [out.json] [static-data-file]\n" +
+                                    "       raid-decoder --selftest [out-dir]");
             return 2;
         }
         if (!Directory.Exists(HHDir))
