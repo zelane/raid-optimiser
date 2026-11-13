@@ -65,7 +65,7 @@ def post(path: str, body: dict) -> Result[None]:
         return Err(reason_from(error))
 
     except (urllib.error.URLError, TimeoutError) as error:
-        return Err(f"the capture proxy isn't reachable ({error}); is ./run-proxy.sh running?")
+        return Err(f"the capture proxy isn't reachable ({error}); is `just proxy` running?")
 
 
 def reason_from(error: urllib.error.HTTPError) -> str:

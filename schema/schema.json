@@ -3906,6 +3906,10 @@
    "WishListSlots": {
     "name": "WishListSlots",
     "type": "List<WishListSlotsInfo>"
+   },
+   "WishlistBoostAllowedModifiers": {
+    "name": "WishlistBoostAllowedModifiers",
+    "type": "List<int>"
    }
   },
   "EffectContainerParams": {
@@ -6066,6 +6070,10 @@
    "p": {
     "name": "StatKindId",
     "type": "StatKindId"
+   },
+   "r": {
+    "name": "Rarity",
+    "type": "Nullable<HeroRarity>"
    }
   },
   "LeaderboardSeasonCondition": {
@@ -6234,6 +6242,10 @@
    "Enabled": {
     "name": "Enabled",
     "type": "bool"
+   },
+   "FirstSeasonNumber": {
+    "name": "FirstSeasonNumber",
+    "type": "long"
    },
    "FirstSeasonStartTime": {
     "name": "FirstSeasonStartTime",
@@ -6432,10 +6444,6 @@
    "MatchMakingAdditionalUIDurationSecondsUI": {
     "name": "MatchMakingAdditionalUIDurationSecondsUI",
     "type": "int"
-   },
-   "MatchMakingCatchUpEnabled": {
-    "name": "MatchMakingCatchUpEnabled",
-    "type": "bool"
    },
    "MatchMakingDurationLimitInSeconds": {
     "name": "MatchMakingDurationLimitInSeconds",
@@ -7835,6 +7843,10 @@
     "name": "CounterId",
     "type": "int"
    },
+   "p": {
+    "name": "ByProducer",
+    "type": "bool"
+   },
    "u": {
     "name": "ByUnique",
     "type": "bool"
@@ -8803,6 +8815,10 @@
    }
   },
   "StaticAcademyData": {
+   "d": {
+    "name": "Divide",
+    "type": "StaticAcademyDivideData"
+   },
    "e": {
     "name": "Empower",
     "type": "StaticAcademyEmpowerData"
@@ -8818,6 +8834,12 @@
    "u": {
     "name": "Unbind",
     "type": "StaticAcademyUnbindData"
+   }
+  },
+  "StaticAcademyDivideData": {
+   "p": {
+    "name": "Price",
+    "type": "Resources"
    }
   },
   "StaticAcademyEmpowerData": {
@@ -12220,6 +12242,7 @@
    "343": "EarlyMissionsV2",
    "344": "NoviceChampionPass",
    "345": "MissionsRedesign",
+   "346": "AlternativeForcedWizardV2",
    "40": "ExtraWizardSteps",
    "41": "ForcedWizardAndIntro",
    "42": "SoftWizard",
@@ -13044,6 +13067,7 @@
    "2002": "HeroPassSeason3",
    "2003": "HeroPassSeason4",
    "2004": "HeroPassSeason5",
+   "2005": "HeroPassSeason6",
    "3": "Season3",
    "3000": "ApprenticePass1",
    "3001": "ApprenticePass2",
@@ -14809,6 +14833,7 @@
    "141": "ConquestEvent",
    "142": "SeasonalCollectionMilestoneReward",
    "143": "PwaInstallReward",
+   "144": "GooglePlayGamesReward",
    "15": "LoyaltyProgram",
    "16": "LoadingReward",
    "17": "AllianceActivityChest",
@@ -15093,7 +15118,8 @@
    "1": "Default",
    "2": "WebOfCorrupion",
    "3": "AgronitesTheme",
-   "4": "August2026"
+   "4": "August2026",
+   "5": "Winter2026"
   },
   "ProtectionMode": {
    "0": "ProtectedFromEnemies",
@@ -15361,6 +15387,7 @@
    "2200": "PlariumTicket",
    "2300": "LiveArenaWinStreak",
    "2400": "ChampionJourney",
+   "2600": "Academy",
    "300": "AllianceKey",
    "301": "AllianceCoin",
    "400": "AutoBattleTicket",
@@ -15399,6 +15426,7 @@
    "1112": "DoubleAscend_ImmortalSoulCoin",
    "1113": "DoubleAscend_EternalSoulCoin",
    "112": "Orb_ForceMid",
+   "11200": "Academy_DivideCoin",
    "1121": "DoubleAscend_ImmortalSoulEssence",
    "1122": "DoubleAscend_EternalSoulEssence",
    "113": "Orb_ForceHigh",
@@ -16014,6 +16042,7 @@
    "10730": "Hero10730",
    "10740": "Hero10740",
    "10850": "Hero10850",
+   "10890": "Hero10890",
    "11000001": "Siege_Tier1",
    "11000002": "Siege_Tier2",
    "11000003": "Siege_Tier3",
@@ -16148,6 +16177,7 @@
    "5340": "Hero5340",
    "5350": "Hero5350",
    "5530": "Hero5530",
+   "5550": "Hero5550",
    "5590": "Hero5590",
    "5620": "Hero5620",
    "5630": "Hero5630",
@@ -16255,6 +16285,8 @@
    "9500003": "SpecialProgramChristmas2025",
    "9500004": "AprilFool2026",
    "9500005": "AugEvent26",
+   "9500006": "RSCThanksgiving1",
+   "9500007": "SpecialProgramChristmas2026",
    "9510": "Hero9510",
    "9520": "Hero9520",
    "9530": "Hero9530",
@@ -16485,6 +16517,8 @@
    "1000057": "ClubAutumnFrame",
    "1000058": "Oktoberfest2026Frame",
    "1000059": "SeasonalCollection2026",
+   "1000060": "Nov26Frame1LO",
+   "1000061": "Nov26Frame2LO",
    "11": "LeaderboardGlobalDungeonTop1",
    "12": "LeaderboardDungeonTop1",
    "13": "SiegeF7",

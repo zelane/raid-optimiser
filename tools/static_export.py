@@ -1,10 +1,11 @@
 """Turn raw game static data JSON into named, typed JSON using a dump-derived schema.
 
-    python3 -I tools/static_export.py static-raw.json schema/schema.json out/ [--full]
+    uv run python -m tools.static_export static-raw.json schema/schema.json out/ [--full]
 
-Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and out/static.json with --full).
+Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and
+out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
-older than the game version: re-dump and re-run tools/gen_schema.py.
+older than the game version: run `just schema-refresh`.
 """
 
 import json
@@ -13,10 +14,29 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import click
+
 FIXED_ONE = 2**32  # SharedModel Fixed is 32.32 fixed point
-PRIMITIVES = {"int", "uint", "long", "ulong", "short", "ushort", "byte", "sbyte",
-              "double", "float", "bool", "string", "decimal", "Int32", "Int64"}
-LIST_RE = re.compile(r"^(?:List|IReadOnlyList|IList|IEnumerable|HashSet|IReadOnlyCollection|ICollection)<(.+)>$")
+PRIMITIVES = {
+    "int",
+    "uint",
+    "long",
+    "ulong",
+    "short",
+    "ushort",
+    "byte",
+    "sbyte",
+    "double",
+    "float",
+    "bool",
+    "string",
+    "decimal",
+    "Int32",
+    "Int64",
+}
+LIST_RE = re.compile(
+    r"^(?:List|IReadOnlyList|IList|IEnumerable|HashSet|IReadOnlyCollection|ICollection)<(.+)>$"
+)
 
 
 def split_args(s):
@@ -37,8 +57,8 @@ def split_args(s):
 class Converter:
     def __init__(self, schema, strings):
         self.classes, self.enums, self.strings = schema["classes"], schema["enums"], strings
-        self.unknown_keys = Counter()   # (class, key) present in data, absent from schema
-        self.enum_misses = Counter()    # (enum, value) not in schema
+        self.unknown_keys = Counter()  # (class, key) present in data, absent from schema
+        self.enum_misses = Counter()  # (enum, value) not in schema
         self.unresolved_text = 0
 
     def conv(self, v, t):
@@ -54,8 +74,10 @@ class Converter:
         m = LIST_RE.match(t)
         if m:
             return [self.conv(x, m.group(1)) for x in v] if isinstance(v, list) else v
-        if t.startswith(("Dictionary<", "IReadOnlyDictionary<", "SortedDictionary<")) and isinstance(v, dict):
-            kt, vt = split_args(t[t.index("<") + 1:-1])
+        if t.startswith(
+            ("Dictionary<", "IReadOnlyDictionary<", "SortedDictionary<")
+        ) and isinstance(v, dict):
+            kt, vt = split_args(t[t.index("<") + 1 : -1])
             return {str(self.conv_key(k, kt)): self.conv(x, vt) for k, x in v.items()}
         short = t.split(".")[-1]
         if short in PRIMITIVES:
@@ -97,8 +119,11 @@ class Converter:
 
 
 def stat_list(bonuses):
-    return [{"stat": b["StatKindId"], "value": round(b["Value"], 6), "absolute": b["IsAbsolute"]}
-            for b in bonuses or [] if b]
+    return [
+        {"stat": b["StatKindId"], "value": round(b["Value"], 6), "absolute": b["IsAbsolute"]}
+        for b in bonuses or []
+        if b
+    ]
 
 
 IGNORE_FORMULA = re.compile(r"^\s*-\s*([\d.]+)\s*(\*\s*sameSkillCount)?\s*$")
@@ -116,9 +141,14 @@ def set_ignore_defence(bonus, skills):
         match = IGNORE_FORMULA.match(effect["MultiplierFormula"] or "")
         if not match:
             raise ValueError(f"unexpected ignore-DEF formula {effect['MultiplierFormula']!r}")
-        out.append({"skill": bonus["SkillTypeId"], "value": float(match.group(1)),
-                    "per_set": bool(match.group(2)),
-                    "aoe_only": "relatedEffectIsAoe" in (effect.get("Condition") or "")})
+        out.append(
+            {
+                "skill": bonus["SkillTypeId"],
+                "value": float(match.group(1)),
+                "per_set": bool(match.group(2)),
+                "aoe_only": "relatedEffectIsAoe" in (effect.get("Condition") or ""),
+            }
+        )
     return out
 
 
@@ -128,33 +158,66 @@ def build_sets(art, skills):
         variable = bool(s.get("SubSetInfos"))
         if variable:
             # Each sub-set lists the full bonus state at that piece count.
-            tiers = [{"pieces": u["ArtifactCount"], "stats": stat_list(u.get("StatBonuses")),
-                      "skill_bonus": u.get("SkillBonus") is not None,
-                      "ignore_defence": set_ignore_defence(u.get("SkillBonus"), skills)}
-                     for u in s["SubSetInfos"]]
+            tiers = [
+                {
+                    "pieces": u["ArtifactCount"],
+                    "stats": stat_list(u.get("StatBonuses")),
+                    "skill_bonus": u.get("SkillBonus") is not None,
+                    "ignore_defence": set_ignore_defence(u.get("SkillBonus"), skills),
+                }
+                for u in s["SubSetInfos"]
+            ]
         else:
-            stats = stat_list(([s["StatBonus"]] if s.get("StatBonus") else []) + (s.get("StatBonuses") or []))
-            tiers = [{"pieces": s["ArtifactCount"], "stats": stats, "skill_bonus": s.get("SkillBonus") is not None,
-                      "ignore_defence": set_ignore_defence(s.get("SkillBonus"), skills)}]
+            stats = stat_list(
+                ([s["StatBonus"]] if s.get("StatBonus") else []) + (s.get("StatBonuses") or [])
+            )
+            tiers = [
+                {
+                    "pieces": s["ArtifactCount"],
+                    "stats": stats,
+                    "skill_bonus": s.get("SkillBonus") is not None,
+                    "ignore_defence": set_ignore_defence(s.get("SkillBonus"), skills),
+                }
+            ]
         # Unreleased sets ship with developer placeholder strings instead of real text.
         placeholder = (s["Name"] or "").endswith("artifact set name")
-        sets.append({"id": s["ArtifactSetKindId"], "name": s["Name"], "variable": variable,
-                     "pieces": s["ArtifactCount"], "tiers": tiers, "description": s["Description"],
-                     "placeholder_text": placeholder})
+        sets.append(
+            {
+                "id": s["ArtifactSetKindId"],
+                "name": s["Name"],
+                "variable": variable,
+                "pieces": s["ArtifactCount"],
+                "tiers": tiers,
+                "description": s["Description"],
+                "placeholder_text": placeholder,
+            }
+        )
     return sets
 
 
 def build_hero_types(hero):
     out = []
     for h in hero["HeroTypes"]:
-        out.append({
-            "id": h["Id"], "name": h["Name"], "fraction": h["Fraction"], "rarity": h["Rarity"],
-            "avatar": avatar_name(h),
-            "forms": [{"element": f["Element"], "role": f["Role"],
-                       "skills": f.get("SkillTypeIds") or [],
-                       "base_stats": {k: round(v, 6) for k, v in (f.get("BaseStats") or {}).items()}}
-                      for f in h.get("Forms") or []],
-        })
+        out.append(
+            {
+                "id": h["Id"],
+                "name": h["Name"],
+                "fraction": h["Fraction"],
+                "rarity": h["Rarity"],
+                "avatar": avatar_name(h),
+                "forms": [
+                    {
+                        "element": f["Element"],
+                        "role": f["Role"],
+                        "skills": f.get("SkillTypeIds") or [],
+                        "base_stats": {
+                            k: round(v, 6) for k, v in (f.get("BaseStats") or {}).items()
+                        },
+                    }
+                    for f in h.get("Forms") or []
+                ],
+            }
+        )
     return out
 
 
@@ -189,9 +252,16 @@ def build_glyphs(market):
         g = item.get("PowerUpData")
         if not g or g["StatId"] not in STAT_KINDS:
             continue
-        glyphs.append({"stat": g["StatId"], "absolute": g["IsAbsolute"],
-                       "rank": RANKS[g["RankId"]], "rarity": g["Rarity"],
-                       "min": round(g["MinValue"], 6), "max": round(g["MaxValue"], 6)})
+        glyphs.append(
+            {
+                "stat": g["StatId"],
+                "absolute": g["IsAbsolute"],
+                "rank": RANKS[g["RankId"]],
+                "rarity": g["Rarity"],
+                "min": round(g["MinValue"], 6),
+                "max": round(g["MaxValue"], 6),
+            }
+        )
     return sorted(glyphs, key=lambda g: (g["stat"], not g["absolute"], g["rank"], g["max"]))
 
 
@@ -199,24 +269,45 @@ def build_gear(art):
     """Gear stats by level: `primary` (main stat at levels 0..max_level, by rank) and
     `ascension` (the ascension bonus at ascension levels 1..rank, ranks 4-6), each per stat
     and the slots it applies to. Rarity doesn't change either."""
+
     def tables(infos):
-        return [{"stat": i["StatKey"]["KindId"], "absolute": i["StatKey"]["IsAbsolute"],
-                 "slots": i["ApplicableKindIds"],
-                 "values": {RANKS[r]: [round(v, 6) for v in vs]
-                            for r, vs in i["ValuesByLevelByRankId"].items()}}
-                for i in infos]
-    return {"max_level": art["MaxArtifactLevel"], "primary": tables(art["PrimaryBonusInfos"]),
-            "ascension": tables(art["AscendBonusInfos"])}
+        return [
+            {
+                "stat": i["StatKey"]["KindId"],
+                "absolute": i["StatKey"]["IsAbsolute"],
+                "slots": i["ApplicableKindIds"],
+                "values": {
+                    RANKS[r]: [round(v, 6) for v in vs]
+                    for r, vs in i["ValuesByLevelByRankId"].items()
+                },
+            }
+            for i in infos
+        ]
+
+    return {
+        "max_level": art["MaxArtifactLevel"],
+        "primary": tables(art["PrimaryBonusInfos"]),
+        "ascension": tables(art["AscendBonusInfos"]),
+    }
 
 
-STAT_KINDS = {"Health", "Attack", "Defence", "Speed", "Resistance", "Accuracy",
-              "CriticalChance", "CriticalDamage"}
+STAT_KINDS = {
+    "Health",
+    "Attack",
+    "Defence",
+    "Speed",
+    "Resistance",
+    "Accuracy",
+    "CriticalChance",
+    "CriticalDamage",
+}
 
 
 def build_bonuses(data, strings):
     """Non-gear stat bonuses. Percentages apply to base stats.
 
-    great_hall[stat][level-1]: the bonus at each level (not cumulative). arena[league]: classic arena league bonus.
+    great_hall[stat][level-1]: the bonus at each level (not cumulative). arena[league]: classic
+    arena league bonus.
     relics: each type's stats unlock at opening_levels[i]; values[stat][level - opening].
     empower[rarity][level-1] and
     awakening[rarity][AwakenedGrade-1] are cumulative totals. empower_substitutes: for
@@ -227,11 +318,16 @@ def build_bonuses(data, strings):
     type has its own base stats (see base_stats_6_60.json).
     """
     village, academy = data["VillageData"], data["AcademyData"]["Empower"]
-    great_hall = {k: [{"value": round(x["Value"], 6), "absolute": x["IsAbsolute"]} for x in v]
-                  for k, v in village["CapitolBonusByStatKind"].items()}
+    great_hall = {
+        k: [{"value": round(x["Value"], 6), "absolute": x["IsAbsolute"]} for x in v]
+        for k, v in village["CapitolBonusByStatKind"].items()
+    }
     legendary = cumulative([x["Bonuses"] for x in academy["Bonuses"]])
-    empower = {"Epic": cumulative([x["Bonuses"] for x in academy["EpicBonuses"]]),
-               "Legendary": legendary, "Mythical": legendary}
+    empower = {
+        "Epic": cumulative([x["Bonuses"] for x in academy["EpicBonuses"]]),
+        "Legendary": legendary,
+        "Mythical": legendary,
+    }
     awakening = {}
     for rarity, grades in data["DoubleAscendData"]["BlessingStatsByRarity"].items():
         grades = sorted(grades, key=lambda g: g["Grade"])  # Stars1..Stars6
@@ -239,30 +335,56 @@ def build_bonuses(data, strings):
     masteries = {}
     for mid, b in data["MasteryData"]["MasteryBonusById"].items():
         name = strings.get(f"l10n:skill/name?id={mid}#static")
-        m = {"name": name, "stat": b["StatKindId"], "value": round(b["Value"], 6), "absolute": b["IsAbsolute"]}
+        m = {
+            "name": name,
+            "stat": b["StatKindId"],
+            "value": round(b["Value"], 6),
+            "absolute": b["IsAbsolute"],
+        }
         if b["StatKindId"] == -1:  # Lore of Steel: scales artifact set stat bonuses
             m = {"name": name, "set_bonus_multiplier": round(1 + b["Value"], 6)}
         masteries[mid] = m
     arena = {
-        league["Id"]: {k: {"value": round(v, 6), "absolute": False}
-                       for k, v in league["BattleBonuses"].items() if v}
+        league["Id"]: {
+            k: {"value": round(v, 6), "absolute": False}
+            for k, v in league["BattleBonuses"].items()
+            if v
+        }
         for league in data["ArenaData"]["LeagueInfos"]
     }
     relic_data = data["RelicData"]
     relics = {
         "opening_levels": relic_data["StatBonusOpeningLevels"],
-        "values": {stat: [{"value": round(v["Value"], 6), "absolute": v["IsAbsolute"]} for v in levels]
-                   for stat, levels in relic_data["StatValueByLevel"].items()},
-        "types": {str(t["Id"]): {"name": t["Name"], "stats": t["StatsBonus"] or []}
-                  for t in relic_data["RelicTypes"]},
+        "values": {
+            stat: [{"value": round(v["Value"], 6), "absolute": v["IsAbsolute"]} for v in levels]
+            for stat, levels in relic_data["StatValueByLevel"].items()
+        },
+        "types": {
+            str(t["Id"]): {"name": t["Name"], "stats": t["StatsBonus"] or []}
+            for t in relic_data["RelicTypes"]
+        },
     }
     substitutes = {str(k): v for k, v in academy["HeroRecipes"].items()}
-    return {"great_hall": great_hall, "arena": arena, "relics": relics, "empower": empower, "awakening": awakening,
-            "empower_substitutes": substitutes, "masteries": masteries}
+    return {
+        "great_hall": great_hall,
+        "arena": arena,
+        "relics": relics,
+        "empower": empower,
+        "awakening": awakening,
+        "empower_substitutes": substitutes,
+        "masteries": masteries,
+    }
 
 
-ENEMY_TARGETS = {"Target", "AllEnemies", "Boss", "EnemyWithHighestStamina", "MostInjuredEnemy",
-                 "RandomEnemy", "RandomEnemyWithMaxBuffsCount"}
+ENEMY_TARGETS = {
+    "Target",
+    "AllEnemies",
+    "Boss",
+    "EnemyWithHighestStamina",
+    "MostInjuredEnemy",
+    "RandomEnemy",
+    "RandomEnemyWithMaxBuffsCount",
+}
 
 
 # Effects other than damage whose size scales with the caster's stats: what heals, shields,
@@ -287,23 +409,41 @@ def build_effect_sources(data):
     sets = []
     for s in data["ArtifactData"]["SetInfos"]:
         tiers = [s] + (s.get("SubSetInfos") or [])
-        skills = [{"pieces": t.get("ArtifactCount") or s["ArtifactCount"], "skill": t["SkillBonus"]["SkillTypeId"]}
-                  for t in tiers if t.get("SkillBonus")]
+        skills = [
+            {
+                "pieces": t.get("ArtifactCount") or s["ArtifactCount"],
+                "skill": t["SkillBonus"]["SkillTypeId"],
+            }
+            for t in tiers
+            if t.get("SkillBonus")
+        ]
         if skills:
             sets.append({"id": s["ArtifactSetKindId"], "name": s["Name"], "skills": skills})
     relics = []
     for r in data["RelicData"]["RelicTypes"]:
-        by_faction = {CAPTURE_FACTIONS.get(f["FractionId"], f["FractionId"]): f["SkillIds"]
-                      for f in r.get("SkillIdsByFaction") or [] if f.get("SkillIds")}
-        relics.append({"id": r["Id"], "name": r["Name"], "rarity": r["Rarity"],
-                       "skills": r.get("SkillIds") or [], "by_faction": by_faction})
+        by_faction = {
+            CAPTURE_FACTIONS.get(f["FractionId"], f["FractionId"]): f["SkillIds"]
+            for f in r.get("SkillIdsByFaction") or []
+            if f.get("SkillIds")
+        }
+        relics.append(
+            {
+                "id": r["Id"],
+                "name": r["Name"],
+                "rarity": r["Rarity"],
+                "skills": r.get("SkillIds") or [],
+                "by_faction": by_faction,
+            }
+        )
     return {"sets": sets, "relics": relics}
 
 
 def source_skill_ids(sources):
-    return ({t["skill"] for s in sources["sets"] for t in s["skills"]}
-            | {i for r in sources["relics"] for i in r["skills"]}
-            | {i for r in sources["relics"] for ids in r["by_faction"].values() for i in ids})
+    return (
+        {t["skill"] for s in sources["sets"] for t in s["skills"]}
+        | {i for r in sources["relics"] for i in r["skills"]}
+        | {i for r in sources["relics"] for ids in r["by_faction"].values() for i in ids}
+    )
 
 
 def build_skills(skills, heroes, status_names, extra_ids=()):
@@ -321,22 +461,39 @@ def build_skills(skills, heroes, status_names, extra_ids=()):
         skill = skills.get(skill_id)
         if not skill:
             continue
-        hits = [e for e in skill["Effects"] or []
-                if e["KindId"] == "Damage" and not e.get("Condition")
-                and (e.get("TargetParams") or {}).get("TargetType") in ENEMY_TARGETS]
+        hits = [
+            e
+            for e in skill["Effects"] or []
+            if e["KindId"] == "Damage"
+            and not e.get("Condition")
+            and (e.get("TargetParams") or {}).get("TargetType") in ENEMY_TARGETS
+        ]
         out[str(skill_id)] = {
-            "name": skill["Name"], "group": skill["Group"], "cooldown": skill["Cooldown"],
+            "name": skill["Name"],
+            "group": skill["Group"],
+            "cooldown": skill["Cooldown"],
             "aoe": any(e["TargetParams"]["TargetType"] == "AllEnemies" for e in hits),
-            "hits": [{"formula": e["MultiplierFormula"], "count": e["Count"],
-                      "defence_modifier": round((e.get("DamageParams") or {}).get("DefenceModifier") or 0, 6)}
-                     for e in hits],
+            "hits": [
+                {
+                    "formula": e["MultiplierFormula"],
+                    "count": e["Count"],
+                    "defence_modifier": round(
+                        (e.get("DamageParams") or {}).get("DefenceModifier") or 0, 6
+                    ),
+                }
+                for e in hits
+            ],
             # One entry per book, in order (level L has the first L-1); 0 for non-damage books.
-            "book_damage": [round(b["Value"], 6) if b["SkillBonusType"] == "Attack" else 0
-                            for b in skill.get("SkillLevelBonuses") or []],
-            "scaling": [{"kind": e["KindId"], "formula": e["MultiplierFormula"]}
-                        for e in skill["Effects"] or []
-                        if e["KindId"] in SCALING_KINDS
-                        and OWN_STATS.search(e.get("MultiplierFormula") or "")],
+            "book_damage": [
+                round(b["Value"], 6) if b["SkillBonusType"] == "Attack" else 0
+                for b in skill.get("SkillLevelBonuses") or []
+            ],
+            "scaling": [
+                {"kind": e["KindId"], "formula": e["MultiplierFormula"]}
+                for e in skill["Effects"] or []
+                if e["KindId"] in SCALING_KINDS
+                and OWN_STATS.search(e.get("MultiplierFormula") or "")
+            ],
             **skill_kit(skill, status_names),
         }
     return out
@@ -353,25 +510,49 @@ def skill_kit(skill, status_names):
         names = {status_names.get(str(s["TypeId"]), str(s["TypeId"])) for s in statuses}
         target = (effect.get("TargetParams") or {}).get("TargetType")
         target_condition = (effect.get("TargetParams") or {}).get("Condition")
-        common = {"chance": effect.get("Chance"), "target": target,
-                  "on_boss": on_boss(effect.get("Condition"), target_condition)}
+        common = {
+            "chance": effect.get("Chance"),
+            "target": target,
+            "on_boss": on_boss(effect.get("Condition"), target_condition),
+        }
         if effect["KindId"] == "ApplyDebuff" and target not in SELF_TARGETS:
             debuffs |= names
         elif effect["KindId"] == "ApplyBuff":
             buffs |= names
         for s in statuses:
-            placements.append({"kind": effect["KindId"], "status": status_names.get(str(s["TypeId"]), str(s["TypeId"])),
-                               "turns": s.get("Duration"),
-                               "unresistable": s.get("ApplyMode") in ("Unresistable", "Guaranteed"), **common})
+            placements.append(
+                {
+                    "kind": effect["KindId"],
+                    "status": status_names.get(str(s["TypeId"]), str(s["TypeId"])),
+                    "turns": s.get("Duration"),
+                    "unresistable": s.get("ApplyMode") in ("Unresistable", "Guaranteed"),
+                    **common,
+                }
+            )
         if not statuses:
-            placements.append({"kind": effect["KindId"], "status": None, "turns": None,
-                               "unresistable": False, **common})
-    return {"debuffs": sorted(debuffs), "buffs": sorted(buffs), "placements": placements,
-            "books": [{"type": b["SkillBonusType"], "value": round(b["Value"], 6)}
-                      for b in skill.get("SkillLevelBonuses") or []],
-            "effect_kinds": sorted({e["KindId"] for e in skill["Effects"] or []}),
-            "target_hp_damage": any(e["KindId"] == "Damage" and TARGET_HP.search(e.get("MultiplierFormula") or "")
-                                    for e in skill["Effects"] or [])}
+            placements.append(
+                {
+                    "kind": effect["KindId"],
+                    "status": None,
+                    "turns": None,
+                    "unresistable": False,
+                    **common,
+                }
+            )
+    return {
+        "debuffs": sorted(debuffs),
+        "buffs": sorted(buffs),
+        "placements": placements,
+        "books": [
+            {"type": b["SkillBonusType"], "value": round(b["Value"], 6)}
+            for b in skill.get("SkillLevelBonuses") or []
+        ],
+        "effect_kinds": sorted({e["KindId"] for e in skill["Effects"] or []}),
+        "target_hp_damage": any(
+            e["KindId"] == "Damage" and TARGET_HP.search(e.get("MultiplierFormula") or "")
+            for e in skill["Effects"] or []
+        ),
+    }
 
 
 GRADE_NAMES = {f"Stars{n}": n for n in range(1, 7)}
@@ -380,8 +561,12 @@ COMPLETED = re.compile(r"challengeCompletedById\((\d+)\)")
 
 
 # Condition atoms that hold in a fight against a lone boss (the Chimera, clan boss, ...).
-BOSS_FACTS = {"targetIsBoss", "relationTargetIsBoss", "thereIsBossInCurrentRound",
-              "ThereIsBossInTeam(enemyTeamId)"}
+BOSS_FACTS = {
+    "targetIsBoss",
+    "relationTargetIsBoss",
+    "thereIsBossInCurrentRound",
+    "ThereIsBossInTeam(enemyTeamId)",
+}
 CONDITION_TOKEN = re.compile(r"\s*(&&|\|\||!(?!=)|\(|\)|[^&|!()]+(?:\([^()]*\))?(?:!=[^&|()]+)?)")
 
 
@@ -468,21 +653,38 @@ def build_enemies(data, skills):
     for stage in data["StageData"]["Stages"]:
         area, region, difficulty = stage_places.get(stage["Id"], (None, None, None))
         stages[str(stage["Id"])] = {
-            "area": area, "region": region, "difficulty": difficulty,
-            "scene": stage["SceneName"], "team_size": stage["UserHeroesCount"],
-            "conditions": [build_condition(c) for c in
-                           (stage.get("StartCondition") or {}).get("HeroConditions") or []],
+            "area": area,
+            "region": region,
+            "difficulty": difficulty,
+            "scene": stage["SceneName"],
+            "team_size": stage["UserHeroesCount"],
+            "conditions": [
+                build_condition(c)
+                for c in (stage.get("StartCondition") or {}).get("HeroConditions") or []
+            ],
             "modifiers": [build_modifier(m) for m in stage.get("Modifiers") or []],
-            "formations": [[build_placement(p) for p in f["HeroSlotsSetup"] or []]
-                           for f in stage.get("Formations") or []],
+            "formations": [
+                [build_placement(p) for p in f["HeroSlotsSetup"] or []]
+                for f in stage.get("Formations") or []
+            ],
         }
     enemy_types = {p["type"] for s in stages.values() for f in s["formations"] for p in f}
     heroes = {h["Id"]: h for h in data["HeroData"]["HeroTypes"]}
-    bosses = {str(t): {"kind": heroes[t]["BossData"]["Type"],
-                       "unkillable": bool(heroes[t]["BossData"].get("IsUnkillable"))}
-              for t in sorted(enemy_types) if t in heroes and heroes[t].get("BossData")}
-    skill_ids = {s for t in enemy_types if t in heroes
-                 for f in heroes[t].get("Forms") or [] for s in f.get("SkillTypeIds") or []}
+    bosses = {
+        str(t): {
+            "kind": heroes[t]["BossData"]["Type"],
+            "unkillable": bool(heroes[t]["BossData"].get("IsUnkillable")),
+        }
+        for t in sorted(enemy_types)
+        if t in heroes and heroes[t].get("BossData")
+    }
+    skill_ids = {
+        s
+        for t in enemy_types
+        if t in heroes
+        for f in heroes[t].get("Forms") or []
+        for s in f.get("SkillTypeIds") or []
+    }
     alliance = data["AllianceData"]
     chimera_tiers = alliance["ChimeraTypes"]
     trial_ids = {c["SkillTypeId"] for tier in chimera_tiers for c in tier["Challenges"]}
@@ -492,16 +694,31 @@ def build_enemies(data, skills):
         "bosses": bosses,
         "skills": {str(i): build_enemy_skill(skills[i]) for i in sorted(skill_ids) if i in skills},
         "shield_caps": data["GameplayData"].get("SpecificShieldCapByArea") or {},
-        "clan_boss": [{"difficulty": b["Id"], "health": b["Health"], "type": b["HeroTypeId"],
-                       "level": b["Level"], "stages": b["StageIdByElement"]}
-                      for b in alliance["BossTypes"]],
+        "clan_boss": [
+            {
+                "difficulty": b["Id"],
+                "health": b["Health"],
+                "type": b["HeroTypeId"],
+                "level": b["Level"],
+                "stages": b["StageIdByElement"],
+            }
+            for b in alliance["BossTypes"]
+        ],
         "chimera": {
             "forms": {k: v for k, v in alliance["ChimeraSequenceForms"].items()},
             "turns_between_forms": alliance["ChimeraTurnsCountBetweenForm"],
-            "tiers": [{"difficulty": t["DifficultyId"], "health": t["Health"], "stages": t["StageIds"],
-                       "trials": [build_trial(c, skills.get(c["SkillTypeId"]), trial_ids)
-                                  for c in t["Challenges"]]}
-                      for t in chimera_tiers],
+            "tiers": [
+                {
+                    "difficulty": t["DifficultyId"],
+                    "health": t["Health"],
+                    "stages": t["StageIds"],
+                    "trials": [
+                        build_trial(c, skills.get(c["SkillTypeId"]), trial_ids)
+                        for c in t["Challenges"]
+                    ],
+                }
+                for t in chimera_tiers
+            ],
         },
     }
 
@@ -518,58 +735,97 @@ def build_areas(raw_areas):
                 for stage_id in ids:
                     places[stage_id] = (area["Id"], region["Id"], difficulty)
             regions.append({"id": region["Id"], "name": region["Name"], "stages": by_difficulty})
-        areas.append({"id": area["Id"], "name": area["Name"],
-                      "user_level": (area.get("Condition") or {}).get("UserLevelRequired"),
-                      "regions": regions})
+        areas.append(
+            {
+                "id": area["Id"],
+                "name": area["Name"],
+                "user_level": (area.get("Condition") or {}).get("UserLevelRequired"),
+                "regions": regions,
+            }
+        )
     return areas, places
 
 
 def build_condition(c):
     """Which champions a stage admits: every one must match (counts are the team size)."""
+
     def listed(one, many):
         return many or ([one] if one else None)
 
-    return {"min": c["MinCount"], "max": c["MaxCount"],
-            "factions": listed(c["Fraction"], c["Fractions"]), "roles": listed(c["Role"], c["Roles"]),
-            "rarities": listed(c["Rarity"], c["Rarities"]),
-            "affinities": listed(c["Element"], c["Elements"]), "grade": c["Grade"],
-            "race": c["Race"], "required_type": c["RequiredHeroTypeId"]}
+    return {
+        "min": c["MinCount"],
+        "max": c["MaxCount"],
+        "factions": listed(c["Fraction"], c["Fractions"]),
+        "roles": listed(c["Role"], c["Roles"]),
+        "rarities": listed(c["Rarity"], c["Rarities"]),
+        "affinities": listed(c["Element"], c["Elements"]),
+        "grade": c["Grade"],
+        "race": c["Race"],
+        "required_type": c["RequiredHeroTypeId"],
+    }
 
 
 def build_modifier(m):
-    return {"wave": m["Round"], "stat": m["KindId"], "value": round(m["Value"], 6),
-            "absolute": m["IsAbsolute"], "boss_only": bool(m["BossOnly"])}
+    return {
+        "wave": m["Round"],
+        "stat": m["KindId"],
+        "value": round(m["Value"], 6),
+        "absolute": m["IsAbsolute"],
+        "boss_only": bool(m["BossOnly"]),
+    }
 
 
 def build_placement(p):
-    return {"wave": p["Round"], "slot": p["Slot"], "type": p["HeroTypeId"],
-            "grade": GRADE_NAMES[p["Grade"]], "level": p["Level"],
-            "boss": bool(p["IsHeroBoss"] or p["IsMainBoss"]),
-            "modifiers": slot_modifiers(p.get("Modifiers") or {}, p["Round"])}
+    return {
+        "wave": p["Round"],
+        "slot": p["Slot"],
+        "type": p["HeroTypeId"],
+        "grade": GRADE_NAMES[p["Grade"]],
+        "level": p["Level"],
+        "boss": bool(p["IsHeroBoss"] or p["IsMainBoss"]),
+        "modifiers": slot_modifiers(p.get("Modifiers") or {}, p["Round"]),
+    }
 
 
 def slot_modifiers(m, wave):
     """A slot's own modifiers (stat maps of percent and flat bonuses), as stage modifiers."""
-    return [{"wave": wave, "stat": stat, "value": round(value, 6), "absolute": absolute,
-             "boss_only": False}
-            for key, absolute in (("PercentBonus", False), ("FlatBonus", True))
-            for stat, value in (m.get(key) or {}).items() if value]
+    return [
+        {
+            "wave": wave,
+            "stat": stat,
+            "value": round(value, 6),
+            "absolute": absolute,
+            "boss_only": False,
+        }
+        for key, absolute in (("PercentBonus", False), ("FlatBonus", True))
+        for stat, value in (m.get(key) or {}).items()
+        if value
+    ]
 
 
 def build_enemy_skill(skill):
-    return {"name": skill["Name"], "group": skill["Group"], "cooldown": skill["Cooldown"],
-            "description": TAGS.sub("", skill["Description"] or "").replace("\r\n", "\n"),
-            "effects": [build_effect(e) for e in skill["Effects"] or []]}
+    return {
+        "name": skill["Name"],
+        "group": skill["Group"],
+        "cooldown": skill["Cooldown"],
+        "description": TAGS.sub("", skill["Description"] or "").replace("\r\n", "\n"),
+        "effects": [build_effect(e) for e in skill["Effects"] or []],
+    }
 
 
 def build_effect(e):
-    statuses = ((e.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or [])
-    effect = {"kind": e["KindId"], "target": (e.get("TargetParams") or {}).get("TargetType"),
-              "count": e["Count"], "chance": e.get("Chance"), "formula": e.get("MultiplierFormula"),
-              "condition": e.get("Condition"),
-              "statuses": [{"type": s["TypeId"], "turns": s["Duration"]} for s in statuses] or None,
-              "defence_modifier": (e.get("DamageParams") or {}).get("DefenceModifier") or None,
-              "fixed": (e.get("DamageParams") or {}).get("IsFixed") or None}
+    statuses = (e.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or []
+    effect = {
+        "kind": e["KindId"],
+        "target": (e.get("TargetParams") or {}).get("TargetType"),
+        "count": e["Count"],
+        "chance": e.get("Chance"),
+        "formula": e.get("MultiplierFormula"),
+        "condition": e.get("Condition"),
+        "statuses": [{"type": s["TypeId"], "turns": s["Duration"]} for s in statuses] or None,
+        "defence_modifier": (e.get("DamageParams") or {}).get("DefenceModifier") or None,
+        "fixed": (e.get("DamageParams") or {}).get("IsFixed") or None,
+    }
     return {k: v for k, v in effect.items() if v is not None}
 
 
@@ -578,15 +834,26 @@ def build_trial(challenge, skill, trial_ids):
     hidden skill (damage or a count; `counter_limit`: the counter it must finish within, the
     Chimera's turns by the text, off by one from it; `requires`: the trial done first;
     `rules`: the conditions of its hidden skill's effects, which say what counts)."""
-    start = next((e for e in (skill or {}).get("Effects") or [] if e["KindId"] == "StartChallenge"), {})
+    start = next(
+        (e for e in (skill or {}).get("Effects") or [] if e["KindId"] == "StartChallenge"), {}
+    )
     params = start.get("ChallengeParams") or {}
-    requires = [int(i) for i in COMPLETED.findall(start.get("Condition") or "") if int(i) in trial_ids]
-    return {"skill": challenge["SkillTypeId"], "form": challenge["Form"], "part": challenge["Part"],
-            "level": challenge["Difficulty"], "statuses": challenge["Effects"],
-            "description": TAGS.sub("", challenge["Description"] or ""),
-            "target": params.get("TargetProgress"), "counter_limit": params.get("CounterLimit"),
-            "damage": bool(params.get("BasedOnDamage")), "requires": requires[0] if requires else None,
-            "rules": [e["Condition"] for e in (skill or {}).get("Effects") or [] if e.get("Condition")]}
+    requires = [
+        int(i) for i in COMPLETED.findall(start.get("Condition") or "") if int(i) in trial_ids
+    ]
+    return {
+        "skill": challenge["SkillTypeId"],
+        "form": challenge["Form"],
+        "part": challenge["Part"],
+        "level": challenge["Difficulty"],
+        "statuses": challenge["Effects"],
+        "description": TAGS.sub("", challenge["Description"] or ""),
+        "target": params.get("TargetProgress"),
+        "counter_limit": params.get("CounterLimit"),
+        "damage": bool(params.get("BasedOnDamage")),
+        "requires": requires[0] if requires else None,
+        "rules": [e["Condition"] for e in (skill or {}).get("Effects") or [] if e.get("Condition")],
+    }
 
 
 def fmt_pct(x):
@@ -621,14 +888,26 @@ def validate(sets, heroes, conv):
         errors.append(f"{no_stats}/{len(playable)} hero types have no base HP")
     # Unknown keys in the records we read mean their layout changed: fail. New keys in
     # the container classes (new sections/fields we don't use) only warrant a warning.
-    strict = {"ArtifactSetInfo", "ArtifactSubSetInfo", "StatBonus", "HeroType", "HeroForm", "BattleStats"}
+    strict = {
+        "ArtifactSetInfo",
+        "ArtifactSubSetInfo",
+        "StatBonus",
+        "HeroType",
+        "HeroForm",
+        "BattleStats",
+    }
     drift = {f"{c}.{k}": n for (c, k), n in conv.unknown_keys.items() if c in strict}
     if drift:
         errors.append(f"keys missing from schema in records we read: {drift}")
     return errors
 
 
-def main(raw_path, schema_path, out_dir, full=False):
+@click.command(help=__doc__)
+@click.argument("raw_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("schema_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("out_dir", type=click.Path(file_okay=False))
+@click.option("--full", is_flag=True, help="Also write the whole named static.json (~100MB).")
+def main(raw_path: str, schema_path: str, out_dir: str, full: bool) -> None:
     raw = json.load(open(raw_path))
     schema = json.load(open(schema_path))
     conv = Converter(schema, raw.get("ca") or {})
@@ -662,7 +941,7 @@ def main(raw_path, schema_path, out_dir, full=False):
     if conv.unknown_keys:
         top = ", ".join(f"{c}.{k}" for (c, k), _ in conv.unknown_keys.most_common(8))
         print(f"note: {len(conv.unknown_keys)} keys not in schema (kept as '?key'), e.g. {top}")
-        print("      (the dump predates this game version; re-dump + tools/gen_schema.py to refresh)")
+        print("      (the dump predates this game version: just schema-refresh)")
     for s in sets:
         if s["placeholder_text"]:
             print(f"note: set {s['id']} has placeholder text (unreleased?)")
@@ -672,9 +951,8 @@ def main(raw_path, schema_path, out_dir, full=False):
     errors = validate(sets, heroes, conv)
     for e in errors:
         print(f"VALIDATION: {e}", file=sys.stderr)
-    return 1 if errors else 0
+    sys.exit(1 if errors else 0)
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if a != "--full"]
-    sys.exit(main(*args, full="--full" in sys.argv))
+    main()

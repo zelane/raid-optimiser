@@ -1,6 +1,6 @@
 """Write the request file for raider's base-stat oracle.
 
-    python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-request.txt
+    uv run python -m tools.oracle_request data/game/hero_types.json /tmp/raider-oracle-request.txt
 
 Lines are "type_id grade level form". Requests every hero type at 6* L60 (each
 metamorph form), plus the full grade x level grid for one type per rarity so the
@@ -8,12 +8,16 @@ scaling curve can be fitted and checked.
 """
 
 import json
-import sys
+
+import click
 
 MAX_FORMS = 2  # HeroMetamorphForm has First=0, Second=1
 
 
-def main(types_path, out_path):
+@click.command(help=__doc__)
+@click.argument("types_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("out_path", type=click.Path(dir_okay=False))
+def main(types_path: str, out_path: str) -> None:
     types = [t for t in json.load(open(types_path)) if t["forms"]]
     lines = []
     for t in types:
@@ -36,4 +40,4 @@ def main(types_path, out_path):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    main()

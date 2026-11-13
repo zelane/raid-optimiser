@@ -7,8 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>raid-decoder</AssemblyName>
     <RollForward>Major</RollForward>
-    <!-- HellHades extractor install dir. Override: dotnet build -p:HHDir=/path/to/hh -->
-    <HHDir Condition="'$(HHDir)' == ''">$(HOME)/.local/share/Steam/steamapps/compatdata/2441943673/pfx/drive_c/hh</HHDir>
+    <!-- HellHades extractor install dir: HH_DIR, which just exports (or -p:HHDir=/path/to/hh) -->
+    <HHDir Condition="'$(HHDir)' == ''">$(HH_DIR)</HHDir>
   </PropertyGroup>
 
   <!-- Compile against HH's own models + their exact MessagePack build.

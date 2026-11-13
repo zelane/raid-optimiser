@@ -6,10 +6,11 @@ through mitmproxy and decodes it to JSON with HH's own `Models.dll`.
 ```
 capture/hh_capture.py   mitmproxy addon: saves upload -> data/captures/raw/<ts>.bin, runs decoder
 decoder/                C# decoder (references DLLs in the HH install dir)
-run-proxy.sh            starts mitmdump on 127.0.0.1:8080, MITMs only *.hellhades.com
+tools/                  the game-data, asset, schema, CA and HH-patch tools (python -m tools.<name>)
+justfile                every task (`just` lists them); the only place with machine paths
 data/                   everything that isn't code (gitignored):
   captures/latest/      newest export: account.json, champions.json, artifacts.json, set_ids.json
-  game/                 the game's tables (update-static.sh)
+  game/                 the game's tables (just static)
   dump/<version>/       IL2CPP dump of the installed game (just dump)
   state/                the optimiser's store (locks, assumptions, runs)
   cache/                the decoder's hero-type list
@@ -17,9 +18,10 @@ data/                   everything that isn't code (gitignored):
 
 ## One-time setup
 
-1. `just configure` (paths into `.env`), then `just ca`: creates mitmproxy's CA in
-   `~/.mitmproxy/` and adds it to the prefix's user root store (`tools/wine_trust_ca.py`;
-   close the game and the extractor first). Trusting it on the host (`trust anchor`) isn't
+1. `just install`, with the game and the extractor closed: asks for paths (into `.env`, or
+   `just configure` later), creates mitmproxy's CA in `~/.mitmproxy/` and adds it to the
+   prefix's user root store (`just ca`, `tools/wine_trust_ca.py`; only adding it needs Wine
+   stopped), then runs `just update`. Trusting it on the host (`trust anchor`) isn't
    enough under umu: Proton runs in the Steam Linux Runtime, whose Wine syncs its machine root
    store from the runtime's certificates. Keep `~/.mitmproxy/` private while it's trusted.
 2. Steam → extractor shortcut → Properties → Launch options:
@@ -27,16 +29,18 @@ data/                   everything that isn't code (gitignored):
 
 ## Use
 
-Run `./run-proxy.sh`, then start the extractor and game. Each account sync saves the raw
+Run `just proxy`, then start the extractor and game. Each account sync saves the raw
 upload as `data/captures/raw/<timestamp>.bin` and replaces `data/captures/latest/`.
 Re-decode a capture manually: `bin/raid-decoder data/captures/raw/<ts>.bin out/`
 
-After an extractor update, rebuild so the decoder picks up the new models:
-`dotnet build decoder -c Release -o bin`. Use `-p:HHDir=...` or `HH_DIR=...` if the install moves.
+After a pull, a game update or an extractor update, run `just update` (Raid can stay open): it
+syncs Python deps, rebuilds the decoder so it picks up the extractor's models, re-applies the HH
+patch, re-exports the game data and re-extracts the assets. Restart the extractor afterwards if
+the decoder or the patch changed. Set `HH_DIR` in `.env` if the extractor install moves.
 
 ## Game static data (sets, hero types)
 
-`./update-static.sh` decodes the game's own cache
+`just static` decodes the game's own cache
 (`AppData/LocalLow/Plarium/Raid_ Shadow Legends/static-data/<version>/<hash>`, MessagePack +
 Lz4BlockArray) and writes:
 
@@ -45,7 +49,9 @@ Lz4BlockArray) and writes:
 - `data/game/hero_types.json` – names, faction, rarity, and per-form element/role/unscaled base stats
 
 Key names and types come from `schema/schema.json`, generated from an IL2CPP dump:
-`just dump` (Il2CppDumper over the installed game, offline), then `just schema`.
+`just dump` (Il2CppDumper over the installed game, offline), then `just schema`;
+`just schema-refresh` does both and re-exports. Run it when the export says the dump predates
+the game version.
 The export validates itself (e.g. set bonuses must match the in-game description text) and
 exits non-zero if the schema no longer fits; notes about unknown keys elsewhere are harmless.
 
@@ -53,7 +59,7 @@ exits non-zero if the schema no longer fits; notes about unknown keys elsewhere 
 
 Static data holds unscaled stats; the rank/level scaling lives in game code
 (`BattleStats.CalcValue`), which `optimiser/levels.py` reproduces from its disassembly,
-with the game's multiplier table. `update-static.sh` checks the table is still in the game's
+with the game's multiplier table. `just static` checks the table is still in the game's
 metadata (`tools/check_levels.py`); if a game update changes it, re-dump and read it again.
 
 ### Checking against the game (raider oracle, throwaway account only)
@@ -62,9 +68,9 @@ metadata (`tools/check_levels.py`); if a game update changes it, re-dump and rea
 (never added to the account) for each line of `/tmp/raider-oracle-request.txt`:
 
 ```
-python3 -I tools/oracle_request.py data/game/hero_types.json /tmp/raider-oracle-request.txt
+just oracle-request
 (cd ~/repo/raider && ./run.sh)          # game running + logged in in ~/tmp/inject-test
-python3 -I tools/oracle_import.py /tmp/raider-oracle.json data/game/hero_types.json data/game/
+just oracle-import
 ```
 
 - `data/game/base_stats_6_60.json`: exact base stats at 6* L60 for every type/form;
@@ -75,7 +81,7 @@ An optional 5th request column sets the empower level and adds the game's `CalcE
 
 ## Non-gear bonuses
 
-`./update-static.sh` also writes `data/game/bonuses.json` from the game data. Percentages apply
+`just static` also writes `data/game/bonuses.json` from the game data. Percentages apply
 to base stats:
 
 - `great_hall[stat][level-1]`: bonus per level (max: +20% HP/ATK/DEF, +25% C.DMG, +80 ACC/RES);
@@ -112,7 +118,7 @@ Not modelled: blessings, faction-guardian bonuses.
 
 ## Web UI
 
-`uv run python -m webui`, then http://127.0.0.1:8000: search a champion, set targets, view
+`just web`, then http://127.0.0.1:8000: search a champion, set targets, view
 builds with every piece's full detail (slot, set, rank, rarity, level, main stat, substats with
 glyphs and rolls, ascension, faction lock, who wears it now, artifact id). The account reloads
 whenever the proxy writes a new capture.
@@ -120,7 +126,7 @@ whenever the proxy writes a new capture.
 Layers: `optimiser/` (model and solver) <- `webui/service/` (framework-free view models, a
 module per page, ready to serve as JSON for a Vue front end) <- `webui/forms.py` (form -> `Request`) <-
 `webui/app.py` + `templates/` (FastAPI, Jinja, htmx, Pico CSS). Icons and portraits come
-from the game's own Unity bundles: `uv run --group assets python -I tools/extract_assets.py`
+from the game's own Unity bundles: `just assets` (`tools/extract_assets.py`)
 writes `webui/static/assets/{portraits,sets,pieces}/` (newest bundle version wins; rerun after
 a game update). Anything missing falls back to text.
 

@@ -1,6 +1,6 @@
 """Turn raider's base-stat oracle output into tables for the optimiser.
 
-    python3 -I tools/oracle_import.py /tmp/raider-oracle.json data/game/hero_types.json data/game/
+    uv run python -m tools.oracle_import /tmp/raider-oracle.json data/game/hero_types.json data/game
 
 Writes:
   base_stats_6_60.json  {type_id: [stats per form]} exact in-game base stats at 6* L60
@@ -11,12 +11,17 @@ Stats use the game's units (crit as fractions, e.g. 0.15).
 
 import json
 import statistics
-import sys
 from collections import defaultdict
 from pathlib import Path
 
+import click
 
-def main(oracle_path, types_path, out_dir):
+
+@click.command(help=__doc__)
+@click.argument("oracle_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("types_path", type=click.Path(exists=True, dir_okay=False))
+@click.argument("out_dir", type=click.Path(file_okay=False))
+def main(oracle_path: str, types_path: str, out_dir: str) -> None:
     rows = json.load(open(oracle_path))["rows"]
     types = {t["id"]: t for t in json.load(open(types_path))}
     out = Path(out_dir)
@@ -38,7 +43,7 @@ def main(oracle_path, types_path, out_dir):
     table = defaultdict(dict)
     worst = 0.0
     for (g, lvl), ms in sorted(curve.items()):
-        if len(ms) < 3:   # only the 6* L60 point has thousands; grid points have ~12
+        if len(ms) < 3:  # only the 6* L60 point has thousands; grid points have ~12
             continue
         med = statistics.median(ms)
         table[g][lvl] = round(med, 5)
@@ -46,9 +51,11 @@ def main(oracle_path, types_path, out_dir):
             worst = max(worst, max(abs(m / med - 1) for m in ms))
     json.dump(table, open(out / "level_curve.json", "w"), indent=1)
     print(f"{len(base)} types at 6*60 -> {out / 'base_stats_6_60.json'}")
-    print(f"{sum(len(v) for v in table.values())} grade/level points -> {out / 'level_curve.json'} "
-          f"(max deviation across sample types {worst:.2%})")
+    print(
+        f"{sum(len(v) for v in table.values())} grade/level points -> {out / 'level_curve.json'} "
+        f"(max deviation across sample types {worst:.2%})"
+    )
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    main()

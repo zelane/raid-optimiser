@@ -5,14 +5,15 @@ Extracts, for every type reachable from the root `StaticData` class:
   - enum value -> name tables
 so the raw static-data JSON can be renamed/typed by static_export.py.
 
-Re-run after re-dumping the game:
-    python3 -I tools/gen_schema.py ~/repo/raider/dump/dump.cs schema/schema.json
+Re-run after re-dumping the game (`just schema`, or `just schema-refresh` for all of it):
+    uv run python -m tools.gen_schema data/dump/<version>/dump.cs schema/schema.json
 """
 
 import json
 import re
-import sys
 from collections import defaultdict
+
+import click
 
 NS_RE = re.compile(r"^// Namespace: ?(.*)$")
 TYPE_RE = re.compile(
@@ -40,9 +41,14 @@ def parse(path):
             m = TYPE_RE.match(line)
             if m:
                 kind, name, bases = m.groups()
-                cur = {"kind": kind, "name": name, "ns": ns,
-                       "bases": [b.strip() for b in (bases or "").split(",") if b.strip()],
-                       "fields": [], "values": {}}
+                cur = {
+                    "kind": kind,
+                    "name": name,
+                    "ns": ns,
+                    "bases": [b.strip() for b in (bases or "").split(",") if b.strip()],
+                    "fields": [],
+                    "values": {},
+                }
                 types[name.split(".")[-1]].append(cur)
                 key = None
                 continue
@@ -68,8 +74,14 @@ def parse(path):
 
 def pick(cands):
     """Several types can share a short name; prefer serializable SharedModel ones."""
+
     def score(t):
-        return (bool(t["fields"]) or bool(t["values"]), t["ns"].startswith("SharedModel"), len(t["fields"]))
+        return (
+            bool(t["fields"]) or bool(t["values"]),
+            t["ns"].startswith("SharedModel"),
+            len(t["fields"]),
+        )
+
     return max(cands, key=score)
 
 
@@ -80,7 +92,10 @@ def referenced(type_str):
     return [t.split(".")[-1] for t in GENERIC_RE.findall(type_str)]
 
 
-def main(dump, out):
+@click.command(help=__doc__)
+@click.argument("dump", type=click.Path(exists=True, dir_okay=False))
+@click.argument("out", type=click.Path(dir_okay=False))
+def main(dump: str, out: str) -> None:
     types = parse(dump)
     schema = {"classes": {}, "enums": {}}
     todo, seen = ["StaticData"], set()
@@ -110,4 +125,4 @@ def main(dump, out):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main()

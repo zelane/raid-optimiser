@@ -10,7 +10,7 @@ its upload. Game tables come from the game's own data.
 - `data/` (gitignored): everything that isn't code. `captures/` (the capture), `game/` (the
   game's tables), `state/` (the store), `cache/` (the decoder's hero-type list);
   `optimiser/paths.py` names them. `schema/` (tracked) stays at the top.
-- `capture/hh_capture.py` + `run-proxy.sh`: mitmproxy tees the HH extractor's upload
+- `capture/hh_capture.py` (`just proxy`): mitmproxy tees the HH extractor's upload
   (`POST /api/Account/v2`, MessagePack + LZ4Block `RaidData`). `decoder/` (C#, references HH's
   DLLs) writes `data/captures/latest/{account,champions,artifacts,set_ids}.json`.
 - In game: the same addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
@@ -22,12 +22,12 @@ its upload. Game tables come from the game's own data.
   `/sell` (`{"artifact_ids"}`, `SellArtifacts(int[])`) only selects the pieces in the game's
   sell screen; the user confirms the sale in game. Only the accessories page sends it, and
   only pieces its current plan sells (`forms.parse_sell`).
-- `update-static.sh`: decodes the game's cached static data
+- `just static`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
   IL2CPP dump, `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
-  `tools/check_levels.py` checks its table is still in the game's metadata (`update-static.sh`)
+  `tools/check_levels.py` checks its table is still in the game's metadata (`just static`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
   `tools/oracle_import.py` drive the oracle (below), now for checking only.
 - `optimiser/enemies.py`: the enemy store (`data/game/enemies.json`, types' base stats from
@@ -151,17 +151,19 @@ its upload. Game tables come from the game's own data.
 
 ## Commands
 
-The `justfile` wraps these (`just` lists recipes: `proxy`, `static`, `web`,
-`web-restart`, `assets`, `check`, `dump`, `schema`, `check-levels`, …; `configure` and
-`install` set a machine up, paths in `.env`).
+Use the `justfile` (`just` lists every recipe). It is the only place that knows machine paths
+(`.env` overrides its defaults) and passes them to the tools as arguments; it exports
+`RAID_PREFIX` and `HH_DIR` for the decoder.
 
 ```
-./run-proxy.sh                                   # capture (extractor + game running)
-./update-static.sh                               # after a game update
-uv run python -m webui                           # http://127.0.0.1:8000
-uv run --group assets python -I tools/extract_assets.py
-uv run --group dev black optimiser webui && uv run --group dev ruff check optimiser webui
-uv run --project ~/repo/python-style python-style optimiser webui   # house style checker
+just install          # set a machine up (paths, mitmproxy's CA, then update)
+just update           # after a pull, game update or HH update: deps, decoder, HH patch, static, assets
+just proxy            # capture (extractor + game running)
+just static           # re-export the game's tables (part of update)
+just schema-refresh   # when the export says the dump predates the game: dump, schema, static
+just web              # http://127.0.0.1:8000 (web-restart, web-stop)
+just assets           # portraits and icons from the game's bundles (part of update)
+just check            # black + ruff over all Python, then the house style checker
 ```
 
 The web server reloads itself when Python under `optimiser/` or `webui/` changes
@@ -173,7 +175,10 @@ that also matches your own shell command.
 Follow `~/repo/python-style` (rules, examples, checker): module docstring maps that name what
 the module defines, workflow functions, frozen dataclasses, narrowable unions + `match`
 over flags, `Result`-style returns for reportable failures, blank lines around blocks. ruff
-and black at line length 100. `tools/*.py` are scripts, outside the style check.
+and black at line length 100, over `optimiser webui capture tools` (`just check`). `tools/` is a
+package of click commands run as `uv run python -m tools.<name>`: paths come in as arguments,
+never hard-coded, and the project's own paths from `optimiser.paths`. `capture/hh_capture.py`
+runs inside mitmproxy (`uv run --group capture`), so it stays standalone.
 Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 
 ## Stat model (verified exact against the game)

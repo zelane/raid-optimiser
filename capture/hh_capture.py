@@ -53,6 +53,23 @@ MAX_SELL = 16384
 RESULT_TIMEOUT = 30.0
 
 
+def _fsync(path: Path) -> None:
+    """Flush a file or directory to disk, so a crash can't leave it empty after a rename."""
+    fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _write_durable(path: Path, data: bytes) -> None:
+    with open(path, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    _fsync(path.parent)
+
+
 class HHCapture:
     def __init__(self) -> None:
         self._pending: Path | None = None
@@ -70,7 +87,7 @@ class HHCapture:
         raw_dir.mkdir(parents=True, exist_ok=True)
         body = req.raw_content or b""
         raw = raw_dir / f"{datetime.now():%Y%m%d-%H%M%S-%f}.bin"
-        raw.write_bytes(body)
+        _write_durable(raw, body)
         for old in sorted(raw_dir.glob("*.bin"))[:-KEEP_RAW]:
             old.unlink(missing_ok=True)
         logging.info(f"[hh] captured account upload: {raw.name} ({len(body)} bytes)")
@@ -102,6 +119,11 @@ class HHCapture:
             logging.error(f"[hh] decode failed for {raw.name}:\n{out}")
             shutil.rmtree(tmp, ignore_errors=True)
             return
+        # Flush the export before swapping it in: on ext4 a crash shortly after the rename
+        # can otherwise leave latest/*.json at 0 bytes, replacing the last good export.
+        for f in tmp.iterdir():
+            _fsync(f)
+        _fsync(tmp)
         # Swap in the new export; `latest` is a symlink in older layouts.
         shutil.rmtree(old, ignore_errors=True)
         if latest.is_symlink():
@@ -109,6 +131,7 @@ class HHCapture:
         elif latest.exists():
             latest.rename(old)
         tmp.rename(latest)
+        _fsync(CAPTURES)
         shutil.rmtree(old, ignore_errors=True)
         logging.info(f"[hh] {out.splitlines()[-1] if out else 'decoded'}")
 

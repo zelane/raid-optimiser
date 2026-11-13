@@ -1,7 +1,7 @@
 """
 extract_assets.py - icons and portraits from the game's Unity bundles, for the web UI.
 
-    uv run --group assets python -I tools/extract_assets.py
+    uv run --group assets python -m tools.extract_assets <game install>   # just assets
 
 Writes webui/static/assets/:
   portraits/<type id with the ascension digit 0>.png  (HeroAvatars, HeroAvatarsLocal,
@@ -29,32 +29,25 @@ each family the newest version wins. Set sprites are named after the game's set 
 display names, HH's names or an old name in `ALIASES`; a sprite that is a prefix of exactly
 one game set name matches it too. Anything unmatched is listed, and the UI shows text instead.
 
-- `GAME`, `OUT`, `TABLES`, `CAPTURES`, `SLOTS`, `ALIASES`: where things are, and the names the sprites use
+- `OUT`, `SLOTS`, `ALIASES`: where the icons go, and the names the sprites use (the game install
+  is an argument; the tables and the capture are `optimiser.paths`')
 - `main`: the workflow
 - `bundles`, `set_keys`, `match_set`, `save`: its steps
 """
 
 import json
-import os
 import re
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
+import click
 import UnityPy
 
-ROOT = Path(__file__).resolve().parents[1]
-PREFIX = Path(
-    os.environ.get(
-        "RAID_PREFIX", Path.home() / ".local/share/Steam/steamapps/compatdata/2441943673/pfx"
-    )
-)
-GAME = (
-    PREFIX / "drive_c/users/steamuser/AppData/Local/PlariumPlay/StandAloneApps/raid-shadow-legends"
-)
+from optimiser.paths import CAPTURES, ROOT, SCHEMA
+from optimiser.paths import GAME as TABLES
+
 OUT = ROOT / "webui" / "static" / "assets"
-TABLES = ROOT / "data" / "game"  # the game's tables (update-static.sh)
-CAPTURES = ROOT / "data" / "captures" / "latest"
 # Sprite slot suffix -> the optimiser's slot name (`Slot` member, lower case).
 SLOTS = {
     "Weapon": "weapon",
@@ -100,7 +93,10 @@ PLACEHOLDER_PORTRAIT = re.compile(r"(\d+)(?:_?temp|_avatar)")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
 
-def main() -> None:
+@click.command(help=__doc__)
+@click.argument("game", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def main(game: Path) -> None:
+    """`game`: the install (PlariumPlay/StandAloneApps/raid-shadow-legends)."""
     keys = set_keys()
     champions = json.load(open(CAPTURES / "champions.json"))
     factions = {c["Faction"] for c in champions}  # the capture's names match the sprites'
@@ -108,8 +104,17 @@ def main() -> None:
     written: dict[str, set[str]] = {
         kind: set()
         for kind in (
-            "portraits", "sets", "pieces", "affinities", "factions", "stars", "frames", "forms",
-            "ui", "statuses", "chimera",
+            "portraits",
+            "sets",
+            "pieces",
+            "affinities",
+            "factions",
+            "stars",
+            "frames",
+            "forms",
+            "ui",
+            "statuses",
+            "chimera",
         )
     }
 
@@ -119,7 +124,7 @@ def main() -> None:
     placeholders = {}
 
     for family in PORTRAIT_FAMILIES:
-        for sprite in sprites(family):
+        for sprite in sprites(game, family):
             if (name := sprite.m_Name).isdigit():
                 save(sprite, "portraits", name, written)
             elif placeholder := PLACEHOLDER_PORTRAIT.fullmatch(name):
@@ -138,7 +143,7 @@ def main() -> None:
             written["portraits"].add(key)
 
     # 2. Set icons.
-    for sprite in sprites("ArtifactSets"):
+    for sprite in sprites(game, "ArtifactSets"):
         if (set_id := match_set(sprite.m_Name, keys)) is None:
             unmatched.add(sprite.m_Name)
             continue
@@ -146,7 +151,7 @@ def main() -> None:
         save(sprite, "sets", str(set_id), written)
 
     # 3. Piece art, by set and slot, or faction and slot for faction accessories.
-    for sprite in sprites("Artifacts"):
+    for sprite in sprites(game, "Artifacts"):
         owner, _, suffix = sprite.m_Name.rpartition("_")
         if suffix not in SLOTS:
             continue
@@ -157,20 +162,20 @@ def main() -> None:
             save(sprite, "pieces", f"{set_id}_{SLOTS[suffix]}", written)
 
     # 4. Affinity icons.
-    for sprite in sprites("HeroElements"):
+    for sprite in sprites(game, "HeroElements"):
         if sprite.m_Name in AFFINITIES:
             save(sprite, "affinities", sprite.m_Name, written)
 
     # 5. Faction banners, named by the game's faction number.
     faction_names = capture_faction_names(champions)
 
-    for sprite in sprites("FractionAvatars"):
+    for sprite in sprites(game, "FractionAvatars"):
         if name := faction_names.get(sprite.m_Name):
             save(sprite, "factions", name, written)
 
     # 6. Champion stars (plain, ascended and awakened), portrait frames by rarity, and the UI
     # pieces (panel frame, rarity crests).
-    for sprite in sprites("UIShared"):
+    for sprite in sprites(game, "UIShared"):
         if colour := STARS.get(sprite.m_Name):
             save(sprite, "stars", colour, written)
         elif sprite.m_Name in FRAMES:
@@ -179,15 +184,15 @@ def main() -> None:
             save(sprite, "ui", name, written)
 
     # 7. A mythical's form switch: its two helms.
-    for sprite in sprites("MetamorphSwitchButton"):
+    for sprite in sprites(game, "MetamorphSwitchButton"):
         if key := FORM_ICONS.get(sprite.m_Name):
             save(sprite, "forms", key, written)
 
     # 8. Buff and debuff icons, and the Chimera's trial icons, under the game's names.
-    for sprite in sprites("StatusEffectIcons"):
+    for sprite in sprites(game, "StatusEffectIcons"):
         save(sprite, "statuses", sprite.m_Name, written)
 
-    for sprite in sprites("ChimeraChallengeIcons"):
+    for sprite in sprites(game, "ChimeraChallengeIcons"):
         save(sprite, "chimera", sprite.m_Name, written)
 
     print(", ".join(f"{len(keys)} {kind}" for kind, keys in written.items()), f"-> {OUT}")
@@ -197,17 +202,17 @@ def main() -> None:
         print("set icons with no matching set (shown as text):", ", ".join(sorted(unmatched)))
 
 
-def sprites(family: str) -> Iterator:
+def sprites(game: Path, family: str) -> Iterator:
     """Sprites from every bundle of a family, oldest version first so newer ones overwrite."""
-    for path in bundles(family):
+    for path in bundles(game, family):
         for obj in UnityPy.load(str(path)).objects:
             if obj.type.name == "Sprite":
                 yield obj.read()
 
 
-def bundles(family: str) -> list[Path]:
-    shipped = GAME.glob(f"build/Raid_Data/StreamingAssets/AssetBundles/{family}*/*/*/*/*.unity3d")
-    downloaded = GAME.glob(f"resources/{family}_*/*/__data")
+def bundles(game: Path, family: str) -> list[Path]:
+    shipped = game.glob(f"build/Raid_Data/StreamingAssets/AssetBundles/{family}*/*/*/*/*.unity3d")
+    downloaded = game.glob(f"resources/{family}_*/*/__data")
     wanted = re.compile(rf"/{re.escape(family)}(_\d+)?(_[\d.]+)?/")  # not e.g. ArtifactsForge
     found = [path for path in [*shipped, *downloaded] if wanted.search(str(path))]
     return sorted(found, key=version_of)
@@ -221,7 +226,7 @@ def version_of(path: Path) -> tuple[int, ...]:
 def capture_faction_names(champions: list[dict]) -> dict[str, str]:
     """The game's faction number (as text) -> the capture's name for it. HH renames a few
     (Samurai -> Shadowkin, Olympians -> Argonites), so pair them up by champion type."""
-    enum = json.load(open(ROOT / "schema" / "schema.json"))["enums"]["HeroFraction"]
+    enum = json.load(open(SCHEMA))["enums"]["HeroFraction"]
     number_of = {name: number for number, name in enum.items()}
     game_faction = {t["id"]: t["fraction"] for t in json.load(open(TABLES / "hero_types.json"))}
     names = {}
@@ -235,7 +240,7 @@ def capture_faction_names(champions: list[dict]) -> dict[str, str]:
 
 def set_keys() -> dict[str, int]:
     """Normalised set name -> set id, from the game's, the display and HH's names."""
-    enum = json.load(open(ROOT / "schema" / "schema.json"))["enums"]["ArtifactSetKindId"]
+    enum = json.load(open(SCHEMA))["enums"]["ArtifactSetKindId"]
     by_game_name = {name: int(number) for number, name in enum.items()}
     keys = {normalise(name): set_id for name, set_id in by_game_name.items()}
 
