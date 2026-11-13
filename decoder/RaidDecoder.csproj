@@ -11,20 +11,12 @@
     <HHDir Condition="'$(HHDir)' == ''">$(HH_DIR)</HHDir>
   </PropertyGroup>
 
-  <!-- Compile against HH's own models + their exact MessagePack build.
+  <!-- Compile against the MessagePack build the HH install ships.
        Private=false: we don't copy them; they're loaded from HHDir at runtime
-       so updating the extractor automatically updates the decoder. -->
+       (no NuGet package needed). -->
   <ItemGroup>
-    <Reference Include="HellHades.ArtifactExtractor.Models">
-      <HintPath>$(HHDir)/HellHades.ArtifactExtractor.Models.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
     <Reference Include="MessagePack">
       <HintPath>$(HHDir)/MessagePack.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>$(HHDir)/Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="MessagePack.Annotations">

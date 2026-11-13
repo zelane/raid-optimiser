@@ -1,5 +1,5 @@
 """
-scores.py - accessory potentials kept on disk, so a piece is scored once: a new capture
+scores.py - accessory potentials kept on disk, so a piece is scored once: a new snapshot
 rescores only the pieces that changed, and a restarted server none. Kept per scorer (the
 types, their weights and the gear tables) and per version of the scoring code; the latest
 `KEPT` scorers' scores are kept.

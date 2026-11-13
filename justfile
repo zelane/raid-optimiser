@@ -30,8 +30,8 @@ default:
 
 # Only TLS to hellhades.com is intercepted; everything else is tunnelled untouched.
 # ~/scripts/hh.sh finds the proxy by `mitmdump .*--listen-port 8080 .*hh_capture.py`: keep the order.
-# Capture: mitmproxy tees the HH extractor's upload (extractor + game running)
-proxy *args: _decoder
+# The web UI's game commands (equip, preview, sell) through the HH extractor (extractor + game running)
+proxy *args:
     uv run --group capture mitmdump --listen-host 127.0.0.1 --listen-port 8080 \
         --allow-hosts 'hellhades\.com(:\d+)?$' -s capture/hh_capture.py --flow-detail 1 "$@"
 
@@ -97,13 +97,27 @@ update:
     just static
     just assets
 
-# (Re)build the C# decoder into bin/ (against the HH install's DLLs: HH_DIR)
+# (Re)build the C# static-data decoder into bin/ (against the HH install's MessagePack: HH_DIR)
 decoder:
     dotnet build decoder -c Release -o bin
 
 # Build the decoder if it isn't built yet
 _decoder:
     @[ -x bin/raid-decoder ] || just decoder
+
+# Build the memory reader (Rust, for the game's Wine prefix)
+reader:
+    cd reader && cargo build --release
+
+# The reader's layout (offsets, enums), from the newest dump (just dump after a game update)
+reader-layout:
+    uv run python -m tools.reader_layout "$(ls -d data/dump/*/ | sort -V | tail -1)" data/cache/reader-layout.json
+
+# Read the account out of the running game's memory (read-only) into data/captures/snapshot.json
+read: reader
+    @[ -f data/cache/reader-layout.json ] || just reader-layout
+    plarium-umu "$PWD/reader/target/x86_64-pc-windows-gnu/release/raid-reader.exe" \
+        "Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json"
 
 # Start the web UI on http://127.0.0.1:<port> (WEB_PORT or 8000), auto-reloading (--no-reload)
 web port=web_port *args:

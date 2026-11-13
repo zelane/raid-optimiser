@@ -1,5 +1,5 @@
 """
-store.py - what the capture doesn't hold, kept in SQLite: champion locks, the glyphs to
+store.py - what the snapshot doesn't hold, kept in SQLite: champion locks, the glyphs to
 assume on gear, account-wide settings, and each champion's run history.
 
 A lock (1-5, 5 the strongest) keeps a champion's gear out of solves that only allow gear from

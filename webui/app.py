@@ -287,7 +287,7 @@ async def equip(request: Request, champion_id: int):
     def send(account: Account, champion: Champion, artifact_ids: list[int]):
         return extractor.equip(champion.id, artifact_ids)
 
-    done = "Equipped. The next sync will show it here."
+    done = "Equipped. The next read (just read) will show it here."
     return await send_build(request, champion_id, send, done)
 
 

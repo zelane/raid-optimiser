@@ -30,7 +30,7 @@ from optimiser.accessories.scaling import (
 )
 from optimiser.account import Account, Stat, load_account
 from optimiser.labels import STAT_LABELS
-from optimiser.paths import CAPTURES, GAME, SCHEMA
+from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 
 UTILITY = ("ACC", "RES", "SPD")
 TARGET_TERMS = re.compile(r"TRG_|REL_|target|Counter|Count\(|relic|CALCULATED|HP_PERC")
@@ -150,7 +150,7 @@ def main() -> None:
     parser.add_argument("--name", help="only champions whose name contains this")
     args = parser.parse_args()
 
-    account = load_account(CAPTURES, GAME, SCHEMA)
+    account = load_account(SNAPSHOT, GAME, SCHEMA)
     interesting = {
         Flag.UNREADABLE,
         Flag.UTILITY,

@@ -130,7 +130,7 @@ class SetSource:
 
 @dataclass(frozen=True)
 class RelicSource:
-    """A relic type's skills, and those only a champion of a faction gets (capture names)."""
+    """A relic type's skills, and those only a champion of a faction gets (display names)."""
 
     id: int
     name: str

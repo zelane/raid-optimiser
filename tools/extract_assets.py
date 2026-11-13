@@ -11,7 +11,7 @@ Writes webui/static/assets/:
   pieces/<set id>_<slot>.png, pieces/<faction>_<slot>.png  (Artifacts: the piece art the
                                                        game shows; faction accessories)
   affinities/<magic|force|spirit|void>.png             (HeroElements)
-  factions/<faction, as the capture names it>.png     (FractionAvatars: the banners)
+  factions/<faction's display name>.png               (FractionAvatars: the banners)
   stars/<yellow|purple|red>.png                       (UIShared: plain, ascended, awakened)
   frames/<rarity, lower case>.png                     (UIShared: 9-slice portrait frames; no
                                                        Uncommon. app.css holds their slices)
@@ -26,13 +26,13 @@ Writes webui/static/assets/:
 
 Bundles ship with the install (StreamingAssets) and are downloaded later (resources/); for
 each family the newest version wins. Set sprites are named after the game's set names, the
-display names, HH's names or an old name in `ALIASES`; a sprite that is a prefix of exactly
+display names or an old name in `ALIASES`; a sprite that is a prefix of exactly
 one game set name matches it too. Anything unmatched is listed, and the UI shows text instead.
 
 - `OUT`, `SLOTS`, `ALIASES`: where the icons go, and the names the sprites use (the game install
-  is an argument; the tables and the capture are `optimiser.paths`')
+  is an argument; the tables are `optimiser.paths`')
 - `main`: the workflow
-- `bundles`, `set_keys`, `match_set`, `save`: its steps
+- `bundles`, `set_keys`, `display_faction_names`, `match_set`, `save`: its steps
 """
 
 import json
@@ -44,8 +44,9 @@ from pathlib import Path
 import click
 import UnityPy
 
-from optimiser.paths import CAPTURES, ROOT, SCHEMA
+from optimiser.account import NO_FACTION, faction_name
 from optimiser.paths import GAME as TABLES
+from optimiser.paths import ROOT, SCHEMA
 
 OUT = ROOT / "webui" / "static" / "assets"
 # Sprite slot suffix -> the optimiser's slot name (`Slot` member, lower case).
@@ -68,6 +69,7 @@ ALIASES = {
     "Stalwart2": "Defiant",
     "Taunting": "Provoke",
     "Warrior": "Cruel",
+    "MonsterHunter": "Slayer",
 }
 AFFINITIES = ("magic", "force", "spirit", "void")
 STARS = {"big_star": "yellow", "big_ascend_star": "purple", "big_red_star": "red"}
@@ -98,8 +100,8 @@ VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 def main(game: Path) -> None:
     """`game`: the install (PlariumPlay/StandAloneApps/raid-shadow-legends)."""
     keys = set_keys()
-    champions = json.load(open(CAPTURES / "champions.json"))
-    factions = {c["Faction"] for c in champions}  # the capture's names match the sprites'
+    faction_names = display_faction_names()
+    factions = set(faction_names.values())  # the sprites use the display names
     unmatched: set[str] = set()
     written: dict[str, set[str]] = {
         kind: set()
@@ -167,8 +169,6 @@ def main(game: Path) -> None:
             save(sprite, "affinities", sprite.m_Name, written)
 
     # 5. Faction banners, named by the game's faction number.
-    faction_names = capture_faction_names(champions)
-
     for sprite in sprites(game, "FractionAvatars"):
         if name := faction_names.get(sprite.m_Name):
             save(sprite, "factions", name, written)
@@ -223,23 +223,14 @@ def version_of(path: Path) -> tuple[int, ...]:
     return tuple(int(part) for part in match.groups()) if match else (0, 0, 0)
 
 
-def capture_faction_names(champions: list[dict]) -> dict[str, str]:
-    """The game's faction number (as text) -> the capture's name for it. HH renames a few
-    (Samurai -> Shadowkin, Olympians -> Argonites), so pair them up by champion type."""
+def display_faction_names() -> dict[str, str]:
+    """The game's faction number (as text) -> the faction's display name."""
     enum = json.load(open(SCHEMA))["enums"]["HeroFraction"]
-    number_of = {name: number for number, name in enum.items()}
-    game_faction = {t["id"]: t["fraction"] for t in json.load(open(TABLES / "hero_types.json"))}
-    names = {}
-
-    for champion in champions:
-        if game_name := game_faction.get(champion["TypeId"] // 10 * 10):
-            names[number_of[game_name]] = champion["Faction"]
-
-    return names
+    return {number: faction_name(name) for number, name in enum.items() if name != NO_FACTION}
 
 
 def set_keys() -> dict[str, int]:
-    """Normalised set name -> set id, from the game's, the display and HH's names."""
+    """Normalised set name -> set id, from the game's and the display names."""
     enum = json.load(open(SCHEMA))["enums"]["ArtifactSetKindId"]
     by_game_name = {name: int(number) for number, name in enum.items()}
     keys = {normalise(name): set_id for name, set_id in by_game_name.items()}
@@ -247,9 +238,6 @@ def set_keys() -> dict[str, int]:
     for raw in json.load(open(TABLES / "sets.json")):
         if raw["name"]:
             keys.setdefault(normalise(raw["name"]), by_game_name[raw["id"]])
-
-    for name, set_id in json.load(open(CAPTURES / "set_ids.json")).items():
-        keys.setdefault(normalise(name), set_id)
 
     keys.pop("none", None)
     return keys
@@ -278,7 +266,8 @@ def save(sprite, kind: str, key: str, written: dict[str, set[str]]) -> None:
 
 
 def normalise(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", name.casefold())
+    """Letters and digits, lower case; sprites spell Defence the British way, the game not."""
+    return re.sub(r"[^a-z0-9]", "", name.casefold()).replace("defence", "defense")
 
 
 if __name__ == "__main__":

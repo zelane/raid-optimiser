@@ -16,6 +16,8 @@ from pathlib import Path
 
 import click
 
+from optimiser.account import faction_name
+
 FIXED_ONE = 2**32  # SharedModel Fixed is 32.32 fixed point
 PRIMITIVES = {
     "int",
@@ -398,14 +400,11 @@ SELF_TARGETS = {"Producer", "Owner", "AllAllies", "RelationProducer"}
 TARGET_HP = re.compile(r"TRG_(?:B_|M_|CUR_)?HP(?!_PERC)\b")
 
 
-# The game's faction names where the capture (HH) names them otherwise.
-CAPTURE_FACTIONS = {"Samurai": "Shadowkin", "Olympians": "Argonites"}
-
-
 def build_effect_sources(data):
     """What else can bring buffs, debuffs and effects to a team: each artifact set's set
     skills (the pieces they take), and each relic type's skills, with those only a champion of
-    one faction gets (faction names as the capture has them). The skills are in skills.json."""
+    one faction gets (by the factions' display names, `faction_name`). The skills are in
+    skills.json."""
     sets = []
     for s in data["ArtifactData"]["SetInfos"]:
         tiers = [s] + (s.get("SubSetInfos") or [])
@@ -422,7 +421,7 @@ def build_effect_sources(data):
     relics = []
     for r in data["RelicData"]["RelicTypes"]:
         by_faction = {
-            CAPTURE_FACTIONS.get(f["FractionId"], f["FractionId"]): f["SkillIds"]
+            faction_name(f["FractionId"]): f["SkillIds"]
             for f in r.get("SkillIdsByFaction") or []
             if f.get("SkillIds")
         }

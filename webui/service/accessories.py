@@ -1,7 +1,7 @@
 """
 accessories.py - the accessories pages: swaps, the roll and rework lists, the clean-up, and
 the champion type weights. Scoring every accessory's potential is the slow part, so the
-potentials are cached per capture and type weights (not locks), and kept on disk per piece
+potentials are cached per snapshot and type weights (not locks), and kept on disk per piece
 (`scores`).
 
 - `WeightCell`, `WeightRow`, `FactionTypeRow`, `SetTierRow`, `WeightTable`, `AccessoryRow`,
@@ -40,7 +40,7 @@ from optimiser.labels import STAT_LABELS, format_line, line_label
 from optimiser.paths import POTENTIALS, STORE
 from optimiser.settings import read_standard_types, set_type_weight
 from optimiser.store import read_number, read_protected, write_number, write_protected
-from webui.service.current import capture_mtime, current_locks, load_for, roster_types
+from webui.service.current import current_locks, load_for, roster_types, snapshot_mtime
 from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
@@ -250,18 +250,18 @@ def pieces_to_sell(account: Account) -> set[int]:
 
 
 def current_assessment(account: Account) -> Assessment:
-    """Of the current capture: `account` is `current_account()`. Locks change often and
+    """Of the current snapshot: `account` is `current_account()`. Locks change often and
     cheaply, so only the potentials are cached."""
-    potentials = potentials_for(capture_mtime(), read_standard_types(STORE))
+    potentials = potentials_for(snapshot_mtime(), read_standard_types(STORE))
     return assess_accessories(account, potentials, current_locks())
 
 
 @lru_cache(maxsize=4)
-def potentials_for(capture_mtime: int, types: tuple[ChampionType, ...]) -> dict[Piece, Potential]:
+def potentials_for(snapshot_mtime: int, types: tuple[ChampionType, ...]) -> dict[Piece, Potential]:
     """Cached; scores are also kept on disk (`scores`), so only pieces new to the scorer are
-    scored. The capture's mtime is only the cache key."""
-    account = load_for(capture_mtime)
-    scorer = make_scorer((*types, *roster_types(capture_mtime)), account.tables.gear)
+    scored. The snapshot's mtime is only the cache key."""
+    account = load_for(snapshot_mtime)
+    scorer = make_scorer((*types, *roster_types(snapshot_mtime)), account.tables.gear)
     known = known_potentials(POTENTIALS, scorer)
     potentials = potentials_of(account, scorer, known)
 
@@ -364,7 +364,7 @@ def weight_table(account: Account) -> WeightTable:
         faction_rows=[
             faction_row(own)
             for own in sorted(
-                roster_types(capture_mtime()), key=lambda t: (t.faction or "", t.label)
+                roster_types(snapshot_mtime()), key=lambda t: (t.faction or "", t.label)
             )
         ],
     )
@@ -472,7 +472,7 @@ def accessory_row(context: RowContext, piece: Assessed) -> AccessoryRow:
 def type_labels() -> dict[str, str]:
     """Type key -> its label; a faction's own types name the faction."""
     labels = {t.key: t.label for t in read_standard_types(STORE)}
-    labels |= {t.key: f"{t.label} ({t.faction})" for t in roster_types(capture_mtime())}
+    labels |= {t.key: f"{t.label} ({t.faction})" for t in roster_types(snapshot_mtime())}
     return labels
 
 

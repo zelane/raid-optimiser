@@ -1,23 +1,16 @@
-"""mitmproxy addon: tee HellHades extractor account uploads to disk and decode them, and let
-the web UI equip builds in game through the extractor.
+"""mitmproxy addon: lets the web UI send builds to the game through the HellHades extractor.
+The account itself comes from the memory reader (`reader/`, `just read`); the extractor's
+uploads pass through untouched and aren't kept.
 
-Capture: every `POST /api/Account/v2` the extractor sends to raidoptimiser.hellhades.com is
-saved as data/captures/raw/<timestamp>.bin (raw MessagePack+LZ4, newest KEEP_RAW kept) and
-decoded by the C# `raid-decoder` tool into data/captures/latest/*.json, which is replaced
-atomically on each sync. The request itself is forwarded untouched.
-
-The extractor re-uploads every ~15s while the game runs, so decodes are coalesced:
-a single worker always decodes the newest pending capture and skips older ones.
-
-Equip and preview: the extractor holds a SignalR connection (JSON protocol, WebSocket) to
-HH's `/reader` hub, and HH's server pushes commands down it. The control server injects one
-into that socket as if the server had sent it, then waits for the extractor's
-`HelperRequestResult` reply (kept from HH's server, as it never asked) and returns it:
+The extractor holds a SignalR connection (JSON protocol, WebSocket) to HH's `/reader` hub, and
+HH's server pushes commands down it. The control server injects one into that socket as if the
+server had sent it, then waits for the extractor's `HelperRequestResult` reply (kept from HH's
+server, as it never asked) and returns it:
 
 - `POST http://127.0.0.1:8081/equip` `{"hero_id", "artifact_ids"}`: `EquipArtifacts`, the
   pieces really move
 - `POST http://127.0.0.1:8081/preview` `{"account_id", "hero_id", "artifact_ids"}`:
-  `PreviewBuild`, the game's build preview; nothing changes, so no account sync follows
+  `PreviewBuild`, the game's build preview; nothing changes
 - `POST http://127.0.0.1:8081/sell` `{"artifact_ids"}`: `SellArtifacts`, which selects the
   pieces in the game's sell screen; the sale is confirmed (or not) in game
 """
@@ -26,23 +19,14 @@ import asyncio
 import json
 import logging
 import os
-import shutil
-import subprocess
 import threading
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 from mitmproxy import ctx, http
 
-ROOT = Path(__file__).resolve().parent.parent
-CAPTURES = Path(os.environ.get("RAID_CAPTURES", ROOT / "data" / "captures"))
-DECODER = ROOT / "bin" / "raid-decoder"
 HOST = "raidoptimiser.hellhades.com"
-KEEP_RAW = 20
-
 HUB_PATH = "/reader"
 CONTROL_ADDRESS = ("127.0.0.1", int(os.environ.get("RAID_CONTROL_PORT", "8081")))
 RECORD_SEPARATOR = "\x1e"  # ends every SignalR JSON message
@@ -51,89 +35,6 @@ MAX_EQUIP = 16  # the extractor's own limits per request
 MAX_PREVIEW = 9
 MAX_SELL = 16384
 RESULT_TIMEOUT = 30.0
-
-
-def _fsync(path: Path) -> None:
-    """Flush a file or directory to disk, so a crash can't leave it empty after a rename."""
-    fd = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def _write_durable(path: Path, data: bytes) -> None:
-    with open(path, "wb") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    _fsync(path.parent)
-
-
-class HHCapture:
-    def __init__(self) -> None:
-        self._pending: Path | None = None
-        self._cond = threading.Condition()
-        threading.Thread(target=self._worker, name="hh-decode", daemon=True).start()
-
-    def request(self, flow: http.HTTPFlow) -> None:
-        req = flow.request
-        if req.method != "POST" or req.pretty_host != HOST:
-            return
-        if req.path.split("?")[0].rstrip("/").lower() != "/api/account/v2":
-            return
-
-        raw_dir = CAPTURES / "raw"
-        raw_dir.mkdir(parents=True, exist_ok=True)
-        body = req.raw_content or b""
-        raw = raw_dir / f"{datetime.now():%Y%m%d-%H%M%S-%f}.bin"
-        _write_durable(raw, body)
-        for old in sorted(raw_dir.glob("*.bin"))[:-KEEP_RAW]:
-            old.unlink(missing_ok=True)
-        logging.info(f"[hh] captured account upload: {raw.name} ({len(body)} bytes)")
-
-        with self._cond:
-            self._pending = raw
-            self._cond.notify()
-
-    def _worker(self) -> None:
-        while True:
-            with self._cond:
-                while self._pending is None:
-                    self._cond.wait()
-                raw, self._pending = self._pending, None
-            try:
-                self._decode(raw)
-            except Exception as e:  # never let the worker die
-                logging.error(f"[hh] decode crashed: {e}")
-
-    def _decode(self, raw: Path) -> None:
-        if not DECODER.exists():
-            logging.warning(f"[hh] decoder not built ({DECODER}); keeping raw capture only")
-            return
-        tmp, latest, old = CAPTURES / ".latest.tmp", CAPTURES / "latest", CAPTURES / ".latest.old"
-        shutil.rmtree(tmp, ignore_errors=True)
-        res = subprocess.run([str(DECODER), str(raw), str(tmp)], capture_output=True, text=True)
-        out = (res.stdout + res.stderr).strip()
-        if res.returncode != 0:
-            logging.error(f"[hh] decode failed for {raw.name}:\n{out}")
-            shutil.rmtree(tmp, ignore_errors=True)
-            return
-        # Flush the export before swapping it in: on ext4 a crash shortly after the rename
-        # can otherwise leave latest/*.json at 0 bytes, replacing the last good export.
-        for f in tmp.iterdir():
-            _fsync(f)
-        _fsync(tmp)
-        # Swap in the new export; `latest` is a symlink in older layouts.
-        shutil.rmtree(old, ignore_errors=True)
-        if latest.is_symlink():
-            latest.unlink()
-        elif latest.exists():
-            latest.rename(old)
-        tmp.rename(latest)
-        _fsync(CAPTURES)
-        shutil.rmtree(old, ignore_errors=True)
-        logging.info(f"[hh] {out.splitlines()[-1] if out else 'decoded'}")
 
 
 @dataclass
@@ -344,4 +245,4 @@ def control_handler(control: HubControl) -> type[BaseHTTPRequestHandler]:
     return ControlHandler
 
 
-addons = [HHCapture(), HubControl()]
+addons = [HubControl()]

@@ -2,7 +2,7 @@
 assume.py - what a solve assumes beyond the gear as it is: the champion at their rank's top
 level, gear levelled to the top (main stat only: substat rolls can't be foreseen), gear that's
 been ascended taken to full ascension (gear never ascended has no bonus stat yet to raise),
-and glyphs (`optimiser.glyphs`). All account-wide, kept in the store. The capture is left
+and glyphs (`optimiser.glyphs`). All account-wide, kept in the store. The snapshot is left
 alone: a solve gets an assumed copy of the account and its request.
 
 - `Flag`, `FLAG_LABELS`, `Assumptions`: what can be assumed

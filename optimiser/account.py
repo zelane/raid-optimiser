@@ -1,6 +1,6 @@
 """
-account.py - the account (from the HH capture) and the game's tables (`paths.GAME`), parsed
-once at the boundary into the shapes the stat model and solver use.
+account.py - the account (the memory reader's snapshot, `paths.SNAPSHOT`) and the game's
+tables (`paths.GAME`), parsed once at the boundary into the shapes the stat model and solver use.
 
 - `Stat`, `STAT_NAMES`, `Stats`, `Bonus`: stats (by the game's names), and the bonuses that
   raise them
@@ -11,13 +11,14 @@ once at the boundary into the shapes the stat model and solver use.
 - `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
-- `HeroForm`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
+- `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
 - `Account`: everything a solve needs
-- `DEFAULT_LEAGUE`, `AFFINITIES`, `GRADES`, `GLYPH_RARITIES`: what the game's words mean
+- `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
+  `faction_name`: what the game's words mean
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
-- `arena_league`, `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets`
-  (`parse_ignore`), `parse_skills`, `parse_relics` (`relic_stats`), `parse_forms`,
+- `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets` (`parse_ignore`),
+  `parse_skills`, `parse_relics` (`relic_stats`), `parse_hero_type`, `parse_forms`,
   `parse_glyphs`, `parse_gear` (`by_line`), `great_hall_by_affinity`, `parse_champion`,
   `parse_artifact` (`parse_line`): its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
@@ -146,7 +147,7 @@ class Champion:
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
     # Which of its forms (`Tables.hero_forms`) it's taken in, 0 first: mythicals have two, and
     # each has its own base stats and skills. A playable form never changes affinity, so the
-    # Great Hall doesn't depend on it. The capture doesn't say; a request does.
+    # Great Hall doesn't depend on it. The game doesn't say; a request does.
     form: int = 0
 
     @property
@@ -311,6 +312,19 @@ class HeroForm:
 
 
 @dataclass(frozen=True)
+class HeroType:
+    """A champion type's fixed facts, by the game's names but for the faction (its display
+    name, `faction_name`); affinity and role are its first form's (a form never changes
+    affinity)."""
+
+    name: str
+    faction: str
+    rarity: str
+    element: str
+    role: str
+
+
+@dataclass(frozen=True)
 class LoreOfSteel:
     """The mastery that scales artifact set stat bonuses."""
 
@@ -342,6 +356,7 @@ class Tables:
     sets: dict[int, ArtifactSet]
     skills: dict[int, Skill]
     hero_forms: dict[int, tuple[HeroForm, ...]]  # hero type id -> every form, first first
+    hero_types: dict[int, HeroType]
     glyphs: dict[GlyphKind, dict[GlyphGrade, float]]  # each grade's top roll, weakest first
     gear: GearTables
 
@@ -369,48 +384,50 @@ class Account:
     relic_types: frozenset[int] = frozenset()
 
 
-DEFAULT_LEAGUE = "GoldV"  # if the capture doesn't say
+DEFAULT_LEAGUE = "GoldV"  # if the game doesn't say
 AFFINITIES = ("Magic", "Force", "Spirit", "Void")
-
-GRADES = {
-    "OneStar": 1,
-    "TwoStars": 2,
-    "ThreeStars": 3,
-    "FourStars": 4,
-    "FiveStars": 5,
-    "SixStars": 6,
-}
 GLYPH_RARITIES = ("Uncommon", "Rare", "Epic", "Legendary")
+# The factions the game shows under another name than its own (the art is named by these)
+FACTION_NAMES = {"Samurai": "Shadowkin", "Olympians": "Argonites"}
+NO_FACTION = "Unknown"  # a piece any faction can wear
 
 
-def load_account(captures: Path, static: Path, schema: Path) -> Account:
-    """The latest capture and the static tables, in one place."""
-    account = read_json(captures / "account.json")
-    tables = cached_tables(static, schema, arena_league(account), tables_stamp(static, schema))
-    relics = parse_relics(account["Relics"], read_json(static / "bonuses.json")["relics"])
-    great_hall = great_hall_by_affinity(account.get("GreatHall"), tables)
+def faction_name(game_name: str) -> str:
+    return FACTION_NAMES.get(game_name, game_name)
+
+
+def load_account(snapshot: Path, static: Path, schema: Path) -> Account:
+    """The latest snapshot and the static tables, in one place."""
+    account = read_json(snapshot)
+    league = account["arena_league"] or DEFAULT_LEAGUE
+    tables = cached_tables(static, schema, league, tables_stamp(static, schema))
+    relics = parse_relics(account["relics"], read_json(static / "bonuses.json")["relics"])
+    great_hall = great_hall_by_affinity(account["great_hall"], tables)
     champions = [
-        parse_champion(raw, relics, great_hall) for raw in read_json(captures / "champions.json")
+        parse_champion(
+            raw,
+            tables.hero_types[raw["type_id"]],
+            account["equipped"].get(str(raw["id"]), ()),
+            tuple(
+                bonus
+                for relic_id in account["worn_relics"].get(str(raw["id"]), ())
+                for bonus in relics.get(relic_id, ())
+            ),
+            great_hall,
+        )
+        for raw in account["heroes"]
     ]
-    hh_set_ids = read_json(captures / "set_ids.json")
-    artifacts = tuple(
-        parse_artifact(raw, hh_set_ids) for raw in read_json(captures / "artifacts.json")
-    )
     owners = {art_id: c.id for c in champions for art_id in c.artifact_ids}
-    mailbox = tuple(
-        parse_artifact(raw, hh_set_ids)
-        for item in account.get("InboxItems") or ()
-        for raw in item.get("Artifacts") or ()
-    )
+    mailbox = tuple(parse_artifact(raw) for item in account["inbox"] for raw in item["artifacts"])
 
     return Account(
-        user_id=account["UserId"],
+        user_id=account["user_id"],
         champions={c.id: c for c in champions},
-        artifacts=artifacts,
+        artifacts=tuple(parse_artifact(raw) for raw in account["artifacts"]),
         owners=owners,
         tables=tables,
         mailbox=mailbox,
-        relic_types=frozenset(relic["TypeId"] for relic in account["Relics"]),
+        relic_types=frozenset(relic["type_id"] for relic in account["relics"]),
     )
 
 
@@ -421,10 +438,10 @@ def worn_gear(account: Account, champion: Champion) -> list[Artifact]:
 
 
 def great_hall_by_affinity(
-    levels: dict[str, dict[str, int]] | None, tables: Tables
+    levels: dict[str, dict[str, int]], tables: Tables
 ) -> dict[str, tuple[Bonus, ...]]:
-    """Affinity -> its Great Hall bonuses at the account's levels. Without levels in the
-    capture, every affinity is taken as complete."""
+    """Affinity -> its Great Hall bonuses at the account's levels. Without any levels (the
+    game hasn't loaded them), every affinity is taken as complete."""
     by_stat = tables.great_hall
     complete = tuple(bonuses[-1] for bonuses in by_stat.values())
 
@@ -443,15 +460,15 @@ def great_hall_by_affinity(
 
 def parse_relics(relics: list[dict], table: dict) -> dict[int, tuple[Bonus, ...]]:
     """Relic id -> the stats it gives."""
-    return {relic["Id"]: relic_stats(relic, table) for relic in relics}
+    return {relic["id"]: relic_stats(relic, table) for relic in relics}
 
 
 def relic_stats(relic: dict, table: dict) -> tuple[Bonus, ...]:
     """Each of the relic type's stats that its level has unlocked, valued by the levels
     gained since it unlocked (a stat opening at 9 gives its first value at level 9).
     Stones add skills, not stats."""
-    stats = table["types"].get(str(relic["TypeId"]), {}).get("stats", [])
-    level = relic["Level"]
+    stats = table["types"].get(str(relic["type_id"]), {}).get("stats", [])
+    level = relic["level"]
     # A type may have fewer stats than there are opening levels.
     openings = zip(stats, table["opening_levels"], strict=False)
     at_level = {
@@ -465,59 +482,59 @@ def relic_stats(relic: dict, table: dict) -> tuple[Bonus, ...]:
 
 
 def parse_champion(
-    raw: dict, relics: dict[int, tuple[Bonus, ...]], great_hall: dict[str, tuple[Bonus, ...]]
+    raw: dict,
+    kind: HeroType,
+    artifact_ids: list[int],
+    relics: tuple[Bonus, ...],
+    great_hall: dict[str, tuple[Bonus, ...]],
 ) -> Champion:
     return Champion(
-        id=raw["Id"],
-        name=raw["Name"] or f"type {raw['TypeId']}",
-        type_id=raw["TypeId"],
-        faction=raw["Faction"],
-        element=raw["Element"],
-        role=raw.get("Role") or "",
-        rarity=raw["Rarity"],
-        grade=GRADES[raw["Grade"]],
-        level=raw["Level"],
-        awakening=GRADES.get(raw["AwakenedGrade"], 0),
-        empower=raw["EmpowerLevel"],
-        masteries=frozenset(raw["Masteries"] or ()),
-        artifact_ids=tuple(raw["Artifacts"] or ()),
-        relics=tuple(
-            bonus for relic_id in raw["Relics"] or () for bonus in relics.get(relic_id, ())
-        ),
-        great_hall=great_hall.get(raw["Element"], ()),
-        skill_levels={
-            int(skill_id): level for skill_id, level in (raw["SkillLevels"] or {}).items()
-        },
+        id=raw["id"],
+        name=kind.name or f"type {raw['type_id']}",
+        type_id=raw["type_id"],
+        faction=kind.faction,
+        element=kind.element,
+        role=kind.role,
+        rarity=kind.rarity,
+        grade=raw["grade"],
+        level=raw["level"],
+        awakening=raw["awakened_grade"],
+        empower=raw["empower"],
+        masteries=frozenset(raw["masteries"]),
+        artifact_ids=tuple(artifact_ids),
+        relics=relics,
+        great_hall=great_hall.get(kind.element, ()),
+        skill_levels={int(skill_id): level for skill_id, level in raw["skills"].items()},
     )
 
 
-def parse_artifact(raw: dict, hh_set_ids: dict[str, int]) -> Artifact:
+def parse_artifact(raw: dict) -> Artifact:
     return Artifact(
-        id=raw["Id"],
-        slot=Slot(raw["Kind"]),
-        set_id=hh_set_ids[raw["Set"]],
-        rank=GRADES[raw["Rank"]],
-        rarity=raw["Rarity"],
-        level=raw["Level"],
-        primary=parse_line(raw["PrimaryBonus"]),
-        substats=tuple(parse_line(sub) for sub in raw["SecondaryBonuses"]),
-        ascension=parse_line(raw["AscendBonus"]) if raw["AscendBonus"] else None,
-        ascend_level=raw.get("AscendLevel") or 0,
-        faction=None if raw["RequiredFraction"] == "None" else raw["RequiredFraction"],
-        reworked=bool(raw.get("RerollsCount")),
-        variant=raw.get("VariantId") or "Normal",
+        id=raw["id"],
+        slot=Slot(raw["kind"]),
+        set_id=raw["set"],
+        rank=raw["rank"],
+        rarity=raw["rarity"],
+        level=raw["level"],
+        primary=parse_line(raw["primary"]),
+        substats=tuple(parse_line(sub) for sub in raw["substats"]),
+        ascension=parse_line(raw["ascend"]) if raw["ascend"] else None,
+        ascend_level=raw["ascend_level"] or 0,
+        faction=None if raw["faction"] == NO_FACTION else faction_name(raw["faction"]),
+        reworked=bool(raw["rerolls"]),
+        variant=raw["variant"],
     )
 
 
 def parse_line(raw: dict) -> StatLine:
-    kind = raw["Kind"]
+    kind = raw["stat"]
     return StatLine(
         kind=kind,
         stat=STAT_NAMES.get(kind),
-        value=raw["Value"],
-        absolute=raw["IsAbsolute"],
-        glyph=raw["Enhancement"],
-        rolls=raw["Level"],
+        value=raw["value"],
+        absolute=raw["absolute"],
+        glyph=raw["glyph"],
+        rolls=raw["rolls"],
     )
 
 
@@ -586,15 +603,10 @@ def parse_skills(static: Path) -> dict[int, Skill]:
     }
 
 
-def arena_league(account: dict) -> str:
-    league = account.get("ArenaLeague")
-    return league if league and league != "None" else DEFAULT_LEAGUE
-
-
 @lru_cache(maxsize=2)
 def cached_tables(static: Path, schema: Path, league: str, stamp: tuple[int, ...]) -> Tables:
     """`parse_tables`, reparsed only when a game update rewrites the tables (`stamp`, only
-    the cache key: `tables_stamp`), not with each capture."""
+    the cache key: `tables_stamp`), not with each snapshot."""
     return parse_tables(static, schema, league)
 
 
@@ -635,8 +647,20 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),
         skills=parse_skills(static),
         hero_forms={t["id"]: parse_forms(t["forms"]) for t in hero_types},
+        hero_types={t["id"]: parse_hero_type(t) for t in hero_types},
         glyphs=parse_glyphs(read_json(static / "glyphs.json")),
         gear=parse_gear(read_json(static / "gear.json")),
+    )
+
+
+def parse_hero_type(raw: dict) -> HeroType:
+    first = raw["forms"][0]
+    return HeroType(
+        name=raw["name"],
+        faction=faction_name(raw["fraction"]),
+        rarity=raw["rarity"],
+        element=first["element"],
+        role=first["role"],
     )
 
 

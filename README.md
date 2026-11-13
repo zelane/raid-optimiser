@@ -1,19 +1,23 @@
 # raid-optimiser
 
-Tees the HellHades Artifact Extractor's account upload (`POST /api/Account/v2`)
-through mitmproxy and decodes it to JSON with HH's own `Models.dll`.
+A gear optimiser for Raid: Shadow Legends. The account is read out of the running game's
+memory (read-only, from outside the process); builds go back to the game through the
+HellHades Artifact Extractor, whose hub connection the proxy injects commands into.
 
 ```
-capture/hh_capture.py   mitmproxy addon: saves upload -> data/captures/raw/<ts>.bin, runs decoder
-decoder/                C# decoder (references DLLs in the HH install dir)
-tools/                  the game-data, asset, schema, CA and HH-patch tools (python -m tools.<name>)
+reader/                 Rust memory reader, run in the game's prefix (just read)
+capture/hh_capture.py   mitmproxy addon: equip / preview / sell through the extractor
+decoder/                C# static-data decoder (the HH install's MessagePack build)
+optimiser/              the model and solver
+webui/                  the web UI
+tools/                  the game-data, layout, asset, schema, CA and HH-patch tools (python -m tools.<name>)
 justfile                every task (`just` lists them); the only place with machine paths
 data/                   everything that isn't code (gitignored):
-  captures/latest/      newest export: account.json, champions.json, artifacts.json, set_ids.json
+  captures/snapshot.json  the account (just read)
   game/                 the game's tables (just static)
   dump/<version>/       IL2CPP dump of the installed game (just dump)
   state/                the optimiser's store (locks, assumptions, runs)
-  cache/                the decoder's hero-type list
+  cache/                the reader's layout (just reader-layout), accessory scores
 ```
 
 ## One-time setup
@@ -29,14 +33,15 @@ data/                   everything that isn't code (gitignored):
 
 ## Use
 
-Run `just proxy`, then start the extractor and game. Each account sync saves the raw
-upload as `data/captures/raw/<timestamp>.bin` and replaces `data/captures/latest/`.
-Re-decode a capture manually: `bin/raid-decoder data/captures/raw/<ts>.bin out/`
+With the game running and logged in, `just read` writes the account to
+`data/captures/snapshot.json` (about 2.5 s); the web UI picks it up. For the equip, preview and
+sell buttons, run `just proxy`, then start the extractor.
 
 After a pull, a game update or an extractor update, run `just update` (Raid can stay open): it
-syncs Python deps, rebuilds the decoder so it picks up the extractor's models, re-applies the HH
-patch, re-exports the game data and re-extracts the assets. Restart the extractor afterwards if
-the decoder or the patch changed. Set `HH_DIR` in `.env` if the extractor install moves.
+syncs Python deps, rebuilds the decoder, re-applies the HH patch, re-exports the game data and
+re-extracts the assets. After a game update also run `just dump` and `just reader-layout`, so
+the reader finds the game's fields. Restart the extractor afterwards if the patch changed. Set
+`HH_DIR` in `.env` if the extractor install moves.
 
 ## Game static data (sets, hero types)
 
@@ -85,19 +90,19 @@ An optional 5th request column sets the empower level and adds the game's `CalcE
 to base stats:
 
 - `great_hall[stat][level-1]`: bonus per level (max: +20% HP/ATK/DEF, +25% C.DMG, +80 ACC/RES);
-  the optimiser uses the account's levels per affinity from the capture (complete if absent)
+  the optimiser uses the account's levels per affinity (complete if absent)
 - `arena[league]`: classic arena league bonus, % of base HP/ATK/DEF (Gold V +22%)
 - `empower[rarity][level-1]`: cumulative; verified against the game's `CalcEmpowerBonus`
 - `awakening[rarity][AwakenedGrade-1]`: cumulative flat bonuses.
   Ascension (0-6) is the last digit of `TypeId`; each ascended type has its own base
   stats (`hero_types.json`).
 - `masteries[id]`: the 13 stat masteries; Lore of Steel is `set_bonus_multiplier: 1.15`
-  (applied to artifact set stat bonuses). Per-champion mastery ids, `AwakenedGrade` and
-  `EmpowerLevel` come from `data/captures/latest/champions.json`.
+  (applied to artifact set stat bonuses). Per-champion mastery ids, awakening and empower
+  levels come from the snapshot.
 
 ## Gear optimiser
 
-Run from the web UI's champion page (below). A HiGHS MILP over the latest capture: one
+Run from the web UI's champion page (below). A HiGHS MILP over the account: one
 binary per wearable artifact (accessories by faction), exact set bonuses through piece-count
 variables, then each ranked stat maximised in turn by priority, held within the slack of its
 best before the next. Further builds exclude earlier ones exactly. C.RATE/C.DMG limits are in
@@ -112,7 +117,7 @@ set ignore DEF adding. Ranked by its log, so the model stays a MILP. Skills whos
 more than the champion's own stats (target HP, battle state) can't be ranked. Pair it with a
 C.RATE minimum of 100. Leaves out buffs/debuffs, affinity and the dealt-damage substats.
 
-Includes the account's classic arena league bonus (from the capture; Gold V if missing).
+Includes the account's classic arena league bonus (Gold V if the game doesn't say).
 Includes the stats of the relics each champion wears (stones add skills only).
 Not modelled: blessings, faction-guardian bonuses.
 
@@ -121,7 +126,7 @@ Not modelled: blessings, faction-guardian bonuses.
 `just web`, then http://127.0.0.1:8000: search a champion, set targets, view
 builds with every piece's full detail (slot, set, rank, rarity, level, main stat, substats with
 glyphs and rolls, ascension, faction lock, who wears it now, artifact id). The account reloads
-whenever the proxy writes a new capture.
+whenever `just read` writes a new snapshot.
 
 Layers: `optimiser/` (model and solver) <- `webui/service/` (framework-free view models, a
 module per page, ready to serve as JSON for a Vue front end) <- `webui/forms.py` (form -> `Request`) <-

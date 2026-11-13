@@ -7,21 +7,40 @@ its upload. Game tables come from the game's own data.
 
 ## Layout
 
-- `data/` (gitignored): everything that isn't code. `captures/` (the capture), `game/` (the
-  game's tables), `state/` (the store), `cache/` (the decoder's hero-type list);
+- `data/` (gitignored): everything that isn't code. `captures/` (the snapshot), `game/` (the
+  game's tables), `state/` (the store), `cache/` (the reader's layout, accessory scores);
   `optimiser/paths.py` names them. `schema/` (tracked) stays at the top.
-- `capture/hh_capture.py` (`just proxy`): mitmproxy tees the HH extractor's upload
-  (`POST /api/Account/v2`, MessagePack + LZ4Block `RaidData`). `decoder/` (C#, references HH's
-  DLLs) writes `data/captures/latest/{account,champions,artifacts,set_ids}.json`.
-- In game: the same addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
+- `capture/hh_capture.py` (`just proxy`; `~/scripts/hh.sh` finds the proxy by its command
+  line, so keep the file name and argument order): mitmproxy, only for the game commands
+  below. The extractor's account uploads pass through untouched; the account comes from the
+  reader. `decoder/` (C#) only decodes the game's static data, with the MessagePack build
+  the HH install ships (`just static`).
+- In game: the addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
   `EquipArtifacts`) and `/preview` (`{"account_id", "hero_id", "artifact_ids"}`, `PreviewBuild`,
   the game's build preview: nothing changes, no sync follows). It injects the SignalR
   invocation into the extractor's `/reader` hub WebSocket, as if HH's server sent it, then
   waits for (and swallows) the extractor's `HelperRequestResult`. `account_id` is the
-  capture's `UserId`. `webui/extractor.py` is the client; each build has both buttons.
+  account's user id. `webui/extractor.py` is the client; each build has both buttons.
   `/sell` (`{"artifact_ids"}`, `SellArtifacts(int[])`) only selects the pieces in the game's
   sell screen; the user confirms the sale in game. Only the accessories page sends it, and
   only pieces its current plan sells (`forms.parse_sell`).
+- `reader/` (Rust, `x86_64-pc-windows-gnu`; `just read`, ~2.5 s): **the account's source**.
+  Reads it out of the running game's memory from outside the process (`OpenProcess` VM_READ +
+  `ReadProcessMemory`; nothing injected or written), run in the game's prefix via
+  `plarium-umu`, into `data/captures/snapshot.json` (`paths.SNAPSHOT`, `account.load_account`
+  parses it; the web UI reloads when it changes). Only what the optimiser uses: champions
+  (static facts come from `hero_types.json`), pieces, who wears what, relics, Great Hall,
+  arena league, inbox pieces. Values are the game's: ids, enums by name (the faction's game
+  name: `account.faction_name` gives the display name), Fixed rounded to 6 decimals. A
+  module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
+  object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
+  (`AppModel` via its type info → parent `SingleInstance<AppModel>`'s statics; pieces live in
+  `ArtifactStorageResolver._implementation`'s `ExternalArtifactsStorage` cache, not
+  `UserArtifactData.Artifacts`, which is empty). Offsets and enum names come by name from the
+  dump: `tools/reader_layout.py` (`just reader-layout`, rerun after `just dump`) writes
+  `data/cache/reader-layout.json`; modules resolve theirs once with `offsets!`. Checked
+  against HH's capture: the same account, but HH rounds Corrupted pieces' damage-modifier
+  lines to two decimals.
 - `just static`: decodes the game's cached static data
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, MessagePack
   Lz4BlockArray, string keys) via `tools/static_export.py` and `schema/schema.json` (from an
@@ -41,7 +60,7 @@ its upload. Game tables come from the game's own data.
   The co-op event world boss (Tainted Demon Lord) is area `CooperationEventWorldBoss`.
 - Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
   column (Wing/Tail/Paw: where this rotation's mythical materials are; the user picks, the
-  capture doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
+  snapshot doesn't say) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
   only count for trials cleared in the same fight). Judged on what champions can place and do,
   not damage (targets are shown, not checked), nor turn order, nor ACC against the RES.
   - `tags`: `Tag` (debuff/buff status kind with strengths merged by `status_kind`, a skill
@@ -62,7 +81,7 @@ its upload. Game tables come from the game's own data.
     boss atoms, `BOSS_FACTS`, true) drops what never lands on a boss (Lamasu's True Fear goes
     to non-bosses; bosses get Decrease SPD), and only what depends on more is `CONDITIONAL`.
   - `gear`: `effect_sources.json` (each set's set skills, each relic type's skills and faction
-    skills, capture faction names) → `Gear` options (every set, relics the account owns,
+    skills, factions by display name) → `Gear` options (every set, relics the account owns,
     `Account.relic_types`), rated like skills. Allowed ones (`gear=<Gear.key>`, `gear_set`
     marks the list as sent; default `DEFAULT_GEAR`, Toxic) and team-wide assumptions make needs
     `Given` (`with_gear`); faction relic skills (Bloatshield Totem's Demonspawn reflect) and
@@ -94,7 +113,7 @@ its upload. Game tables come from the game's own data.
 - `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
   `labels`), `paths` (where the data lives) and `settings` (the store's rows as the model's
   types: the only model module besides `store` that touches the file).
-- `optimiser/store.py`: user state the capture doesn't hold, in SQLite at `data/state/optimiser.sqlite`
+- `optimiser/store.py`: user state the snapshot doesn't hold, in SQLite at `data/state/optimiser.sqlite`
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list. A solve's gear pool
   (`AnyGear | UpToLock(level) | Unequipped`) decides whose worn gear it may take; the
   champion's own gear is always allowed.
@@ -110,8 +129,8 @@ its upload. Game tables come from the game's own data.
   shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
 - Accessories (`/accessories`, tabs in the workflow's order: Swaps · Roll · Rework · Clean up,
   then Weights; `optimiser/accessories/`, which doesn't use the solver). Only unequipped gear takes
-  inventory space (2200 for accessories); overflow waits in the mailbox (the capture's
-  `InboxItems` "Overflow" artifacts, `Account.mailbox`).
+  inventory space (2200 for accessories); overflow waits in the mailbox (the inbox's
+  pieces, `Account.mailbox`).
   - `roles.py`: champion types (ATK/HP/DEF damage, bomber/poisoner, support: per-stat weights,
     stored in `type_weights`, and the main stats that suit them) and set roles (Damage, Hybrid,
     Support, Any; the user's table, by set id). Support sets still keep one C.DMG amulet.
@@ -141,7 +160,7 @@ its upload. Game tables come from the game's own data.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
-  cached capture, locks), `views` (champion rows, piece names and art) and `scores` (accessory
+  cached account, locks), `views` (champion rows, piece names and art) and `scores` (accessory
   potentials kept in `data/cache/potentials.pickle` by piece state, per scorer and scoring
   code, so only changed pieces are rescored); `forms.py` is the
   form boundary; only `app.py` and `templates/` know about HTTP/HTML.
@@ -158,7 +177,8 @@ Use the `justfile` (`just` lists every recipe). It is the only place that knows 
 ```
 just install          # set a machine up (paths, mitmproxy's CA, then update)
 just update           # after a pull, game update or HH update: deps, decoder, HH patch, static, assets
-just proxy            # capture (extractor + game running)
+just read             # the account, from the running game's memory (read-only)
+just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
 just static           # re-export the game's tables (part of update)
 just schema-refresh   # when the export says the dump predates the game: dump, schema, static
 just web              # http://127.0.0.1:8000 (web-restart, web-stop)
@@ -198,8 +218,8 @@ Anaxia's in-game stats matched exactly.
   cumulative per star (`bonuses.json` `awakening`).
 - **Empower:** cumulative per level; Epic has its own table, Legendary/Mythical share one
   (checked against `CalcEmpowerBonus`).
-- **Great Hall:** per affinity and stat level from the capture's `GreatHall` (values per level,
-  not cumulative). **Arena:** the capture's `ArenaLeague` (Gold V +22% HP/ATK/DEF).
+- **Great Hall:** per affinity and stat level from the snapshot's `great_hall` (values per
+  level, not cumulative). **Arena:** its `arena_league` (Gold V +22% HP/ATK/DEF).
 - **Masteries:** 13 stat masteries; Lore of Steel (500343) multiplies set stat bonuses by
   1.15 (the game lists that extra under masteries).
 - **Relics:** a type's stats unlock at levels 0/9/15; a stat's value is
@@ -211,8 +231,8 @@ Anaxia's in-game stats matched exactly.
   1–5 Uncommon only, 6 in Uncommon–Legendary; substats only, no C.RATE/C.DMG glyphs.
   Accessories may be faction-locked. Sets: fixed (per N pieces) or variable (cumulative total
   at each piece count, accessories count).
-- HH names sets differently from the game (HH `AttackPowerAndIgnoreDefence` = Cruel); join by
-  number via `set_ids.json`. Two placeholder sets (55, 56) are unreleased prototypes, hidden.
+- Pieces carry the game's set id. HH named sets differently (HH `AttackPowerAndIgnoreDefence`
+  = Cruel). Two placeholder sets (55, 56) are unreleased prototypes, hidden.
 
 ## Damage (read from `SharedModel.Battle.Core.DamageCalculator` disassembly)
 
@@ -267,9 +287,8 @@ data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.c
 ## Assets
 
 Portraits are named by type id with ascension 0 (`9990`), piece art `<set id>_<slot>`, set
-icons by set id. Affinity icons by lower-case affinity, faction banners by the capture's
-(HH's) faction name (HH renames Samurai → Shadowkin, Olympians → Argonites; the extractor
-pairs them by type), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
+icons by set id. Affinity icons by lower-case affinity, faction banners by display name
+(`account.FACTION_NAMES`: Samurai → Shadowkin, Olympians → Argonites), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
 portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only
 set-less accessories use `<faction>_<slot>`. Old sprite names mapped by the user: Berserker = Crit
 Damage, Healing = Regeneration, Rage = Killstroke, Stalwart2 = Defiant, Taunting = Provoke,

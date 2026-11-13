@@ -17,3 +17,6 @@ webui/static/assets/
 
 # Machine-specific paths (see .env.example)
 .env
+
+# The memory reader's build
+reader/target/

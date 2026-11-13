@@ -1,15 +1,12 @@
-// raid-decoder: decode a captured HellHades `api/Account/v2` upload
-// (MessagePack + LZ4Block serialized RaidData) into readable JSON.
+// raid-decoder: decode the game's cached static data (MessagePack + Lz4BlockArray) into raw
+// JSON, with the MessagePack build the HellHades install ships.
 //
-// usage: raid-decoder <capture.bin> [out-dir]
-//        raid-decoder --selftest [out-dir]
-// env:   HH_DIR overrides the extractor install dir used to load HH's DLLs.
+// usage: raid-decoder static [out.json] [static-data-file]
+// env:   HH_DIR overrides the extractor install dir its DLLs are loaded from.
 
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 static class Entry
 {
@@ -18,7 +15,7 @@ static class Entry
         ?? typeof(Entry).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
             .First(a => a.Key == "DefaultHHDir").Value!;
 
-    // Must run before anything touches HH / MessagePack types, so the resolver
+    // Must run before anything touches MessagePack types, so the resolver
     // is in place when the JIT first needs those assemblies.
     [ModuleInitializer]
     internal static void InstallResolver()
@@ -32,11 +29,9 @@ static class Entry
 
     static int Main(string[] args)
     {
-        if (args.Length == 0)
+        if (args.Length == 0 || args[0] != "static")
         {
-            Console.Error.WriteLine("usage: raid-decoder <capture.bin> [out-dir]\n" +
-                                    "       raid-decoder static [out.json] [static-data-file]\n" +
-                                    "       raid-decoder --selftest [out-dir]");
+            Console.Error.WriteLine("usage: raid-decoder static [out.json] [static-data-file]");
             return 2;
         }
         if (!Directory.Exists(HHDir))
@@ -46,12 +41,7 @@ static class Entry
         }
         try
         {
-            return args[0] switch
-            {
-                "--selftest" => Exporter.SelfTest(args.Length > 1 ? args[1] : "selftest-out"),
-                "static" => StaticData.Export(args.Length > 2 ? args[2] : null, args.Length > 1 ? args[1] : "static-raw.json", HHDir),
-                _ => Exporter.Export(args[0], args.Length > 1 ? args[1] : Path.ChangeExtension(args[0], null)),
-            };
+            return StaticData.Export(args.Length > 2 ? args[2] : null, args.Length > 1 ? args[1] : "static-raw.json", HHDir);
         }
         catch (Exception e)
         {
