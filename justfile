@@ -33,7 +33,7 @@ default:
 # The web UI's game commands (equip, preview, sell) through the HH extractor (extractor + game running)
 proxy *args:
     uv run --group capture mitmdump --listen-host 127.0.0.1 --listen-port 8080 \
-        --allow-hosts 'hellhades\.com(:\d+)?$' -s capture/hh_capture.py --flow-detail 1 "$@"
+        --allow-hosts 'hellhades\.com(:\d+)?$' -s capture/hh_capture.py --flow-detail 0 "$@"
 
 # Re-apply the HellHades sell/equip fix (after a HellHades update) in its install (-q: quiet)
 hh-patch *args:
