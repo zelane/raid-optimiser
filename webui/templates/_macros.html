@@ -75,6 +75,7 @@
       {% endif %}
     </header>
     {% if p.faction %}<p class="meta"><small>{{ p.faction }} only</small></p>{% endif %}
+    {% if p.reserved_by %}<p class="meta reserved"><small title="Reserved: {{ p.reserved_by | join('; ') }}">reserved: {{ p.reserved_by | join('; ') }}</small></p>{% endif %}
     <table class="piece-stats">
       {% for sub in p.substats %}{{ line(sub) }}{% endfor %}
     </table>

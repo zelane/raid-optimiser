@@ -31,7 +31,9 @@ the game itself.
   parses it; the web UI reloads when it changes; the nav's Sync button runs `just read` through
   `webui/reader.py`, and a successful Equip syncs after). Only what the optimiser uses:
   champions (static facts come from `hero_types.json`), pieces, who wears what, relics, Great
-  Hall, arena league, inbox pieces, saved teams (`teams`: presets with their area, from
+  Hall, arena league, inbox pieces, champion tags (`marker`: `HeroMarker`, one per champion;
+  ArenaFirst is "Arena Build I"), gear presets (`gear_presets`: `ExternalArtifactsStorage._presets`,
+  per champion or global (`hero_id` null, the game's key -1), artifact or accessory), saved teams (`teams`: presets with their area, from
   `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3
   arena defenses; empty slots are 0 or -1) and the Chimera's raid (`chimera`:
   `SharedModelManager.DynamicData.StageData.AllianceChimeraData`). Values are the game's: ids, enums by name (the faction's game
@@ -128,9 +130,14 @@ the game itself.
   `labels`), `paths` (where the data lives) and `settings` (the store's rows as the model's
   types: the only model module besides `store` that touches the file).
 - `optimiser/store.py`: user state the snapshot doesn't hold, in SQLite at `data/state/optimiser.sqlite`
-  (stdlib `sqlite3`): champion locks 1–5, set on the champion list. A solve's gear pool
-  (`AnyGear | UpToLock(level) | Unequipped`) decides whose worn gear it may take; the
-  champion's own gear is always allowed.
+  (stdlib `sqlite3`): champion locks 1–5, set on the champion list, and reserve rules
+  (`optimiser/reserve.py`, by `rule_key`: `Tagged(marker)` what champions with a tag wear,
+  `GlobalPresets` every global gear preset's pieces even unworn, `Team(preset id)` what a saved
+  team wears; what they reserve comes from each snapshot; edited on the `/assumptions` page). A solve's `GearFilter`
+  says what gear it may not take, each part toggled on its own on the champion page: each reserve
+  rule (`exclude_<rule key>`, on by default), champions locked above a level, anything other
+  champions wear. Taken pieces note what reserves them. The champion's own gear is always
+  allowed. Locks are kept for now, to compare.
   Also what solves assume (account-wide, `/assumptions` page; `optimiser/assume.py`): flags for
   the champion at their rank's top level, gear at +16 (main stat only) and ascended gear fully
   ascended (`planned_*` fields; `data/game/gear.json` tables, checked exact against every piece),
@@ -164,7 +171,7 @@ the game itself.
     (`roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint 1.15; set-less 0.6).
   - `cleanup.py`: inventory + mailbox planned together; the lowest values go until
     `target_free` spaces are left (sold, or left unclaimed). Special variants
-    (`VariantId` "Corrupted": unusual stats, a border) are left alone everywhere. Never dropped: protected pieces,
+    (`VariantId` "Corrupted": unusual stats, a border) are left alone everywhere. Never dropped: protected pieces, reserved pieces (swaps may still move them),
     banners with SPD rolled 3+, good potential (slot's top quarter), each faction's Faction
     Wars reserve, 6★ damage-set amulets not yet reworked (may rework to C.DMG). Group quotas
     (2, 1 for low-value sets) make the surplus go first. Swaps (own tab, by champion): a loose

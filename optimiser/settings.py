@@ -1,12 +1,13 @@
 """
 settings.py - what the user has set, read from the store as the model's types and written
-back by the store's names: the assumptions solves make (flags and glyphs) and the standard
-champion types' weights. The only part of the optimiser besides the store that touches the
-file; the model takes what this returns.
+back by the store's names: the assumptions solves make (flags and glyphs), the standard
+champion types' weights, and the rules that reserve gear. The only part of the optimiser
+besides the store that touches the file; the model takes what this returns.
 
 - `read_assumptions`, `set_flag`: what solves assume
 - `read_planned`, `plan_glyph`: the glyphs assumed on gear
 - `read_standard_types`, `set_type_weight`: the standard types, with the stored weights
+- `read_reserve_rules`, `set_reserve_rule`: what reserves gear
 """
 
 from pathlib import Path
@@ -15,14 +16,17 @@ from optimiser.accessories.roles import ChampionType, TypeKey, standard_types
 from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, Tables
 from optimiser.assume import Assumptions, Flag
 from optimiser.glyphs import grade_key, kind_key, parse_grade, parse_kind
+from optimiser.reserve import Rule, parse_rule, rule_key
 from optimiser.store import (
     read_flags,
     read_glyphs,
     read_weights,
     write_flag,
     write_glyph,
+    write_reserve_rule,
     write_weight,
 )
+from optimiser.store import read_reserve_rules as read_rule_keys
 
 
 def read_assumptions(store: Path, account: Account) -> Assumptions:
@@ -64,3 +68,12 @@ def read_standard_types(store: Path) -> tuple[ChampionType, ...]:
 
 def set_type_weight(store: Path, key: TypeKey, stat: Stat, weight: float) -> None:
     write_weight(store, (key.value, stat.value), weight)
+
+
+def read_reserve_rules(store: Path) -> tuple[Rule, ...]:
+    """In the order they were added; keys no longer understood are ignored."""
+    return tuple(rule for key in read_rule_keys(store) if (rule := parse_rule(key)))
+
+
+def set_reserve_rule(store: Path, rule: Rule, on: bool) -> None:
+    write_reserve_rule(store, rule_key(rule), on)

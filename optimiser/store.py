@@ -14,7 +14,9 @@ names them.
 
 Type weights are what `optimiser.accessories.roles` values a stat at for a champion type, keyed by
 the type's and the stat's names (opaque here); weights left at their default have no row.
-Protected pieces are accessories the clean-up must never drop. Numbers are named settings
+Reserve rules say what gear is kept for something else (`optimiser.reserve` names them;
+opaque here), in the order they were added. Protected pieces are accessories the clean-up must
+never drop. Numbers are named settings
 with a value ("target_free"); unset ones have no row.
 
 `optimiser.settings` reads the flags, glyphs and weights back as the model's types.
@@ -28,6 +30,7 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `read_glyphs`, `write_glyph`: glyphs
 - `read_flags`, `write_flag`: settings
 - `WeightKey`, `read_weights`, `write_weight`: champion type weights
+- `read_reserve_rules`, `write_reserve_rule`: reserve rules
 - `read_protected`, `write_protected`: protected accessories
 - `read_number`, `write_number`: numeric settings
 - `save_run`, `list_runs`, `read_run`, `latest_run`, `delete_run`: runs
@@ -96,6 +99,7 @@ SCHEMA = (
         weight REAL NOT NULL,
         PRIMARY KEY (type, stat)
     )""",
+    "CREATE TABLE IF NOT EXISTS reserve_rules (key TEXT PRIMARY KEY)",
     "CREATE TABLE IF NOT EXISTS protected_artifacts (artifact_id INTEGER PRIMARY KEY)",
     "CREATE TABLE IF NOT EXISTS numbers (name TEXT PRIMARY KEY, value REAL NOT NULL)",
 )
@@ -181,6 +185,25 @@ def write_weight(path: Path, key: WeightKey, weight: float) -> None:
             " ON CONFLICT (type, stat) DO UPDATE SET weight = excluded.weight",
             (*key, weight),
         )
+
+
+def read_reserve_rules(path: Path) -> list[str]:
+    """Oldest first."""
+    if not path.exists():
+        return []
+
+    with connect(path) as db:
+        rows = db.execute("SELECT key FROM reserve_rules ORDER BY rowid").fetchall()
+
+    return [key for (key,) in rows]
+
+
+def write_reserve_rule(path: Path, key: str, on: bool) -> None:
+    with connect(path) as db:
+        if on:
+            db.execute("INSERT OR IGNORE INTO reserve_rules (key) VALUES (?)", (key,))
+        else:
+            db.execute("DELETE FROM reserve_rules WHERE key = ?", (key,))
 
 
 def read_protected(path: Path) -> set[int]:

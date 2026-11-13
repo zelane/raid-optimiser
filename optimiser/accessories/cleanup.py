@@ -12,12 +12,12 @@ set-less piece gives way to any set piece of its slot, main stat and faction wit
 stats.
 
 Never dropped: special variants (Corrupted: unusual stats; left alone entirely, swaps too),
-pieces protected by hand, banners with SPD rolled three times or more, pieces
-of good potential, each faction's Faction Wars reserve (its best support pieces and best
-damage pieces of each slot, worn ones included), and 6★ damage-set amulets not yet reworked
-(a rework may make them C.DMG). Groups (slot, main stat, set, faction) keep
-`group_quota` pieces each, worn ones on unlocked champions counting; pieces past that go
-first, as if worth `SURPLUS_FACTOR` of their value.
+pieces protected by hand, reserved pieces (`optimiser.reserve`: swaps may still move them),
+banners with SPD rolled three times or more, pieces of good potential, each faction's Faction
+Wars reserve (its best support pieces and best damage pieces of each slot, worn ones
+included), and 6★ damage-set amulets not yet reworked (a rework may make them C.DMG). Groups
+(slot, main stat, set, faction) keep `group_quota` pieces each, worn ones on unlocked
+champions counting; pieces past that go first, as if worth `SURPLUS_FACTOR` of their value.
 
 - `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`, `SPEED_ROLLS`, `FACTION_WARS`, `SURPLUS_FACTOR`,
   `CRIT_REWORK_RANK`: the rules' numbers
@@ -48,6 +48,7 @@ SWAP_MARGIN = 1.1  # a loose piece must be worth this much more than a worn one 
 
 class Keep(StrEnum):
     PROTECTED = "protected"
+    RESERVED = "reserved"
     SPECIAL = "special variant"
     SPEED = "SPD rolled 3+"
     POTENTIAL = "good potential"
@@ -141,7 +142,9 @@ class Plan:
         return {p.piece.artifact.id for p in (*self.to_sell, *self.leave_unclaimed)} | swapped_off
 
 
-def plan_cleanup(assessment: Assessment, protected: set[int], target_free: int) -> Plan:
+def plan_cleanup(
+    assessment: Assessment, protected: set[int], reserved: set[int], target_free: int
+) -> Plan:
     pieces = assessment.pieces
     pairs = find_swaps(pieces)
     going_on = {pair.better.artifact.id for pair in pairs}
@@ -152,12 +155,14 @@ def plan_cleanup(assessment: Assessment, protected: set[int], target_free: int) 
         if (p.where is not Where.WORN and p.artifact.id not in going_on)
         or p.artifact.id in coming_off
     ]
-    reserve = faction_wars_reserve(pieces)
+    faction_wars = faction_wars_reserve(pieces)
     places = places_in_groups(pieces)
 
     placed = [
         place_piece(
-            piece, places[piece.artifact.id], keep_reasons(piece, assessment, protected, reserve)
+            piece,
+            places[piece.artifact.id],
+            keep_reasons(piece, assessment, protected, reserved, faction_wars),
         )
         for piece in loose
     ]
@@ -278,15 +283,20 @@ def worn_score(piece: Assessed) -> float:
 
 
 def keep_reasons(
-    piece: Assessed, assessment: Assessment, protected: set[int], reserve: set[int]
+    piece: Assessed,
+    assessment: Assessment,
+    protected: set[int],
+    reserved: set[int],
+    faction_wars: set[int],
 ) -> tuple[Keep, ...]:
     artifact = piece.artifact
     checks = (
         (Keep.PROTECTED, artifact.id in protected),
+        (Keep.RESERVED, artifact.id in reserved),
         (Keep.SPECIAL, artifact.special()),
         (Keep.SPEED, artifact.slot is Slot.BANNER and speed_rolls(piece) >= SPEED_ROLLS),
         (Keep.POTENTIAL, assessment.is_good(piece)),
-        (Keep.FACTION_WARS, artifact.id in reserve),
+        (Keep.FACTION_WARS, artifact.id in faction_wars),
         (Keep.CRIT_REWORK, could_rework_to_crit(piece)),
     )
     return tuple(reason for reason, applies in checks if applies)

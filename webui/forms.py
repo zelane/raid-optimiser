@@ -4,29 +4,32 @@ The boundary: past here the solver sees only valid, typed requests.
 
 Fields: `min_<STAT>`/`max_<STAT>` (C.RATE and C.DMG in %), `set_<n>` with `pieces_<n>` (any
 number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` with
-`damage_skill` (skill id) and `enemy_def`, `slack` (%), `builds`, `pool` (a `pool_name`),
-`above_level`, `form` (which of a mythical's forms, 0 first; absent: the first). The equip
-button posts `artifact_ids`, comma-separated; the champion list's lock picker posts `level`;
-the assumptions page posts `kind` (a `kind_key`) and `grade` (a `grade_key`, empty for none)
-for a glyph, and `flag` (a `Flag`) with `on` (present when ticked) for the rest. The
-accessories pages post `key` ("<type>:<stat>", by the store's names) with `weight` for a
-champion type's weight, `target_free` for the spaces to leave, `on` (present when ticked) to
-protect a piece, and `artifact_id` (repeated) for the pieces to sell. The Chimera page's
-`slot` (repeated, one per team slot) is a champion picked from its list, which ends in
-"#<champion id>", or part of a champion's name typed in, or empty for an open slot; `want`
-(repeated) a debuff, buff or effect every team must bring besides (a `Tag.key`, one of
-`chimera.wantable`); `gear` (repeated) a set or relic any champion may wear (a `Gear.key`;
-`gear_set` present: the list is as sent, else the defaults); `assume` (repeated) something
-assumed: "<tag key>" for the team, "<champion id>@<tag key>" for one champion.
+`damage_skill` (skill id) and `enemy_def`, `slack` (%), `builds`, the gear filters (each
+present when ticked: `unworn_only`; `locked` with `lock_level`; `exclude_<rule key>` per
+reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; absent: the first).
+The equip button posts `artifact_ids`, comma-separated; the champion list's lock picker posts
+`level`; the assumptions page posts `kind` (a `kind_key`) and `grade` (a `grade_key`, empty for
+none) for a glyph, `flag` (a `Flag`) with `on` (present when ticked) for the rest, and `rule`
+(a reserve `rule_key`) with `on` (present: add it, else remove it). The accessories pages post
+`key` ("<type>:<stat>", by the store's names) with `weight` for a champion type's weight,
+`target_free` for the spaces to leave, `on` (present when ticked) to protect a piece, and
+`artifact_id` (repeated) for the pieces to sell. The Chimera page's `slot` (repeated, one per
+team slot) is a champion picked from its list, which ends in "#<champion id>", or part of a
+champion's name typed in, or empty for an open slot; `want` (repeated) a debuff, buff or effect
+every team must bring besides (a `Tag.key`, one of `chimera.wantable`); `gear` (repeated) a set
+or relic any champion may wear (a `Gear.key`; `gear_set` present: the list is as sent, else the
+defaults); `assume` (repeated) something assumed: "<tag key>" for the team, "<champion id>@<tag
+key>" for one champion.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `FormErrors`: what's wrong with a submitted form
 - `GlyphPlan`, `FlagSetting`, `WeightSetting`: what the assumption and weight forms set
-- `parse_request`: the boundary
+- `parse_request` (`parse_gear_filter`): the boundary
 - `parse_equip`: the equip button's pieces
 - `parse_lock`: the lock picker's level
 - `parse_glyph`: a glyph kind and the grade to assume for it
 - `parse_flag`: an assumption, on or off
+- `ReserveSetting`, `parse_reserve_rule`: a reserve rule, added or removed
 - `MAX_WEIGHT`, `parse_weight`: a champion type's weight for a stat
 - `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
 - `parse_protect`: a piece protected from the clean-up, or not
@@ -63,8 +66,9 @@ from optimiser.chimera.tags import Tag
 from optimiser.chimera.trials import PARTS, TEAM_SIZE
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.glyphs import parse_grade, parse_kind
-from optimiser.labels import PERCENT_STATS, STAT_LABELS, parse_pool
-from optimiser.solve import MAX_PIECES, Goal, Request
+from optimiser.labels import MARKER_LABELS, PERCENT_STATS, STAT_LABELS
+from optimiser.reserve import Rule, Tagged, Team, parse_rule, reservations, rule_key
+from optimiser.solve import MAX_PIECES, GearFilter, Goal, Request
 
 DEFAULT_ENEMY_DEF = 6000
 DEFAULT_ABOVE_LEVEL = 8
@@ -102,7 +106,11 @@ class WeightSetting:
 
 
 def parse_request(
-    form: Mapping[str, str], champion: Champion, account: Account, locks: Locks
+    form: Mapping[str, str],
+    champion: Champion,
+    account: Account,
+    locks: Locks,
+    rules: tuple[Rule, ...],
 ) -> Request | FormErrors:
     errors: list[str] = []
     champion = parse_form(form, champion, account, errors)
@@ -113,7 +121,7 @@ def parse_request(
     slack = parse_number(form, "slack", "slack", errors, default=1.0)
     builds = parse_number(form, "builds", "builds", errors, default=3)
     above_level = parse_number(form, "above_level", "item level", errors, DEFAULT_ABOVE_LEVEL)
-    pool = parse_pool(form.get("pool", "all"), locks)
+    gear = parse_gear_filter(form, account, locks, rules, errors)
 
     if not 0 <= slack <= 50:
         errors.append("slack must be between 0 and 50 %")
@@ -121,10 +129,7 @@ def parse_request(
     if not 1 <= builds <= MAX_BUILDS:
         errors.append(f"builds must be between 1 and {MAX_BUILDS}")
 
-    if pool is None:
-        errors.append("unknown gear pool")
-
-    if errors or pool is None:
+    if errors:
         return FormErrors(errors)
 
     return Request(
@@ -135,8 +140,30 @@ def parse_request(
         ranking=ranking,
         slack=slack / 100,
         builds=int(builds),
-        pool=pool,
+        gear=gear,
         above_level=int(above_level),
+    )
+
+
+def parse_gear_filter(
+    form: Mapping[str, str],
+    account: Account,
+    locks: Locks,
+    rules: tuple[Rule, ...],
+    errors: list[str],
+) -> GearFilter:
+    level = form.get("lock_level", "0")
+
+    if "locked" in form and not (level.isdigit() and int(level) < max(LOCK_LEVELS)):
+        errors.append(f"lock level must be 0 to {max(LOCK_LEVELS) - 1}")
+
+    excluded = tuple(rule for rule in rules if f"exclude_{rule_key(rule)}" in form)
+    return GearFilter(
+        unworn_only="unworn_only" in form,
+        lock_level=int(level) if "locked" in form and level.isdigit() else None,
+        locks=locks,
+        rules=excluded,
+        reserved=reservations(account, excluded),
     )
 
 
@@ -399,6 +426,30 @@ def parse_flag(form: Mapping[str, str]) -> FlagSetting | FormErrors:
         return FormErrors([f"no such assumption: {name}"])
 
     return FlagSetting(Flag(name), "on" in form)
+
+
+@dataclass(frozen=True)
+class ReserveSetting:
+    rule: Rule
+    on: bool  # added; else removed
+
+
+def parse_reserve_rule(form: Mapping[str, str], account: Account) -> ReserveSetting | FormErrors:
+    """A rule to add must name a tag the game has or a saved team; any can be removed."""
+    rule, on = parse_rule(form.get("rule", "")), "on" in form
+
+    match rule:
+        case None:
+            return FormErrors(["no such reserve rule"])
+
+        case Tagged(marker=marker) if on and marker not in MARKER_LABELS:
+            return FormErrors([f"no champion tag {marker}"])
+
+        case Team(preset_id=preset_id) if on and all(p.id != preset_id for p in account.presets):
+            return FormErrors(["that saved team is gone; sync and reload"])
+
+        case _:
+            return ReserveSetting(rule, on)
 
 
 def parse_weight(form: Mapping[str, str]) -> WeightSetting | FormErrors:

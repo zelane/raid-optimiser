@@ -38,9 +38,16 @@ from optimiser.accessories.roles import (
 from optimiser.account import Account, Stat
 from optimiser.labels import STAT_LABELS, format_line, line_label
 from optimiser.paths import POTENTIALS, STORE
+from optimiser.reserve import reservations
 from optimiser.settings import read_standard_types, set_type_weight
 from optimiser.store import read_number, read_protected, write_number, write_protected
-from webui.service.current import current_locks, load_for, roster_types, snapshot_mtime
+from webui.service.current import (
+    current_locks,
+    current_reserve_rules,
+    load_for,
+    roster_types,
+    snapshot_mtime,
+)
 from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
@@ -215,7 +222,7 @@ TARGET_FREE = "target_free"  # the store's name for it
 
 def accessories_page(account: Account, tab: str) -> AccessoriesPage:
     assessment = current_assessment(account)
-    plan = current_plan(assessment)
+    plan = current_plan(account, assessment)
     return AccessoriesPage(
         tab=tab,
         swaps=swap_groups(account, plan),
@@ -226,7 +233,7 @@ def accessories_page(account: Account, tab: str) -> AccessoriesPage:
 
 
 def cleanup_page(account: Account) -> CleanupView:
-    return cleanup_view(account, current_plan(current_assessment(account)))
+    return cleanup_view(account, current_plan(account, current_assessment(account)))
 
 
 def set_target_free(account: Account, target: int) -> CleanupView:
@@ -245,7 +252,7 @@ def change_type_weight(key: TypeKey, stat: Stat, weight: float) -> None:
 
 def pieces_to_sell(account: Account) -> set[int]:
     """What the plan sells now, so a stale page can't sell what it no longer would."""
-    plan = current_plan(current_assessment(account))
+    plan = current_plan(account, current_assessment(account))
     return {placed.piece.artifact.id for placed in plan.to_sell}
 
 
@@ -271,8 +278,10 @@ def potentials_for(snapshot_mtime: int, types: tuple[ChampionType, ...]) -> dict
     return potentials
 
 
-def current_plan(assessment: Assessment) -> Plan:
-    return plan_cleanup(assessment, read_protected(STORE), current_target_free())
+def current_plan(account: Account, assessment: Assessment) -> Plan:
+    """Reserved pieces are kept like protected ones (swaps may still move them)."""
+    reserved = set(reservations(account, current_reserve_rules()))
+    return plan_cleanup(assessment, read_protected(STORE), reserved, current_target_free())
 
 
 def current_target_free() -> int:

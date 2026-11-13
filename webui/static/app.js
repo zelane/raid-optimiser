@@ -123,13 +123,18 @@ document.addEventListener("click", (event) => {
       row.querySelector("input").value = values[`pieces_${n}`] ?? "4";
     }
 
+    // Only ticked boxes are saved, so every box is set: some are ticked by default.
+    for (const box of form.querySelectorAll('input[type="checkbox"]')) {
+      box.checked = box.name in values;
+    }
+
     // The form first (a radio group: setting its value picks that radio), then that form's
     // skill: each form has its own picker.
     for (const [name, value] of Object.entries(values)) {
       if (/^(set|pieces)_\d+$/.test(name) || name === "damage_skill") continue;
 
       const field = form.elements.namedItem(name);
-      if (field) field.value = value;
+      if (field && field.type !== "checkbox") field.value = value;
     }
 
     showForm();

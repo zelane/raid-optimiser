@@ -4,7 +4,8 @@ now and the skills damage can be ranked by; the request form's options; and thei
 
 - `SEARCH_LIMIT`, `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the pages' shape, and
   the game's default champion order
-- `ListedChampion`, `StatOption`, `SetOption`, `PoolOption`, `FormOptions`, `SkillOption`,
+- `ListedChampion`, `StatOption`, `SetOption`, `RuleOption`, `FormOptions`,
+  `SkillOption`,
   `FormView`, `ChampionPage`: the views
 - `search_champions`, `lock_champion`, `champion_page`: what the pages ask for
 - `game_order`, `listed_champion`, `form_options`, `form_views`, `skill_options`,
@@ -13,10 +14,11 @@ now and the skills damage can be ranked by; the request form's options; and thei
 
 from dataclasses import dataclass, replace
 
-from optimiser.account import Account, Champion, Locks, Stat, Stats, worn_gear
+from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats, worn_gear
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
-from optimiser.labels import PERCENT_STATS, STAT_LABELS, pool_choices, pool_label, pool_name
+from optimiser.labels import PERCENT_STATS, STAT_LABELS, rule_label
 from optimiser.paths import STORE
+from optimiser.reserve import Rule, reservations, rule_key
 from optimiser.stats import build_stats
 from optimiser.store import latest_run, write_lock
 from webui.service.results import StatCell, stat_cells
@@ -52,16 +54,20 @@ class SetOption:
 
 
 @dataclass(frozen=True)
-class PoolOption:
-    name: str  # `pool_name`
+class RuleOption:
+    """A reserve rule a solve can keep out (the form's `exclude_<key>`, on by default)."""
+
+    key: str  # `rule_key`
     label: str
+    pieces: int  # how many it reserves
 
 
 @dataclass(frozen=True)
 class FormOptions:
     stats: list[StatOption]
     sets: list[SetOption]  # by name
-    pools: list[PoolOption]  # loosest first
+    rules: list[RuleOption]  # the reserve rules, as configured
+    lock_levels: list[int]  # for "only from champions locked up to": 0 (unlocked) first
 
 
 @dataclass(frozen=True)
@@ -113,12 +119,12 @@ def lock_champion(champion: Champion, level: int) -> ListedChampion:
     return listed_champion(champion, level)
 
 
-def champion_page(account: Account, locks: Locks, champion: Champion) -> ChampionPage:
+def champion_page(account: Account, rules: tuple[Rule, ...], champion: Champion) -> ChampionPage:
     latest = latest_run(STORE, champion.id)
     return ChampionPage(
         champion=champion_row(champion),
         forms=form_views(account, champion),
-        options=form_options(account, locks),
+        options=form_options(account, rules),
         history=run_history(champion),
         latest=run_view(latest, champion) if latest else None,
     )
@@ -144,15 +150,25 @@ def listed_champion(champion: Champion, lock: int) -> ListedChampion:
     return ListedChampion(champion_row(champion), lock)
 
 
-def form_options(account: Account, locks: Locks) -> FormOptions:
+def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:
+    """Up to the top lock level would let any locked champion's gear in, so it's left out."""
     sets = sorted(
         (SetOption(set_id, s.name) for set_id, s in account.tables.sets.items() if s.name),
         key=lambda option: option.name,
     )
+    reserved = reservations(account, rules)
     return FormOptions(
         stats=[StatOption(stat.name, STAT_LABELS[stat], stat in PERCENT_STATS) for stat in Stat],
         sets=sets,
-        pools=[PoolOption(pool_name(pool), pool_label(pool)) for pool in pool_choices(locks)],
+        rules=[
+            RuleOption(
+                rule_key(rule),
+                rule_label(rule, account),
+                sum(1 for reasons in reserved.values() if any(r.rule == rule for r in reasons)),
+            )
+            for rule in rules
+        ],
+        lock_levels=list(range(max(LOCK_LEVELS))),
     )
 
 

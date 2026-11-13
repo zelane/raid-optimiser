@@ -23,4 +23,13 @@
     <thead><tr><th>Stat</th><th>Assume</th></tr></thead>
     <tbody>{% for row in page.glyphs %}{% include "_glyph_row.html" %}{% endfor %}</tbody>
   </table>
+
+  <h2>Reserved gear</h2>
+  <p class="lede">
+    Gear kept for something else, read fresh from the game on every sync. Each rule is its own
+    switch on the champion page (on by default), builds that take reserved gear say so, and the
+    accessory clean-up never sells it (swaps may still move it). Global presets reserve their
+    pieces even when no one wears them. A champion's own gear is always theirs to use.
+  </p>
+  {% with reserve = page.reserve %}{% include "_reserve.html" %}{% endwith %}
 {% endblock %}

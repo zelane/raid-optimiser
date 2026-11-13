@@ -11,7 +11,7 @@ ranked by its log: log(formula) + log(1 + C.DMG) + log(DEF multiplier). The firs
 concave, held under tangent lines; the third depends only on the DEF the sets ignore, which
 comes in 5 % steps, so it's exact with a binary per step.
 
-- `AnyGear`, `Unequipped`, `UpToLock`, `Pool`, `Goal`, `Request`: what's asked
+- `GearFilter`, `Goal`, `Request`: what's asked
 - `Build`, `SetsRuleOut`, `Shortfall`: the outcomes
 - `find_builds`: the workflow
 - `frame` (`wearable`, `prune`, `directions`), `check_sets`, `best_build`,
@@ -24,7 +24,7 @@ comes in 5 % steps, so it's exact with a binary per step.
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import highspy
 
@@ -43,6 +43,7 @@ from optimiser.account import (
     VariableSet,
 )
 from optimiser.damage import ActiveIgnore, DamageGoal, LinearFormula, applies, defence_multiplier
+from optimiser.reserve import Reservations, Rule
 from optimiser.stats import (
     artifact_stats,
     base_stats,
@@ -64,25 +65,32 @@ SET_HEADROOM = 1.5  # sets can add to what the best piece per slot gives
 
 
 @dataclass(frozen=True)
-class AnyGear:
-    """Any artifact, even one another champion wears."""
+class GearFilter:
+    """Which gear a solve may not take, each part on its own; nothing set: any gear. The
+    champion's own is always allowed.
 
+    `unworn_only`: nothing another champion wears. `lock_level`: nothing worn by a champion
+    locked above it (0: only unlocked champions'; None: locks don't matter). `reserved`: what
+    the `rules` keep (`optimiser.reserve`), worn or not."""
 
-@dataclass(frozen=True)
-class Unequipped:
-    """Unworn artifacts, and the champion's own."""
+    unworn_only: bool = False
+    lock_level: int | None = None
+    locks: Locks = field(default_factory=dict)
+    rules: tuple[Rule, ...] = ()
+    reserved: Reservations = field(default_factory=dict)
 
+    def allows(self, artifact_id: int, owner: int | None) -> bool:
+        """`owner`: whoever wears it, if anyone but the champion does."""
+        if artifact_id in self.reserved:
+            return False
 
-@dataclass(frozen=True)
-class UpToLock:
-    """Unworn artifacts, the champion's own, and those of champions locked at `level` or
-    below (0: unlocked champions only)."""
+        if owner is None:
+            return True
 
-    level: int
-    locks: Locks
+        if self.unworn_only:
+            return False
 
-
-type Pool = AnyGear | Unequipped | UpToLock
+        return self.lock_level is None or self.locks.get(owner, 0) <= self.lock_level
 
 
 type Goal = Stat | DamageGoal
@@ -99,7 +107,7 @@ class Request:
     ranking: tuple[Goal, ...]
     slack: float  # each ranked stat may give up this fraction of its best for the next
     builds: int
-    pool: Pool
+    gear: GearFilter
     above_level: int  # only pieces enhanced past this level (8: +9 and up)
 
     def damage_goal(self) -> DamageGoal | None:
@@ -191,18 +199,10 @@ def wearable(artifact: Artifact, account: Account, request: Request) -> bool:
     if artifact.level <= request.above_level:
         return False
 
-    if (owner := account.owners.get(artifact.id)) in (None, request.champion.id):
+    if (owner := account.owners.get(artifact.id)) == request.champion.id:
         return True
 
-    match request.pool:
-        case AnyGear():
-            return True
-
-        case Unequipped():
-            return False
-
-        case UpToLock(level=level, locks=locks):
-            return locks.get(owner, 0) <= level
+    return request.gear.allows(artifact.id, owner)
 
 
 def prune(

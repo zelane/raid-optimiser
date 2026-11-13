@@ -35,6 +35,7 @@
         </table>
       {% endfor %}
     </aside>
+    <div class="champion-request">
     <form class="champion-main" id="request"
           data-champion="{{ champion.id }}"
           hx-post="/champions/{{ champion.id }}/builds"
@@ -114,12 +115,25 @@
             Pieces above level
             <input type="number" name="above_level" value="8" min="0" max="16">
           </label>
+        </div>
+        <div class="gear-filters" title="Gear the solve may not take; the champion's own is always allowed">
+          <span>Leave out gear from</span>
+          {% for rule in page.options.rules %}
           <label>
-            Gear to use
-            <select name="pool"
-                    title="Gear worn by other champions the solve may use; the champion's own is always allowed">
-              {% for pool in page.options.pools %}<option value="{{ pool.name }}">{{ pool.label }}</option>{% endfor %}
+            <input type="checkbox" role="switch" name="exclude_{{ rule.key }}" checked>
+            {{ rule.label }} <span class="count">{{ rule.pieces }}</span>
+          </label>
+          {% endfor %}
+          <label class="lock-filter">
+            <input type="checkbox" role="switch" name="locked">
+            Champions locked above
+            <select name="lock_level" aria-label="Lock level">
+              {% for level in page.options.lock_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
             </select>
+          </label>
+          <label>
+            <input type="checkbox" role="switch" name="unworn_only">
+            Any other champion (unequipped gear only)
           </label>
         </div>
       </fieldset>
@@ -129,6 +143,7 @@
       </div>
       <span id="solving" class="htmx-indicator" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
     </form>
+    </div>
   </div>
   {% with history = page.history, champion_id = page.champion.id %}
     {% include "_history.html" %}

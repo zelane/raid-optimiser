@@ -12,7 +12,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
-- `Preset`, `ChimeraRaid`: saved teams, and the Chimera's current raid
+- `Preset`, `GearPreset`, `ChimeraRaid`: saved teams, global gear presets, and the Chimera's
+  current raid
 - `Account`: everything a solve needs, and the account's saved teams
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
   `faction_name`: what the game's words mean
@@ -21,7 +22,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets` (`parse_ignore`),
   `parse_skills`, `parse_relics` (`relic_stats`), `parse_hero_type`, `parse_forms`,
   `parse_glyphs`, `parse_gear` (`by_line`), `great_hall_by_affinity`, `parse_champion`,
-  `parse_artifact` (`parse_line`), `parse_preset`, `parse_raid`, `team`: its steps
+  `parse_artifact` (`parse_line`), `parse_preset`, `parse_gear_preset`, `parse_raid`, `team`:
+  its steps
 - `parse_bonus`, `parse_bonuses`, `parse_levels`: what the steps share
 """
 
@@ -147,6 +149,7 @@ class Champion:
     relics: tuple[Bonus, ...]  # the stats of the relics it wears
     great_hall: tuple[Bonus, ...]  # the account's Great Hall, for the champion's affinity
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
+    marker: str = "None"  # its tag in game (`HeroMarker`: Favorite, ArenaFirst, …), at most one
     # Which of its forms (`Tables.hero_forms`) it's taken in, 0 first: mythicals have two, and
     # each has its own base stats and skills. A playable form never changes affinity, so the
     # Great Hall doesn't depend on it. The game doesn't say; a request does.
@@ -384,6 +387,17 @@ class Preset:
 
 
 @dataclass(frozen=True)
+class GearPreset:
+    """A global gear preset: pieces saved together under a name, for any champion to put on
+    (an artifact preset, or an accessory one)."""
+
+    id: int
+    name: str
+    accessories: bool
+    artifact_ids: tuple[int, ...]
+
+
+@dataclass(frozen=True)
 class ChimeraRaid:
     """The Chimera's current raid; its prize offset decides which trials give which rewards
     (`optimiser.chimera.rotation`)."""
@@ -397,8 +411,8 @@ class ChimeraRaid:
 class Account:
     """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed;
     `relic_types`: the relic types the account has (worn or not); `presets`, the arena
-    defenses (classic, and 3v3's three teams) and `chimera_raid`: what the game holds besides
-    gear."""
+    defenses (classic, and 3v3's three teams), `gear_presets` (the global ones; champions' own
+    presets are left out) and `chimera_raid`: what the game holds besides gear."""
 
     user_id: int  # the Raid account
     champions: dict[int, Champion]
@@ -410,6 +424,7 @@ class Account:
     presets: tuple[Preset, ...] = ()
     arena_defense: tuple[int, ...] = ()
     arena3x3_defense: tuple[tuple[int, ...], ...] = ()
+    gear_presets: tuple[GearPreset, ...] = ()
     chimera_raid: ChimeraRaid | None = None
 
 
@@ -460,6 +475,9 @@ def load_account(snapshot: Path, static: Path, schema: Path) -> Account:
         presets=tuple(parse_preset(raw) for raw in account["presets"]),
         arena_defense=team(account["arena_defense"]),
         arena3x3_defense=tuple(team(raw) for raw in account["arena3x3_defense"]),
+        gear_presets=tuple(
+            parse_gear_preset(raw) for raw in account["gear_presets"] if raw["hero_id"] is None
+        ),
         chimera_raid=parse_raid(account["chimera"]) if account["chimera"] else None,
     )
 
@@ -538,6 +556,7 @@ def parse_champion(
         relics=relics,
         great_hall=great_hall.get(kind.element, ()),
         skill_levels={int(skill_id): level for skill_id, level in raw["skills"].items()},
+        marker=raw["marker"],
     )
 
 
@@ -573,6 +592,10 @@ def parse_line(raw: dict) -> StatLine:
 
 def parse_preset(raw: dict) -> Preset:
     return Preset(raw["id"], raw["name"], raw["area"], team(raw["heroes"]))
+
+
+def parse_gear_preset(raw: dict) -> GearPreset:
+    return GearPreset(raw["id"], raw["name"], raw["accessories"], tuple(raw["artifact_ids"]))
 
 
 def parse_raid(raw: dict) -> ChimeraRaid:

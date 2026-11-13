@@ -4,14 +4,16 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 - `STAT_LABELS`, `PERCENT_STATS`: stat names as the game shows them, and which read in %
 - `format_stat`, `format_line`, `line_label`, `line_amount`: the formatting
 - `glyph_kind_label`, `glyph_grade_label`: glyphs, "HP%", "6★ Legendary"
-- `pool_choices`, `pool_name`, `pool_label`, `parse_pool`: gear pools, as offered, as a
-  word ("all", "lock-3", "free") and as read
+- `gear_filter_label`: what a solve keeps out of its gear, in a line
+- `MARKER_LABELS`, `rule_label`, `reason_label`: champion tags as the game shows them, and
+  what reserves gear: "Arena Build I", "team cb"; "Arena Build I (Arbiter)", "preset spd"
 """
 
 import re
 
-from optimiser.account import LOCK_LEVELS, GlyphGrade, GlyphKind, Locks, Stat, StatLine
-from optimiser.solve import AnyGear, Pool, Unequipped, UpToLock
+from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine
+from optimiser.reserve import GlobalPresets, Reason, Rule, Tagged, Team
+from optimiser.solve import GearFilter
 
 STAT_LABELS = {
     Stat.HP: "HP",
@@ -24,6 +26,18 @@ STAT_LABELS = {
     Stat.CD: "C.DMG",
 }
 PERCENT_STATS = (Stat.CR, Stat.CD)
+MARKER_LABELS = {
+    "Favorite": "Favorite",
+    "First": "Build I",
+    "Second": "Build II",
+    "Third": "Build III",
+    "Attack": "Attack Build",
+    "Defence": "Defense Build",
+    "Support": "Support Build",
+    "Speed": "Speed Build",
+    "ArenaFirst": "Arena Build I",
+    "ArenaSecond": "Arena Build II",
+}
 
 
 def format_stat(stat: Stat, value: float) -> str:
@@ -69,51 +83,48 @@ def glyph_grade_label(grade: GlyphGrade) -> str:
     return f"{grade.rank}★" + (f" {grade.rarity}" if grade.rank == 6 else "")
 
 
-def pool_choices(locks: Locks) -> list[Pool]:
-    """Loosest first. Up to the top lock level would be the same as any gear, so it's left
-    out."""
-    lock_levels = range(max(LOCK_LEVELS) - 1, -1, -1)
-    return [AnyGear(), *(UpToLock(level, locks) for level in lock_levels), Unequipped()]
+def gear_filter_label(gear: GearFilter, account: Account) -> str:
+    """ "any", or what it keeps out: "unequipped only · locked up to 2 · not Arena Build I,
+    team cb"."""
+    parts = []
+
+    if gear.unworn_only:
+        parts.append("unequipped only")
+
+    match gear.lock_level:
+        case None:
+            pass
+
+        case 0:
+            parts.append("unlocked only")
+
+        case level:
+            parts.append(f"locked up to {level}")
+
+    if gear.rules:
+        parts.append("not " + ", ".join(rule_label(rule, account) for rule in gear.rules))
+
+    return " · ".join(parts) or "any"
 
 
-def pool_name(pool: Pool) -> str:
-    match pool:
-        case AnyGear():
-            return "all"
+def rule_label(rule: Rule, account: Account) -> str:
+    match rule:
+        case Tagged(marker=marker):
+            return MARKER_LABELS.get(marker, marker)
 
-        case Unequipped():
-            return "free"
+        case GlobalPresets():
+            return "Global presets"
 
-        case UpToLock(level=level):
-            return f"lock-{level}"
-
-
-def pool_label(pool: Pool) -> str:
-    match pool:
-        case AnyGear():
-            return "Any"
-
-        case Unequipped():
-            return "Unequipped only"
-
-        case UpToLock(level=0):
-            return "Unlocked only"
-
-        case UpToLock(level=level):
-            return f"Locked up to {level}"
+        case Team(preset_id=preset_id):
+            team = next((p for p in account.presets if p.id == preset_id), None)
+            return f"team {team.name}" if team else f"team {preset_id} (gone)"
 
 
-def parse_pool(name: str, locks: Locks) -> Pool | None:
-    """None for a name `pool_name` never gives."""
-    match name.split("-"):
-        case ["all"]:
-            return AnyGear()
+def reason_label(reason: Reason, account: Account) -> str:
+    """The rule, and through whom: "Arena Build I (Arbiter)", "preset spd"."""
+    if reason.preset_name is not None:
+        return f"preset {reason.preset_name}"
 
-        case ["free"]:
-            return Unequipped()
-
-        case ["lock", level] if level.isdigit() and int(level) <= max(LOCK_LEVELS):
-            return UpToLock(int(level), locks)
-
-        case _:
-            return None
+    champion = account.champions.get(reason.champion_id or 0)
+    rule = rule_label(reason.rule, account)
+    return f"{rule} ({champion.name})" if champion else rule

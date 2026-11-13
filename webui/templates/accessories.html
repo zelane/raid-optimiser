@@ -40,6 +40,7 @@
                 <span class="swap-result"></span>
               </div>
             </header>
+            <div class="overflow-auto">
             <table class="accessory-list">
               <thead><tr><th></th><th>Equip</th><th>Main</th><th>Substats</th><th class="num" title="its stats as they are">Now</th>
                 <th></th><th>In place of</th><th>Main</th><th>Substats</th><th class="num" title="its stats as they are">Now</th></tr></thead>
@@ -54,6 +55,7 @@
                 {% endfor %}
               </tbody>
             </table>
+            </div>
           </article>
         {% endfor %}
       </div>
@@ -101,6 +103,7 @@
       A piece scores as the best type its set is worn by and its main stat suits; supports
       also count the lesser of HP and DEF twice more, for balance. 0 ignores a stat.
     </p>
+    <div class="overflow-auto">
     <table class="weights">
       <thead><tr><th></th>{% for label in page.weights.stats %}<th>{{ label }}</th>{% endfor %}</tr></thead>
       <tbody>
@@ -117,6 +120,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     <p id="weight-result"></p>
 
     <h2>Sets</h2>
@@ -139,6 +143,7 @@
       than HP or DEF. They count only for that faction's pieces, beside the types above. Each
       effect counts its shape, not its size.
     </p>
+    <div class="overflow-auto">
     <table class="weights faction-types">
       <thead><tr><th>Faction</th><th>Type</th><th>From</th>{% for label in page.weights.stats %}<th>{{ label }}</th>{% endfor %}<th>Main stats</th></tr></thead>
       <tbody>
@@ -151,6 +156,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
   {% endif %}
 {% endblock %}
 {% block scripts %}<script src="{{ static_url('cleanup.js') }}"></script>{% endblock %}

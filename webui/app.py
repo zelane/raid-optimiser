@@ -3,7 +3,8 @@ app.py - the web entry point: routes that render the service's views as HTML. On
 module and the templates know about HTTP or HTML; a JSON API would sit beside it.
 
 - `app`, `templates`: the FastAPI app and its Jinja templates
-- `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`, `champion`,
+- `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`,
+  `reserve_rule`, `champion`,
   `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`, `chimera`, `sync`: the
   routes
@@ -25,12 +26,14 @@ from starlette.types import Scope
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.chimera.gear import gear_options
 from optimiser.chimera.kits import wantable
+from optimiser.reserve import reservations
 from webui import extractor, reader
 from webui.forms import (
     FlagSetting,
     FormErrors,
     GlyphPlan,
     Offers,
+    ReserveSetting,
     Unknown,
     WeightSetting,
     parse_chimera,
@@ -40,6 +43,7 @@ from webui.forms import (
     parse_lock,
     parse_protect,
     parse_request,
+    parse_reserve_rule,
     parse_sell,
     parse_target_free,
     parse_weight,
@@ -146,6 +150,20 @@ async def plan_glyph(request: Request):
             return templates.TemplateResponse(request, "_glyph_row.html", {"row": row})
 
 
+@app.post("/reserve", response_class=HTMLResponse)
+async def reserve_rule(request: Request):
+    account = current.current_account()
+    form = {key: str(value) for key, value in (await request.form()).items()}
+
+    match parse_reserve_rule(form, account):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case ReserveSetting(rule=rule, on=on):
+            section = assumption_pages.change_reserve_rule(account, rule, on)
+            return templates.TemplateResponse(request, "_reserve.html", {"reserve": section})
+
+
 @app.get("/accessories", response_class=HTMLResponse)
 def accessories(request: Request, tab: str = accessory_pages.ACCESSORY_TABS[0]):
     if tab not in accessory_pages.ACCESSORY_TABS:
@@ -242,7 +260,7 @@ def chimera(request: Request):
 def champion(request: Request, champion_id: int):
     account = current.current_account()
     page = champion_pages.champion_page(
-        account, current.current_locks(), find_champion(account, champion_id)
+        account, current.current_reserve_rules(), find_champion(account, champion_id)
     )
     context = {"page": page}
     return templates.TemplateResponse(request, "champion.html", context)
@@ -255,12 +273,14 @@ async def builds(request: Request, champion_id: int):
 
     champion = find_champion(account, champion_id)
 
-    match parse_request(form, champion, account, current.current_locks()):
+    locks, rules = current.current_locks(), current.current_reserve_rules()
+
+    match parse_request(form, champion, account, locks, rules):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case solve_request:
-            outcome = results.solve(account, solve_request)
+            outcome = results.solve(account, solve_request, reservations(account, rules))
 
     # The new run goes in the history too, swapped in beside the results.
     context = {

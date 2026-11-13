@@ -47,6 +47,7 @@ CLASSES = {
         "Skills",
         "MasteryData",
         "DoubleAscendData",
+        "Marker",
     ),
     ("SharedModel.Meta.Skills", "Skill"): ("TypeId", "Level"),
     ("SharedModel.Meta.Masteries", "HeroMasteryData"): ("Masteries",),
@@ -59,8 +60,17 @@ CLASSES = {
     ),
     ("SharedModel.Meta.Artifacts", "HeroArtifactData"): ("ArtifactIdByKind",),
     ("SharedModel.Meta.Artifacts.ArtifactStorage", "ArtifactStorageResolver"): ("_implementation",),
-    ("Client.Model.Gameplay.Artifacts", "ExternalArtifactsStorage"): ("_cachedArtifacts",),
+    ("Client.Model.Gameplay.Artifacts", "ExternalArtifactsStorage"): (
+        "_cachedArtifacts",
+        "_presets",
+    ),
     ("Client.Model.Gameplay.Artifacts", "CachedArtifacts"): ("_artifacts",),
+    ("Client.Model.Gameplay.Artifacts.Presets", "ArtifactPresets"): ("_presets",),
+    ("SharedModel.Meta.Artifacts.Presets", "ArtifactsPresetsOfType"): (
+        "_artifactPresets",
+        "_accessoryPresets",
+    ),
+    ("SharedModel.Meta.Artifacts.Presets", "ArtifactPreset"): ("_id", "_name", "_artifactIds"),
     ("SharedModel.Meta.Artifacts", "Artifact"): (
         "_id",
         "_level",
@@ -125,6 +135,7 @@ ENUMS = {
     ("SharedModel.Meta.Battle.Arena", "ArenaLeagueId"),
     ("SharedModel.Meta.Inbox", "InboxTypeId"),
     ("SharedModel.Meta.Heroes", "HeroesAiPresetType"),
+    ("SharedModel.Meta.Heroes", "HeroMarker"),
 }
 
 NAMESPACE = re.compile(r"^// Namespace: ?(.*)$")

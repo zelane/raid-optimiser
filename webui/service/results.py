@@ -15,8 +15,9 @@ from dataclasses import dataclass, field
 from optimiser.account import Account, Artifact, Champion, Slot, Stat, StatLine, Stats, worn_gear
 from optimiser.assume import assume
 from optimiser.damage import estimate_damage
-from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label
+from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label, reason_label
 from optimiser.paths import STORE
+from optimiser.reserve import Reservations
 from optimiser.settings import read_assumptions
 from optimiser.solve import Build, Request, SetsRuleOut, Shortfall, find_builds
 from optimiser.stats import build_stats, set_multiplier
@@ -80,6 +81,7 @@ class PieceView:
     ascend_level: int = 0
     planned_level: int | None = None  # assumed levelled to this
     planned_ascend_level: int | None = None  # assumed ascended to this
+    reserved_by: list[str] = field(default_factory=list)  # reserve rules keeping it elsewhere
 
 
 @dataclass(frozen=True)
@@ -119,7 +121,8 @@ class ShortfallView:
 type Outcome = ResultsView | ShortfallView
 
 
-def solve(account: Account, request: Request) -> Outcome:
+def solve(account: Account, request: Request, reserved: Reservations) -> Outcome:
+    """`reserved`: what every reserve rule keeps, to note on pieces (whatever the pool)."""
     assumed, request = assume(account, request, read_assumptions(STORE, account))
     started = time.monotonic()
     outcome = find_builds(assumed, request)
@@ -133,11 +136,15 @@ def solve(account: Account, request: Request) -> Outcome:
             return shortfall_view(shortfall, request)
 
         case builds:
-            return results_view(account, request, builds, seconds)
+            return results_view(account, request, builds, seconds, reserved)
 
 
 def results_view(
-    account: Account, request: Request, builds: list[Build], seconds: float
+    account: Account,
+    request: Request,
+    builds: list[Build],
+    seconds: float,
+    reserved: Reservations,
 ) -> ResultsView:
     """The builds against the champion's current gear (as they are, nothing assumed)."""
     champion = request.champion
@@ -160,7 +167,13 @@ def results_view(
         current=stat_cells(current, None) + damage_cells(current, tuple(worn)),
         builds=[
             build_view(
-                n, build, current, account, champion, damage_cells(build.stats, build.artifacts)
+                n,
+                build,
+                current,
+                account,
+                champion,
+                damage_cells(build.stats, build.artifacts),
+                reserved,
             )
             for n, build in enumerate(builds, 1)
         ],
@@ -194,8 +207,9 @@ def build_view(
     account: Account,
     champion: Champion,
     extra_cells: list[StatCell],
+    reserved: Reservations,
 ) -> BuildView:
-    by_slot = {a.slot: piece_view(a, account, champion) for a in build.artifacts}
+    by_slot = {a.slot: piece_view(a, account, champion, reserved) for a in build.artifacts}
     pieces = list(by_slot.values())
     return BuildView(
         number=number,
@@ -210,7 +224,10 @@ def build_view(
     )
 
 
-def piece_view(artifact: Artifact, account: Account, champion: Champion) -> PieceView:
+def piece_view(
+    artifact: Artifact, account: Account, champion: Champion, reserved: Reservations
+) -> PieceView:
+    """Reasons through the champion themselves (their own tag, their team) aren't noted."""
     owner_id = account.owners.get(artifact.id)
     wearer = account.champions.get(owner_id) if owner_id is not None else None
     owner = None if owner_id == champion.id else wearer
@@ -235,6 +252,11 @@ def piece_view(artifact: Artifact, account: Account, champion: Champion) -> Piec
         worn_by=owner.name if owner else None,
         worn_by_portrait=champion_row(wearer).portrait_url if wearer else None,
         equipped=owner_id == champion.id,
+        reserved_by=[
+            reason_label(reason, account)
+            for reason in reserved.get(artifact.id, ())
+            if reason.champion_id != champion.id
+        ],
     )
 
 

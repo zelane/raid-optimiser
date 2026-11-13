@@ -4,12 +4,13 @@
 //! - `Reader`: reads pieces (also the inbox's, `account`)
 //! - `read`: every piece the account holds, and where they were read from
 //! - `equipped`: champion id → the ids of the pieces they wear
+//! - `GearPreset`, `presets`: saved gear presets (a champion's, or global), from the storage
 
 use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::collections::{dict_i32, dict_refs, list_refs};
+use crate::collections::{dict_i32, dict_refs, list_i32, list_refs, string};
 use crate::layout::{offsets, Layout};
 use crate::process::Process;
 use crate::roots;
@@ -35,6 +36,17 @@ offsets!(ArtifactFields, "Artifact" {
 offsets!(BonusFields, "ArtifactBonus" {
     stat: "_kindId", value: "_value", glyph: "_powerUpValue", rolls: "_level",
 });
+const PRESETS: [&str; 2] = [
+    "ExternalArtifactsStorage._presets",
+    "ArtifactPresets._presets",
+];
+/// The key the game keeps global presets under (`GlobalGroupHeroId`)
+const GLOBAL: i32 = -1;
+
+offsets!(PresetsOfTypeFields, "ArtifactsPresetsOfType" {
+    artifacts: "_artifactPresets", accessories: "_accessoryPresets",
+});
+offsets!(PresetFields, "ArtifactPreset" { id: "_id", name: "_name", ids: "_artifactIds" });
 offsets!(ValueFields, "BonusValue" { absolute: "_isAbsolute", value: "_value" });
 
 #[derive(Serialize)]
@@ -175,4 +187,51 @@ pub fn equipped(
             Ok((hero, pieces.into_iter().map(|(_, id)| id).collect()))
         })
         .collect()
+}
+
+#[derive(Serialize)]
+pub struct GearPreset {
+    pub id: i64,
+    /// the champion it belongs to; None for a global preset
+    pub hero_id: Option<i32>,
+    pub name: String,
+    /// an accessory preset (ring, amulet, banner) rather than an artifact one
+    pub accessories: bool,
+    pub artifact_ids: Vec<i32>,
+}
+
+/// Every saved gear preset; none when the game doesn't use the external storage.
+pub fn presets(process: &Process, layout: &Layout) -> Result<Vec<GearPreset>, String> {
+    let (storage, class) = roots::artifact_storage(process, layout)?;
+
+    if class != EXTERNAL {
+        return Ok(Vec::new());
+    }
+
+    let of_type = PresetsOfTypeFields::new(layout)?;
+    let fields = PresetFields::new(layout)?;
+    let mut presets = Vec::new();
+
+    for (hero, group) in dict_refs(process, layout.follow(process, storage, &PRESETS)?)? {
+        let hero_id = (hero != GLOBAL).then_some(hero);
+        let g = process.block(group, of_type.span)?;
+
+        for (list, accessories) in [
+            (g.ptr(of_type.artifacts), false),
+            (g.ptr(of_type.accessories), true),
+        ] {
+            for addr in list_refs(process, list)?.into_iter().filter(|&a| a != 0) {
+                let b = process.block(addr, fields.span)?;
+                presets.push(GearPreset {
+                    id: b.i64(fields.id),
+                    hero_id,
+                    name: string(process, b.ptr(fields.name))?,
+                    accessories,
+                    artifact_ids: list_i32(process, b.ptr(fields.ids))?,
+                });
+            }
+        }
+    }
+
+    Ok(presets)
 }

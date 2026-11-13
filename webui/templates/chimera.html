@@ -65,11 +65,11 @@
   <form method="get" action="/chimera" class="chimera-form-steps">
     <section class="chimera-step">
       <h2><span class="step-number">1</span> Rotation</h2>
-      <fieldset role="group" class="chimera-columns">
+      <fieldset class="chimera-columns" role="radiogroup" aria-label="Rotation">
         {% for column in page.columns %}
           <label class="chimera-column" title="Its Easy Ram trial: {{ column.hint }}">
             <input type="radio" name="column" value="{{ column.part }}" {% if column.part == page.column %}checked{% endif %} onchange="this.form.submit()">
-            Mythicals in {{ column.part }}{% if column.mythical %} <mark>this raid</mark>{% endif %}
+            <span class="chimera-column-title">Mythicals in {{ column.part }}{% if column.mythical %} <mark>this raid</mark>{% endif %}</span>
             <small class="chimera-column-hint">{{ column.hint }}</small>
           </label>
         {% endfor %}

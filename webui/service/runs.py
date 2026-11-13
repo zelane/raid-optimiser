@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 
 from optimiser.account import Account, Champion
 from optimiser.damage import DamageGoal
-from optimiser.labels import STAT_LABELS, format_stat, pool_label
+from optimiser.labels import STAT_LABELS, format_stat, gear_filter_label
 from optimiser.paths import STORE
 from optimiser.solve import Goal, Request
 from optimiser.store import NewRun, Run, RunEntry, delete_run, list_runs, read_run, save_run
@@ -92,7 +92,8 @@ def describe_request(request: Request, account: Account) -> str:
         for set_id, pieces in request.set_minimums.items()
     ]
     ranking = " › ".join(describe_ranked(goal) for goal in request.ranking)
-    gear = f"gear: {pool_label(request.pool)}"
+    gear = f"gear: {gear_filter_label(request.gear, account)}"
+
     return " · ".join([*form, ranking, *at_least, *at_most, *sets, gear])
 
 

@@ -19,7 +19,7 @@ const PATH: [&str; 3] = [
 
 offsets!(HeroFields, "Hero" {
     id: "Id", type_id: "TypeId", grade: "Grade", level: "Level", empower: "EmpowerLevel",
-    skills: "Skills", mastery: "MasteryData", double_ascend: "DoubleAscendData",
+    skills: "Skills", mastery: "MasteryData", double_ascend: "DoubleAscendData", marker: "Marker",
 });
 offsets!(SkillFields, "Skill" { type_id: "TypeId", level: "Level" });
 
@@ -35,6 +35,8 @@ pub struct Hero {
     /// skill type id → level
     pub skills: BTreeMap<i32, i32>,
     pub masteries: Vec<i32>,
+    /// the champion's tag (`HeroMarker`: None, Favorite, First … ArenaSecond)
+    pub marker: String,
 }
 
 pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, String> {
@@ -75,6 +77,7 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
                 awakened_grade,
                 skills,
                 masteries,
+                marker: layout.name("HeroMarker", b.i32(hero.marker))?,
             })
         })
         .collect()
