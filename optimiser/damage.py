@@ -65,7 +65,8 @@ class LinearFormula:
         )
 
     def plus(self, other: "LinearFormula") -> "LinearFormula":
-        stats = self.coefficients.keys() | other.coefficients.keys()
+        """Stats in the order they first appear (a set's order would change between runs)."""
+        stats = dict.fromkeys([*self.coefficients, *other.coefficients])
         return LinearFormula(
             {s: self.coefficients.get(s, 0) + other.coefficients.get(s, 0) for s in stats},
             self.constant + other.constant,

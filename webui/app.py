@@ -4,11 +4,10 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 
 - `app`, `templates`: the FastAPI app and its Jinja templates
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`,
-  `reserve_rule`, `champion`,
-  `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`, `accessory_weight`,
-  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`, `chimera`, `sync`: the
-  routes
-- `find_champion`, `find_run`, `send_build`: what they share
+  `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
+  `accessory_weight`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
+  `chimera`, `sync`: the routes
+- `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
@@ -28,26 +27,24 @@ from optimiser.chimera.gear import gear_options
 from optimiser.chimera.kits import wantable
 from optimiser.reserve import reservations
 from webui import extractor, reader
-from webui.forms import (
+from webui.forms.chimera import Offers, Unknown, parse_chimera
+from webui.forms.common import FormErrors
+from webui.forms.request import parse_equip, parse_request
+from webui.forms.settings import (
     FlagSetting,
-    FormErrors,
     GlyphPlan,
-    Offers,
     ReserveSetting,
-    Unknown,
     WeightSetting,
-    parse_chimera,
-    parse_equip,
     parse_flag,
     parse_glyph,
     parse_lock,
     parse_protect,
-    parse_request,
     parse_reserve_rule,
     parse_sell,
     parse_target_free,
     parse_weight,
 )
+from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
 from webui.service import champions as champion_pages
@@ -106,7 +103,7 @@ def champion_list(request: Request, query: str = ""):
 @app.post("/champions/{champion_id}/lock", response_class=HTMLResponse)
 async def lock(request: Request, champion_id: int):
     champion = find_champion(current.current_account(), champion_id)
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_lock(form):
         case FormErrors() as errors:
@@ -125,7 +122,7 @@ def assumptions(request: Request):
 
 @app.post("/assumptions", response_class=HTMLResponse)
 async def set_assumption(request: Request):
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_flag(form):
         case FormErrors() as errors:
@@ -139,7 +136,7 @@ async def set_assumption(request: Request):
 @app.post("/glyphs", response_class=HTMLResponse)
 async def plan_glyph(request: Request):
     account = current.current_account()
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_glyph(form, account.tables):
         case FormErrors() as errors:
@@ -153,7 +150,7 @@ async def plan_glyph(request: Request):
 @app.post("/reserve", response_class=HTMLResponse)
 async def reserve_rule(request: Request):
     account = current.current_account()
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_reserve_rule(form, account):
         case FormErrors() as errors:
@@ -175,7 +172,7 @@ def accessories(request: Request, tab: str = accessory_pages.ACCESSORY_TABS[0]):
 
 @app.post("/accessories/weights", response_class=HTMLResponse)
 async def accessory_weight(request: Request):
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_weight(form):
         case FormErrors() as errors:
@@ -188,7 +185,7 @@ async def accessory_weight(request: Request):
 
 @app.post("/accessories/target", response_class=HTMLResponse)
 async def accessory_target(request: Request):
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_target_free(form):
         case FormErrors() as errors:
@@ -201,7 +198,7 @@ async def accessory_target(request: Request):
 
 @app.post("/accessories/{artifact_id}/protect", response_class=HTMLResponse)
 async def protect_accessory(request: Request, artifact_id: int):
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
     plan = accessory_pages.protect_accessory(
         current.current_account(), artifact_id, parse_protect(form)
     )
@@ -214,13 +211,13 @@ async def sell_accessories(request: Request):
 
     match parse_sell(fields, accessory_pages.pieces_to_sell(current.current_account())):
         case FormErrors(messages=messages):
-            outcome = extractor.Err("; ".join(messages))
+            outcome = Err("; ".join(messages))
 
         case artifact_ids:
             outcome = extractor.select_to_sell(artifact_ids)
 
     context = {
-        "error": outcome.reason if extractor.failed(outcome) else None,
+        "error": outcome.reason if failed(outcome) else None,
         "done": "Selected in game: check them and confirm the sale there.",
     }
     return templates.TemplateResponse(request, "_equip_result.html", context)
@@ -251,7 +248,7 @@ def chimera(request: Request):
         case FormErrors(messages=messages):
             raise HTTPException(400, "; ".join(messages))
         case asked:
-            page = chimera_pages.chimera_page(account, enemies, asked, offers)
+            page = chimera_pages.chimera_page(account, enemies, asked, offers, rotation)
 
     return templates.TemplateResponse(request, "chimera.html", {"page": page})
 
@@ -269,7 +266,7 @@ def champion(request: Request, champion_id: int):
 @app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)
 async def builds(request: Request, champion_id: int):
     account = current.current_account()
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     champion = find_champion(account, champion_id)
 
@@ -311,10 +308,10 @@ def delete_run(request: Request, champion_id: int, run_id: int):
 def sync(request: Request):
     """Reads the account; on success the page reloads with it (htmx's HX-Refresh)."""
     outcome = reader.sync()
-    context = {"error": outcome.reason if reader.failed(outcome) else None, "done": "Synced"}
+    context = {"error": outcome.reason if failed(outcome) else None, "done": "Synced"}
     response = templates.TemplateResponse(request, "_equip_result.html", context)
 
-    if not reader.failed(outcome):
+    if not failed(outcome):
         response.headers["HX-Refresh"] = "true"
 
     return response
@@ -324,12 +321,12 @@ def sync(request: Request):
 async def equip(request: Request, champion_id: int):
     def send(account: Account, champion: Champion, artifact_ids: list[int]):
         match extractor.equip(champion.id, artifact_ids):
-            case extractor.Err() as error:
+            case Err() as error:
                 return error
 
         match reader.sync():
-            case reader.Err(reason=reason):
-                return extractor.Err(f"equipped, but the sync failed: {reason}")
+            case Err(reason=reason):
+                return Err(f"equipped, but the sync failed: {reason}")
 
         return None
 
@@ -347,23 +344,28 @@ async def preview(request: Request, champion_id: int):
 async def send_build(
     request: Request,
     champion_id: int,
-    send: Callable[[Account, Champion, list[int]], extractor.Result[None]],
+    send: Callable[[Account, Champion, list[int]], Result[None]],
     done: str,
 ) -> HTMLResponse:
     """The build button's pieces, sent to the game by `send`."""
     account = current.current_account()
     champion = find_champion(account, champion_id)
-    form = {key: str(value) for key, value in (await request.form()).items()}
+    form = await read_form(request)
 
     match parse_equip(form, account):
         case FormErrors(messages=messages):
-            outcome = extractor.Err("; ".join(messages))
+            outcome = Err("; ".join(messages))
 
         case artifact_ids:
             outcome = send(account, champion, artifact_ids)
 
-    context = {"error": outcome.reason if extractor.failed(outcome) else None, "done": done}
+    context = {"error": outcome.reason if failed(outcome) else None, "done": done}
     return templates.TemplateResponse(request, "_equip_result.html", context)
+
+
+async def read_form(request: Request) -> dict[str, str]:
+    """The posted form's fields, each name's last value."""
+    return {key: str(value) for key, value in (await request.form()).items()}
 
 
 def find_champion(account: Account, champion_id: int) -> Champion:

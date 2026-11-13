@@ -23,7 +23,7 @@ the game itself.
   account's user id. `webui/extractor.py` is the client; each build has both buttons.
   `/sell` (`{"artifact_ids"}`, `SellArtifacts(int[])`) only selects the pieces in the game's
   sell screen; the user confirms the sale in game. Only the accessories page sends it, and
-  only pieces its current plan sells (`forms.parse_sell`).
+  only pieces its current plan sells (`forms.settings.parse_sell`).
 - `reader/` (Rust, `x86_64-pc-windows-gnu`; `just read`, ~2.5 s): **the account's source**.
   Reads it out of the running game's memory from outside the process (`OpenProcess` VM_READ +
   `ReadProcessMemory`; nothing injected or written), run in the game's prefix via
@@ -114,7 +114,7 @@ the game itself.
     previous one's before. Offset 0 puts the Mythical materials on Tail, so the column is
     Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
     2, Paw). The page's default column.
-  - Page (`webui/service/chimera.py`; `forms.parse_chimera` is its boundary, `ChimeraRequest`
+  - Page (`webui/service/chimera.py`; `forms.chimera.parse_chimera` is its boundary, `ChimeraRequest`
     with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from a datalist,
     or part of a name), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
     assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
@@ -183,8 +183,10 @@ the game itself.
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
   cached account, locks), `views` (champion rows, piece names and art) and `scores` (accessory
   potentials kept in `data/cache/potentials.pickle` by piece state, per scorer and scoring
-  code, so only changed pieces are rescored); `forms.py` is the
-  form boundary; only `app.py` and `templates/` know about HTTP/HTML.
+  code, so only changed pieces are rescored); `forms/` is the form boundary (`request`: the
+  solve form and build buttons, `settings`: the forms that change the store, `chimera`, and
+  `common`: `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
+  `reader.py` return; only `app.py` and `templates/` know about HTTP/HTML.
   Colour palettes (Pico's default and Hana, from `~/repo/demeter`'s `palettes.css`) live in
   `static/palettes.css`: the nav's switcher (`palette.js`) sets `<html data-palette>` and a
   `raid_palette` cookie, which `base.html` reads so pages render in it from the start.
@@ -204,6 +206,7 @@ just schema-refresh   # when the export says the dump predates the game: dump, s
 just web              # http://127.0.0.1:8000 (web-restart, web-stop)
 just assets           # portraits and icons from the game's bundles (part of update)
 just check            # black + ruff over all Python, then the house style checker
+uv run --group dev pytest   # tests/ (not part of just check)
 ```
 
 The web server reloads itself when Python under `optimiser/` or `webui/` changes
@@ -269,7 +272,7 @@ Anaxia's in-game stats matched exactly.
 
 ## Solver
 
-MILP in HiGHS (`highspy`). A binary per wearable piece (faction, pool, `above_level` filter),
+MILP in HiGHS (`highspy`). A binary per wearable piece (faction, `GearFilter`, `above_level` filter),
 one per armour slot, ≤ 1 per accessory slot; set bonuses exact via piece-count variables
 tied with equalities. Ranking is lexicographic: maximise each goal, then hold it within
 `slack` (relative; for damage, applied to damage not its log). Builds after the first exclude

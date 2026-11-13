@@ -21,7 +21,7 @@ team shown can clear it in one Ultra Nightmare fight.
 
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from optimiser.account import Account, Champion
 from optimiser.chimera.cover import Lineup, Member, NeedCover, TrialCover
@@ -31,7 +31,7 @@ from optimiser.chimera.rotation import mythical_column
 from optimiser.chimera.tags import Side, Tag, only_in, plain_label
 from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS, PLAN_DIFFICULTY
 from optimiser.enemies import Enemies, Trial
-from webui.forms import (
+from webui.forms.chimera import (
     FIRST_SHOWN,
     GRADES,
     ChimeraRequest,
@@ -221,10 +221,15 @@ class ChimeraPage:
 
 
 def chimera_page(
-    account: Account, enemies: Enemies, request: ChimeraRequest, offers: Offers
+    account: Account,
+    enemies: Enemies,
+    request: ChimeraRequest,
+    offers: Offers,
+    rotation: str | None,
 ) -> ChimeraPage:
     """With `request.fill`, the search fills the open slots (and those whose text isn't a
-    champion) every way it can; else the slots are shown as they are."""
+    champion) every way it can; else the slots are shown as they are. `rotation`: the column
+    the current raid puts the mythical materials in (`rotation_column`), if known."""
     picks, wanted, loadout = request.picks, request.wanted, request.loadout
     brief = Brief(request.column, wanted, loadout)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in picks)
@@ -243,7 +248,7 @@ def chimera_page(
     champions = sorted(account.champions.values(), key=lambda c: (c.name, -c.grade, -c.level))
     return ChimeraPage(
         column=request.column,
-        columns=column_views(enemies, rotation_column(account, enemies, datetime.now(UTC))),
+        columns=column_views(enemies, rotation),
         min_grade=request.min_grade,
         grades=GRADES,
         gear=gear_groups(offers.gear, allowed),

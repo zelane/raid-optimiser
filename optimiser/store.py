@@ -12,14 +12,14 @@ have no row.
 Settings are named flags ("max_gear_level"), on when they have a row; `optimiser.assume`
 names them.
 
-Type weights are what `optimiser.accessories.roles` values a stat at for a champion type, keyed by
-the type's and the stat's names (opaque here); weights left at their default have no row.
-Reserve rules say what gear is kept for something else (`optimiser.reserve` names them;
+Type weights are what `optimiser.accessories.roles` values a stat at for a champion type,
+keyed by the type's and the stat's names (opaque here); weights left at their default have no
+row. Reserve rules say what gear is kept for something else (`optimiser.reserve` names them;
 opaque here), in the order they were added. Protected pieces are accessories the clean-up must
-never drop. Numbers are named settings
-with a value ("target_free"); unset ones have no row.
+never drop. Numbers are named settings with a value ("target_free"); unset ones have no row.
 
-`optimiser.settings` reads the flags, glyphs and weights back as the model's types.
+`optimiser.settings` reads the flags, glyphs, weights and reserve rules back as the model's
+types.
 
 A run is a solve as a front end asked and showed it: the form it was asked with and what it
 found, both JSON the front end writes and reads (opaque here), with a summary for listings.
@@ -34,7 +34,7 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `read_protected`, `write_protected`: protected accessories
 - `read_number`, `write_number`: numeric settings
 - `save_run`, `list_runs`, `read_run`, `latest_run`, `delete_run`: runs
-- `connect`, `run_from_row`: what they share
+- `write_member`, `connect`, `run_from_row`: what they share
 """
 
 import json
@@ -161,11 +161,7 @@ def read_flags(path: Path) -> set[str]:
 
 
 def write_flag(path: Path, name: str, on: bool) -> None:
-    with connect(path) as db:
-        if on:
-            db.execute("INSERT OR IGNORE INTO flags (name) VALUES (?)", (name,))
-        else:
-            db.execute("DELETE FROM flags WHERE name = ?", (name,))
+    write_member(path, "flags", "name", name, on)
 
 
 def read_weights(path: Path) -> dict[WeightKey, float]:
@@ -199,11 +195,7 @@ def read_reserve_rules(path: Path) -> list[str]:
 
 
 def write_reserve_rule(path: Path, key: str, on: bool) -> None:
-    with connect(path) as db:
-        if on:
-            db.execute("INSERT OR IGNORE INTO reserve_rules (key) VALUES (?)", (key,))
-        else:
-            db.execute("DELETE FROM reserve_rules WHERE key = ?", (key,))
+    write_member(path, "reserve_rules", "key", key, on)
 
 
 def read_protected(path: Path) -> set[int]:
@@ -217,14 +209,7 @@ def read_protected(path: Path) -> set[int]:
 
 
 def write_protected(path: Path, artifact_id: int, protected: bool) -> None:
-    with connect(path) as db:
-        if protected:
-            db.execute(
-                "INSERT OR IGNORE INTO protected_artifacts (artifact_id) VALUES (?)",
-                (artifact_id,),
-            )
-        else:
-            db.execute("DELETE FROM protected_artifacts WHERE artifact_id = ?", (artifact_id,))
+    write_member(path, "protected_artifacts", "artifact_id", artifact_id, protected)
 
 
 def read_number(path: Path, name: str) -> float | None:
@@ -305,6 +290,16 @@ def latest_run(path: Path, champion_id: int) -> Run | None:
 def delete_run(path: Path, champion_id: int, run_id: int) -> None:
     with connect(path) as db:
         db.execute("DELETE FROM runs WHERE champion_id = ? AND id = ?", (champion_id, run_id))
+
+
+def write_member(path: Path, table: str, column: str, value: str | int, on: bool) -> None:
+    """Puts `value` in (or takes it out of) a table of one key column; `table` and `column`
+    are this module's own names, never input."""
+    with connect(path) as db:
+        if on:
+            db.execute(f"INSERT OR IGNORE INTO {table} ({column}) VALUES (?)", (value,))
+        else:
+            db.execute(f"DELETE FROM {table} WHERE {column} = ?", (value,))
 
 
 @contextmanager

@@ -3,7 +3,6 @@ reader.py - syncing the account: runs `just read` (the memory reader, in the gam
 the justfile knows the paths), which rewrites the snapshot the pages reload from.
 
 - `TIMEOUT`: how long a read may take (it takes about 2.5 s, plus starting the prefix's tools)
-- `Err`, `Result`, `failed`: an outcome, or why it failed
 - `sync`: read the account now (one read at a time)
 - `synced_ago`: how old the snapshot is, as the nav shows it
 """
@@ -11,27 +10,14 @@ the justfile knows the paths), which rewrites the snapshot the pages reload from
 import subprocess
 import threading
 import time
-from dataclasses import dataclass
-from typing import TypeIs
 
 from optimiser.paths import ROOT, SNAPSHOT
+from webui.result import Err, Result
 
 TIMEOUT = 60.0
 LINES = 3  # of the reader's output, kept as the reason a read failed
 
 _reading = threading.Lock()
-
-
-@dataclass(frozen=True)
-class Err:
-    reason: str
-
-
-type Result[T] = T | Err
-
-
-def failed[T](result: Result[T]) -> TypeIs[Err]:
-    return isinstance(result, Err)
 
 
 def sync() -> Result[None]:

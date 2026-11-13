@@ -9,8 +9,9 @@ preset expects to get it back. A champion's own gear is never reserved against t
 solver allows it first).
 
 - `Tagged`, `GlobalPresets`, `Team`, `Rule`: the rules
-- `Reason`, `Reservations`: why a piece is reserved
+- `Worn`, `Held`, `Reason`, `Reservations`: why a piece is reserved
 - `reservations`: every reserved piece, with its reasons (`reserved_by`, `worn_by`: its steps)
+- `reserved_count`: how many pieces a rule reserves
 - `rule_key`, `parse_rule`: rules as the store and the forms name them ("tag:ArenaFirst",
   "global", "team:14")
 """
@@ -44,13 +45,22 @@ type Rule = Tagged | GlobalPresets | Team
 
 
 @dataclass(frozen=True)
-class Reason:
-    """A rule that reserves a piece, and through whom: the champion wearing it (tags, teams)
-    or the preset holding it."""
+class Worn:
+    """Reserved by a rule (a tag, a team) because this champion wears it."""
 
     rule: Rule
-    champion_id: int | None = None
-    preset_name: str | None = None
+    champion_id: int
+
+
+@dataclass(frozen=True)
+class Held:
+    """Reserved by a rule (the global presets) because this preset holds it."""
+
+    rule: Rule
+    preset_name: str
+
+
+type Reason = Worn | Held
 
 
 # Artifact id -> why it's reserved; pieces nothing reserves are absent.
@@ -67,6 +77,11 @@ def reservations(account: Account, rules: tuple[Rule, ...]) -> dict[int, tuple[R
     return {artifact_id: tuple(found) for artifact_id, found in reasons.items()}
 
 
+def reserved_count(reserved: Reservations, rule: Rule) -> int:
+    """A piece counts once, however many of its reasons are the rule's."""
+    return sum(1 for reasons in reserved.values() if any(r.rule == rule for r in reasons))
+
+
 def reserved_by(account: Account, rule: Rule) -> list[tuple[int, Reason]]:
     match rule:
         case Tagged(marker=marker):
@@ -75,19 +90,19 @@ def reserved_by(account: Account, rule: Rule) -> list[tuple[int, Reason]]:
 
         case GlobalPresets():
             return [
-                (artifact_id, Reason(rule, preset_name=preset.name))
+                (artifact_id, Held(rule, preset.name))
                 for preset in account.gear_presets
                 for artifact_id in preset.artifact_ids
             ]
 
         case Team(preset_id=preset_id):
-            team = next((p for p in account.presets if p.id == preset_id), None)
+            team = account.preset(preset_id)
             return worn_by(account, rule, team.champion_ids if team else ())
 
 
 def worn_by(account: Account, rule: Rule, champion_ids: Iterable[int]) -> list[tuple[int, Reason]]:
     return [
-        (artifact_id, Reason(rule, champion_id=champion_id))
+        (artifact_id, Worn(rule, champion_id))
         for champion_id in champion_ids
         if champion_id in account.champions
         for artifact_id in account.champions[champion_id].artifact_ids

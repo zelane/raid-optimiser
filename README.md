@@ -106,8 +106,8 @@ binary per wearable artifact (accessories by faction), exact set bonuses through
 variables, then each ranked stat maximised in turn by priority, held within the slack of its
 best before the next. Further builds exclude earlier ones exactly. C.RATE/C.DMG limits are in
 %; ranking C.RATE stops at 100 %. `current` is the champion's gear under the same model:
-compare it with the game to check the model. The gear pool "Any" includes gear worn by
-others and says who wears it.
+compare it with the game to check the model. Unless the gear filters keep it out, gear worn
+by others is allowed, and each piece says who wears it (and what reserves it).
 
 Damage: the Damage row of the form ranks a skill's crit-hit damage against an enemy DEF, as
 the game's `DamageCalculator` computes it (read from the game code): formula × (1 + books) ×
@@ -128,7 +128,7 @@ glyphs and rolls, ascension, faction lock, who wears it now, artifact id). The a
 whenever `just read` writes a new snapshot.
 
 Layers: `optimiser/` (model and solver) <- `webui/service/` (framework-free view models, a
-module per page, ready to serve as JSON for a Vue front end) <- `webui/forms.py` (form -> `Request`) <-
+module per page, ready to serve as JSON for a Vue front end) <- `webui/forms/` (form -> `Request`) <-
 `webui/app.py` + `templates/` (FastAPI, Jinja, htmx, Pico CSS). Icons and portraits come
 from the game's own Unity bundles: `just assets` (`tools/extract_assets.py`)
 writes `webui/static/assets/{portraits,sets,pieces}/` (newest bundle version wins; rerun after

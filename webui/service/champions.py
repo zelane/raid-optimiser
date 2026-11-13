@@ -4,8 +4,7 @@ now and the skills damage can be ranked by; the request form's options; and thei
 
 - `SEARCH_LIMIT`, `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the pages' shape, and
   the game's default champion order
-- `ListedChampion`, `StatOption`, `SetOption`, `RuleOption`, `FormOptions`,
-  `SkillOption`,
+- `ListedChampion`, `StatOption`, `SetOption`, `RuleOption`, `FormOptions`, `SkillOption`,
   `FormView`, `ChampionPage`: the views
 - `search_champions`, `lock_champion`, `champion_page`: what the pages ask for
 - `game_order`, `listed_champion`, `form_options`, `form_views`, `skill_options`,
@@ -18,7 +17,7 @@ from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.labels import PERCENT_STATS, STAT_LABELS, rule_label
 from optimiser.paths import STORE
-from optimiser.reserve import Rule, reservations, rule_key
+from optimiser.reserve import Rule, reservations, reserved_count, rule_key
 from optimiser.stats import build_stats
 from optimiser.store import latest_run, write_lock
 from webui.service.results import StatCell, stat_cells
@@ -164,7 +163,7 @@ def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:
             RuleOption(
                 rule_key(rule),
                 rule_label(rule, account),
-                sum(1 for reasons in reserved.values() if any(r.rule == rule for r in reasons)),
+                reserved_count(reserved, rule),
             )
             for rule in rules
         ],

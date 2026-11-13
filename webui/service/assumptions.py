@@ -9,9 +9,10 @@ glyphs) and what gear is reserved (`optimiser.reserve`), kept in the store.
 - `flag_view`, `glyph_row`, `reserve_section`: what they share
 """
 
+from collections import Counter
 from dataclasses import dataclass
 
-from optimiser.account import Account, GlyphGrade, GlyphKind
+from optimiser.account import Account, GlyphGrade, GlyphKind, Preset
 from optimiser.assume import FLAG_LABELS, Flag
 from optimiser.glyphs import grade_key, kind_key
 from optimiser.labels import (
@@ -22,14 +23,17 @@ from optimiser.labels import (
     rule_label,
 )
 from optimiser.paths import STORE
-from optimiser.reserve import GlobalPresets, Rule, Tagged, Team, reservations, rule_key
-from optimiser.settings import (
-    plan_glyph,
-    read_assumptions,
-    read_reserve_rules,
-    set_flag,
-    set_reserve_rule,
+from optimiser.reserve import (
+    GlobalPresets,
+    Rule,
+    Tagged,
+    Team,
+    reservations,
+    reserved_count,
+    rule_key,
 )
+from optimiser.settings import plan_glyph, read_assumptions, set_flag, set_reserve_rule
+from webui.service.current import current_reserve_rules
 
 
 @dataclass(frozen=True)
@@ -134,36 +138,29 @@ def glyph_row(account: Account, kind: GlyphKind, chosen: GlyphGrade | None) -> G
 
 
 def reserve_section(account: Account) -> ReserveSection:
-    rules = read_reserve_rules(STORE)
+    rules = current_reserve_rules()
     reserved = reservations(account, rules)
-    tagged: dict[str, int] = {}
+    tagged = Counter(champion.marker for champion in account.champions.values())
 
-    for champion in account.champions.values():
-        tagged[champion.marker] = tagged.get(champion.marker, 0) + 1
-
-    def pieces(rule: Rule) -> int:
-        return sum(1 for reasons in reserved.values() if any(r.rule == rule for r in reasons))
-
-    def team_choice(team: Team) -> RuleChoice:
-        preset = next(p for p in account.presets if p.id == team.preset_id)
+    def team_choice(preset: Preset) -> RuleChoice:
         names = ", ".join(
             account.champions[i].name for i in preset.champion_ids if i in account.champions
         )
-        return RuleChoice(rule_key(team), f"{preset.name} · {preset.area}: {names}")
+        return RuleChoice(rule_key(Team(preset.id)), f"{preset.name} · {preset.area}: {names}")
 
-    tags = [Tagged(marker) for marker in MARKER_LABELS if tagged.get(marker)]
-    teams = sorted(
-        (Team(p.id) for p in account.presets if p.champion_ids),
-        key=lambda team: team.preset_id,
-    )
+    tags = [Tagged(marker) for marker in MARKER_LABELS if tagged[marker]]
+    teams = sorted((p for p in account.presets if p.champion_ids), key=lambda p: p.id)
     return ReserveSection(
-        rules=[RuleView(rule_key(r), rule_label(r, account), pieces(r)) for r in rules],
+        rules=[
+            RuleView(rule_key(r), rule_label(r, account), reserved_count(reserved, r))
+            for r in rules
+        ],
         pieces=len(reserved),
         tags=[
             RuleChoice(rule_key(tag), f"{rule_label(tag, account)} · {tagged[tag.marker]}")
             for tag in tags
             if tag not in rules
         ],
-        teams=[team_choice(team) for team in teams if team not in rules],
+        teams=[team_choice(preset) for preset in teams if Team(preset.id) not in rules],
         global_key=None if GlobalPresets() in rules else rule_key(GlobalPresets()),
     )

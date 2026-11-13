@@ -14,7 +14,7 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
 - `Preset`, `GearPreset`, `ChimeraRaid`: saved teams, global gear presets, and the Chimera's
   current raid
-- `Account`: everything a solve needs, and the account's saved teams
+- `Account`: everything a solve needs, and the account's saved teams (`preset`: one by id)
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
   `faction_name`: what the game's words mean
 - `load_account`: the loader
@@ -426,6 +426,10 @@ class Account:
     arena3x3_defense: tuple[tuple[int, ...], ...] = ()
     gear_presets: tuple[GearPreset, ...] = ()
     chimera_raid: ChimeraRaid | None = None
+
+    def preset(self, preset_id: int) -> Preset | None:
+        """The saved team with this id; None once it's gone."""
+        return next((preset for preset in self.presets if preset.id == preset_id), None)
 
 
 DEFAULT_LEAGUE = "GoldV"  # if the game doesn't say

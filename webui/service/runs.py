@@ -74,7 +74,7 @@ def forget_run(champion: Champion, run_id: int) -> None:
 
 
 def describe_request(request: Request, account: Account) -> str:
-    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: Locked up to 2", led by the form for
+    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: locked up to 2", led by the form for
     champions with several ("Health form · HP › ...")."""
     champion = request.champion
     forms = account.tables.hero_forms.get(champion.type_id, ())

@@ -17,7 +17,7 @@ from optimiser.assume import assume
 from optimiser.damage import estimate_damage
 from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label, reason_label
 from optimiser.paths import STORE
-from optimiser.reserve import Reservations
+from optimiser.reserve import Reservations, Worn
 from optimiser.settings import read_assumptions
 from optimiser.solve import Build, Request, SetsRuleOut, Shortfall, find_builds
 from optimiser.stats import build_stats, set_multiplier
@@ -122,7 +122,8 @@ type Outcome = ResultsView | ShortfallView
 
 
 def solve(account: Account, request: Request, reserved: Reservations) -> Outcome:
-    """`reserved`: what every reserve rule keeps, to note on pieces (whatever the pool)."""
+    """`reserved`: what every reserve rule keeps, to note on pieces (whichever the request
+    keeps out)."""
     assumed, request = assume(account, request, read_assumptions(STORE, account))
     started = time.monotonic()
     outcome = find_builds(assumed, request)
@@ -255,7 +256,7 @@ def piece_view(
         reserved_by=[
             reason_label(reason, account)
             for reason in reserved.get(artifact.id, ())
-            if reason.champion_id != champion.id
+            if not (isinstance(reason, Worn) and reason.champion_id == champion.id)
         ],
     )
 

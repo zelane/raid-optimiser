@@ -4,7 +4,6 @@ proxy (`capture/hh_capture.py`) injects the command into the extractor's hub con
 answers once the extractor reports back.
 
 - `CONTROL_URL`, `TIMEOUT`: where the proxy listens, and how long an equip may take
-- `Err`, `Result`, `failed`: an outcome, or why it failed
 - `equip`: put pieces on a champion in game
 - `preview`: show a champion in pieces in the game's build preview, changing nothing
 - `select_to_sell`: select pieces in the game's sell screen; selling is confirmed in game
@@ -14,25 +13,12 @@ import json
 import os
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from typing import TypeIs
 
 from optimiser.account import Account
+from webui.result import Err, Result
 
 CONTROL_URL = os.environ.get("RAID_CONTROL_URL", "http://127.0.0.1:8081")
 TIMEOUT = 40.0  # the proxy gives the extractor 30 s
-
-
-@dataclass(frozen=True)
-class Err:
-    reason: str
-
-
-type Result[T] = T | Err
-
-
-def failed[T](result: Result[T]) -> TypeIs[Err]:
-    return isinstance(result, Err)
 
 
 def equip(champion_id: int, artifact_ids: list[int]) -> Result[None]:

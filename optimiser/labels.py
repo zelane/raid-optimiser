@@ -12,7 +12,7 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 import re
 
 from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine
-from optimiser.reserve import GlobalPresets, Reason, Rule, Tagged, Team
+from optimiser.reserve import GlobalPresets, Held, Reason, Rule, Tagged, Team, Worn
 from optimiser.solve import GearFilter
 
 STAT_LABELS = {
@@ -116,15 +116,17 @@ def rule_label(rule: Rule, account: Account) -> str:
             return "Global presets"
 
         case Team(preset_id=preset_id):
-            team = next((p for p in account.presets if p.id == preset_id), None)
+            team = account.preset(preset_id)
             return f"team {team.name}" if team else f"team {preset_id} (gone)"
 
 
 def reason_label(reason: Reason, account: Account) -> str:
     """The rule, and through whom: "Arena Build I (Arbiter)", "preset spd"."""
-    if reason.preset_name is not None:
-        return f"preset {reason.preset_name}"
+    match reason:
+        case Held(preset_name=preset_name):
+            return f"preset {preset_name}"
 
-    champion = account.champions.get(reason.champion_id or 0)
-    rule = rule_label(reason.rule, account)
-    return f"{rule} ({champion.name})" if champion else rule
+        case Worn(rule=rule, champion_id=champion_id):
+            champion = account.champions.get(champion_id)
+            label = rule_label(rule, account)
+            return f"{label} ({champion.name})" if champion else label
