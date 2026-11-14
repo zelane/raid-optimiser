@@ -1,4 +1,4 @@
-{% from "_macros.html" import stars %}
+{% from "_macros.html" import stars, piece %}
 {# An accessory's cells in the lists: its art, what it is, its main stat and substats. #}
 {% macro accessory_cells(row) %}
   <td>
@@ -42,4 +42,17 @@
            hx-post="/accessories/{{ row.id }}/protect" hx-trigger="change" hx-target="#cleanup" hx-swap="innerHTML">
     Keep
   </label>
+{% endmacro %}
+
+{# One side of a swap (`gear-pair`): `label` and the piece's score as it stands, then `note`
+   (the gain, or "then sell"), over the optimiser's piece card (`piece`, as `champion` sees
+   it: the worn one is theirs and steps back). The one to equip is rimmed in gold. #}
+{% macro gear_card(row, view, champion, kind, label, note="", note_class="") %}
+  <div class="gear-card {{ kind }}">
+    <header>
+      <span class="caps">{{ label }}</span>
+      <span class="gear-score">Score <strong>{{ row.now }}</strong>{% if note %} <small class="{{ note_class }}">{{ note }}</small>{% endif %}</span>
+    </header>
+    {{ piece(view, champion) }}
+  </div>
 {% endmacro %}

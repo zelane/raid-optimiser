@@ -2,5 +2,5 @@
   <input type="checkbox" role="switch" name="on" {% if flag.on %}checked{% endif %}
          hx-post="/assumptions" hx-vals='{"flag": "{{ flag.name }}"}' hx-trigger="change"
          hx-target="closest label" hx-swap="outerHTML">
-  {{ flag.label }}
+  <span class="row-name">{{ flag.label }}</span>
 </label>

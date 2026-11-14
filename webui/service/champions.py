@@ -50,6 +50,7 @@ class StatOption:
 class SetOption:
     id: int
     name: str
+    icon_url: str | None
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,11 @@ def listed_champion(champion: Champion, lock: int) -> ListedChampion:
 def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:
     """Up to the top lock level would let any locked champion's gear in, so it's left out."""
     sets = sorted(
-        (SetOption(set_id, s.name) for set_id, s in account.tables.sets.items() if s.name),
+        (
+            SetOption(set_id, s.name, asset_url("sets", str(set_id)))
+            for set_id, s in account.tables.sets.items()
+            if s.name
+        ),
         key=lambda option: option.name,
     )
     reserved = reservations(account, rules)

@@ -42,6 +42,7 @@ from optimiser.account import (
     Stats,
     Tables,
     VariableSet,
+    slot_unlocked,
 )
 from optimiser.damage import (
     ActiveBonus,
@@ -202,6 +203,9 @@ def frame(account: Account, request: Request) -> Problem:
 
 def wearable(artifact: Artifact, account: Account, request: Request) -> bool:
     if artifact.faction not in (None, request.champion.faction):
+        return False
+
+    if not slot_unlocked(request.champion, artifact.slot, account.tables.gear):
         return False
 
     if artifact.level <= request.above_level:

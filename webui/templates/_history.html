@@ -1,18 +1,28 @@
-<section id="history"{% if history_oob %} hx-swap-oob="true"{% endif %}>
-  {% if history %}
-    <div class="page-section">
+{# The champion's runs as cards, newest first: when, what it found, what was asked and the gear
+   it left out. app.js marks the one the results show (`current`). #}
+<section id="history" class="panel"{% if history_oob %} hx-swap-oob="true"{% endif %}>
+  <header class="panel-head">
     <h2>History</h2>
+    <small class="caps">{{ history | length }} run{{ "s" if history | length != 1 }}</small>
+  </header>
+  {% if history %}
     <ul class="history">
       {% for entry in history %}
         <li data-run-id="{{ entry.id }}">
-          <a href="#results" hx-get="/champions/{{ champion_id }}/runs/{{ entry.id }}" hx-target="#results">{{ entry.ran_at }}</a>
-          <span>{{ entry.summary }}</span>
-          <small>{{ entry.note }}</small>
-          <button class="delete secondary outline" title="Delete this run"
+          <a class="run-link" href="#results" hx-get="/champions/{{ champion_id }}/runs/{{ entry.id }}" hx-target="#results">
+            <span class="run-meta">
+              <time>{{ entry.ran_at }}</time>
+              <span class="badge{{ '' if entry.found else ' bad' }}">{{ entry.note }}</span>
+            </span>
+            <strong class="run-summary">{{ entry.summary }}</strong>
+            {% if entry.gear %}<small class="run-gear">{{ entry.gear }}</small>{% endif %}
+          </a>
+          <button class="delete" title="Delete this run" aria-label="Delete this run"
                   hx-delete="/champions/{{ champion_id }}/runs/{{ entry.id }}" hx-target="#history" hx-swap="outerHTML">✕</button>
         </li>
       {% endfor %}
     </ul>
-    </div>
+  {% else %}
+    <p class="muted">No runs yet: what you solve for is kept here.</p>
   {% endif %}
 </section>

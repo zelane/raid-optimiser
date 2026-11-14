@@ -1,121 +1,57 @@
 /*
- * Colour palettes, picked with the switcher in the nav (base.html, palette.js), which sets
- * <html data-palette="...">: Vault (this app's own, and the default), and Pico's and Hana from
- * ~/repo/demeter's palettes.css. "default" is Pico's own look and needs nothing here. Each
- * palette defines its colours as --m-* variables (Hana for light and dark, following the
- * system setting like Pico; Vault dark only), then one block maps Pico's and the app's
- * variables onto them, so every page picks them up (--m-heading is optional: headings, else
- * the text colour; --m-display too: the heading face, else the body's). Loaded after Pico and
- * app.css so these win.
+ * The theme, Vault: the game's own vernacular, a dark hall of warm charcoal, brass for what you
+ * act on, bone-white text. Dark only: base.html sets Pico's data-theme="dark", and these rules
+ * select on it, so they outrank Pico's own dark theme (loaded before them).
+ * Its colours are --m-* variables, then one block maps Pico's and the app's variables onto them,
+ * so every page picks them up (--m-display is the heading face, --m-card the panels). Its
+ * typefaces: Alegreya for headings and the wordmark, Alegreya Sans (old-style figures off:
+ * tables line up) for everything else. Panels are warm slate cards (--m-card) on the obsidian
+ * slab, their insets (tables, fields) the slab again.
  */
 
-/* --- Vault (the default) ---------------------------------------------------- */
+/* --- Colours and type --------------------------------------------------------- */
 
-/* The game's own vernacular: a dark hall of warm charcoal, brass for what you act on,
-   bone-white text. Dark only (base.html sets Pico's data-theme="dark" with it). Its typefaces: Alegreya
-   for headings and the wordmark, Alegreya Sans (old-style figures off: tables line up) for
-   everything else. */
-:root[data-palette='vault'] {
+:root[data-theme='dark'] {
   --pico-font-family-sans-serif: 'Alegreya Sans', 'Noto Sans', sans-serif;
   --m-display: 'Alegreya', Georgia, serif;
-  --m-primary: #d9ad57;
+  --m-primary: #e6895c;
   --m-on-primary: #1a1408;
   --m-secondary: #a9b1ba;
   --m-on-secondary: #121110;
   --m-tertiary: #7cc4b8;
-  --m-error: #ec7a63;
-  --m-surface: #121212;
+  --m-error: #ec5162; /* a true red, well clear of the coral primary: bad, losses, selling */
+  --m-surface: #0e0d0e;
   --m-on-surface: #ebe3d0;
-  --m-surface-variant: #1d1c1a;
+  --m-surface-variant: #131214;
+  --m-card: #171615;
   --m-on-surface-variant: #a39e94;
   --m-outline: #3a3833;
   --m-shadow: #000;
   --m-hover: #2a2825;
-  --m-selection: #d9ad57;
-  --m-green: #84cf8a;
-  --m-yellow: #d9ad57;
+  --m-selection: #e6895c; /* the primary */
+  --m-green: #3fb950;
+  --m-yellow: #e8b543; /* amber: middling (scores, Normal), and marks */
   --m-heading: #f3e7c9;
   --m-mix: #fff; /* hovers lighten */
   color-scheme: dark;
 }
 
 /* Alegreya Sans runs small and sets old-style figures: a touch larger, figures lined up. */
-:root[data-palette='vault'] body {
+:root[data-theme='dark'] body {
   font-size: 1.06rem;
-  /* The hall's walls: cut stone (textures/stone.svg, greys about 50%) blended `overlay` onto
-     a blackish slate base, so it keeps the base's colour and only the joints and wear show; then
-     the edges fall into shadow (`multiply`). The page's content sits on a plain slab in front
-     of the wall (below), so the stone frames it rather than running under the numbers. */
-  background:
-    radial-gradient(ellipse 110% 90% at 50% 20%, #fff 35%, #2a2a2a) fixed,
-    url(textures/stone.svg) 0 0 / 480px 240px,
-    #1d2024;
-  background-blend-mode: multiply, overlay, normal;
-}
-:root[data-palette='vault'] main.container {
-  min-height: 100vh; padding-block: 2rem 4rem;
   background: var(--m-surface);
-  box-shadow: 0 0 3rem 1rem rgb(0 0 0 / 0.65), 0 0 0 1px rgb(0 0 0 / 0.6);
 }
-:root[data-palette='vault'] .topbar {
-  margin-bottom: 0; border-bottom-color: rgb(0 0 0 / 0.6);
-  background: rgb(8 9 11 / 0.72);
-}
-/* Wide enough for walls either side: room inside the slab, and the top bar's ends in line. */
+:root[data-theme='dark'] main.container { min-height: 100vh; padding-block: 2rem 4rem; }
+:root[data-theme='dark'] .topbar { margin-bottom: 0; }
+/* Room inside the content's edges on a wide page, the top bar's ends in line with it. */
 @media (min-width: 1024px) {
-  :root[data-palette='vault'] :is(main.container, .topbar nav.container) { padding-inline: 2rem; }
+  :root[data-theme='dark'] :is(main.container, .topbar nav.container) { padding-inline: 2rem; }
 }
-:root[data-palette='vault'] :is(body, input, select, button, textarea) { font-variant-numeric: lining-nums; }
+:root[data-theme='dark'] :is(body, input, select, button, textarea) { font-variant-numeric: lining-nums; }
 
-/* --- Hana ----------------------------------------------------------------- */
+/* --- Onto Pico's variables and the app's ---------------------------------------- */
 
-:root[data-palette='hana'] {
-  --pico-font-family-sans-serif:
-    'P22 Underground CY Pro', 'GDS Transport', 'Noto Sans', sans-serif; /* installed locally */
-  --m-primary: #6d4b49;
-  --m-on-primary: #f3f5f7;
-  --m-secondary: #624d64;
-  --m-on-secondary: #f3f5f7;
-  --m-tertiary: #345d61;
-  --m-error: #6d4b49;
-  --m-surface: #f3f5f7;
-  --m-on-surface: #1a150f;
-  --m-surface-variant: #e6e8ea;
-  --m-on-surface-variant: #3e3a34;
-  --m-outline: #b6aaa9;
-  --m-shadow: #0f0a09;
-  --m-hover: #efe0df;
-  --m-selection: #9e8988;
-  --m-green: #465c44;
-  --m-yellow: #625337;
-  --m-mix: #000; /* hovers darken in light mode */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root[data-palette='hana'] {
-    --m-primary: #d5aca9;
-    --m-on-primary: #1a1d20;
-    --m-secondary: #c7aeca;
-    --m-on-secondary: #1a1d20;
-    --m-tertiary: #94c1c5;
-    --m-error: #d5aca9;
-    --m-surface: #1a1d20;
-    --m-on-surface: #e3d4c3;
-    --m-surface-variant: #282b2f;
-    --m-on-surface-variant: #a5998d;
-    --m-outline: #5d5251;
-    --m-shadow: #010000;
-    --m-hover: #3d3231;
-    --m-selection: #8a7573;
-    --m-green: #a6c0a4;
-    --m-yellow: #c7b595;
-    --m-mix: #fff; /* ...and lighten in dark mode */
-  }
-}
-
-/* --- Palette -> Pico variables (shared by every palette) ------------------ */
-
-:root[data-palette]:not([data-palette='default']) {
+:root[data-theme='dark'] {
   --pico-background-color: var(--m-surface);
   --pico-color: var(--m-on-surface);
   --pico-text-selection-color: color-mix(in srgb, var(--m-selection) 45%, transparent);
@@ -158,6 +94,7 @@
 
   --stat-up: var(--m-green);
   --stat-down: var(--m-error);
+  --stat-mid: var(--m-yellow);
   --accent: var(--m-primary);
 
   --pico-ins-color: var(--m-green);
@@ -174,12 +111,12 @@
   --pico-form-element-placeholder-color: var(--m-on-surface-variant);
   --pico-form-element-active-background-color: var(--m-surface);
   --pico-form-element-active-border-color: var(--m-primary);
-  --pico-form-element-focus-color: var(--pico-primary-focus);
+  --pico-form-element-focus-color: var(--m-primary);
   --pico-switch-background-color: var(--m-outline);
   --pico-switch-checked-background-color: var(--m-primary);
   --pico-switch-color: var(--m-surface);
 
-  --pico-card-background-color: color-mix(in srgb, var(--m-surface-variant) 45%, var(--m-surface));
+  --pico-card-background-color: #131214;
   --pico-card-border-color: var(--m-outline);
   --pico-card-sectioning-background-color: var(--m-surface-variant);
   --pico-card-box-shadow: 0 0.25rem 1.25rem color-mix(in srgb, var(--m-shadow) 12%, transparent);

@@ -4,6 +4,7 @@ and pictured.
 
 - `ASSETS`: where the extracted game art lives
 - `StarView`, `ChampionRow`, `champion_row`, `star_views`, `star_colour`: a champion
+- `choice_label`: a champion as the pickers name them ("Name, 6★ L60 #id": the id decides)
 - `set_name`, `slot_label`, `piece_image_url`: a piece
 - `asset_url`: an extracted game icon
 """
@@ -111,3 +112,7 @@ def asset_url(kind: str, key: str) -> str | None:
         return f"/static/assets/{kind}/{key}.png"
 
     return None
+
+
+def choice_label(champion: Champion) -> str:
+    return f"{champion.name}, {champion.grade}★ L{champion.level} #{champion.id}"

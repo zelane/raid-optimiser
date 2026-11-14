@@ -36,7 +36,9 @@ the game itself.
   per champion or global (`hero_id` null, the game's key -1), artifact or accessory), saved teams (`teams`: presets with their area, from
   `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3
   arena defenses; empty slots are 0 or -1) and the Chimera's raid (`chimera`:
-  `SharedModelManager.DynamicData.StageData.AllianceChimeraData`). Values are the game's: ids, enums by name (the faction's game
+  `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
+  `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star
+  count; the game keeps the count only, not which battle quests earned it). Values are the game's: ids, enums by name (the faction's game
   name: `account.faction_name` gives the display name), Fixed rounded to 6 decimals. A
   module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
   object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
@@ -118,11 +120,14 @@ the game itself.
     Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
     2, Paw). The page's default column.
   - Page (`webui/service/chimera.py`; `forms.chimera.parse_chimera` is its boundary, `ChimeraRequest`
-    with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from a datalist,
-    or part of a name), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
+    with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from the champion
+    finder, or part of a name in the URL), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
     assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
-    the grid shows; "Use this team" puts it in the slots), then the 3×3 board. State is all in
-    the URL. Icons: `statuses/` (StatusEffectIcons, by status kind; `service.chimera.icon_name`
+    the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
+    State is all in the URL; `static/chimera.js` only drives the pickers of "Also bring"
+    (what the team needs) and gear, relics & assumptions (how it brings it): a search over
+    what isn't chosen, grouped by kind; a pick adds a field and reloads, showing it as a
+    removable chip. Icons: `statuses/` (StatusEffectIcons, by status kind; `service.chimera.icon_name`
     maps ours, e.g. DecreaseDefence → StatusReduceDefence) and `chimera/<Form>_<Level>`
     (ChimeraChallengeIcons), from `tools/extract_assets.py`.
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
@@ -136,12 +141,12 @@ the game itself.
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list, and reserve rules
   (`optimiser/reserve.py`, by `rule_key`: `Tagged(marker)` what champions with a tag wear,
   `GlobalPresets` every global gear preset's pieces even unworn, `Team(preset id)` what a saved
-  team wears; what they reserve comes from each snapshot; edited on the `/assumptions` page). A solve's `GearFilter`
+  team wears; what they reserve comes from each snapshot; edited on the Config page, `/config`). A solve's `GearFilter`
   says what gear it may not take, each part toggled on its own on the champion page: each reserve
   rule (`exclude_<rule key>`, on by default), champions locked above a level, anything other
   champions wear. Taken pieces note what reserves them. The champion's own gear is always
   allowed. Locks are kept for now, to compare.
-  Also what solves assume (account-wide, `/assumptions` page; `optimiser/assume.py`): flags for
+  Also what solves assume (account-wide, the Config page `/config`, once `/assumptions`; `optimiser/assume.py`): flags for
   the champion at their rank's top level, gear at +16 (main stat only) and ascended gear fully
   ascended (`planned_*` fields; `data/game/gear.json` tables, checked exact against every piece),
   and glyphs to assume (a grade per kind): `optimiser/glyphs.py` gives solves a copy of the account whose substats of those kinds carry the grade's top roll
@@ -181,6 +186,20 @@ the game itself.
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
+- Nav (`base.html` `sections`): Optimiser, Accessories, Chimera, Info; a section with several pages
+  shows them as tabs under the bar. Optimiser: the champion list, the champion last solved for
+  (`store.latest_champion`), Config. Info: Faction Wars (`/info`), Empower (`/empower`).
+- Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
+  Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
+  need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
+  missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
+- Champion finder (`webui/service/finder.py`, `forms/finder.py`, `_finder.html`,
+  `_finder_results.html`, `static/finder.js`, route `/finder`): a dialog a page includes, opened
+  by any button marked `data-finder`; name, rarity and fewest stars filter the account's
+  champions (htmx). A pick goes to the champion's optimiser, or with `data-finder="slot"` fills
+  the field `data-finder-target` names with the pickers' "Name, 6★ L60 #id" (`views.
+  choice_label`) and submits its form. Used by the champion page's Switch champion and the
+  Chimera slots (+ when open, Change when filled; their `slot` fields are hidden).
 - Target picker (`webui/service/targets.py`, `forms/targets.py`, `_target_picker.html`,
   `static/target.js`, route `/targets`): a reusable component, top of the champion page. Zone
   (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
@@ -199,9 +218,17 @@ the game itself.
   solve form and build buttons, `settings`: the forms that change the store, `chimera`, and
   `common`: `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
   `reader.py` return; only `app.py` and `templates/` know about HTTP/HTML.
-  Colour palettes (Pico's default and Hana, from `~/repo/demeter`'s `palettes.css`) live in
-  `static/palettes.css`: the nav's switcher (`palette.js`) sets `<html data-palette>` and a
-  `raid_palette` cookie, which `base.html` reads so pages render in it from the start.
+  One theme, Vault, in `static/theme.css` (dark only: `base.html` sets Pico's `data-theme="dark"`).
+  The look (◆ section titles) follows the Stitch design system the
+  user supplied, but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over
+  the spec's fonts. `static/app.css` opens with a base layer
+  over Pico (short controls, no margins on controls or sections: layouts space with `gap`;
+  tables headed in caps on whatever holds them; cards with a rim, no shadow) and the shared
+  components: `panel`/`panel-head`, `well`, `table-well`, `caps`, `badge` (`good`/`bad`/
+  `info`), `chip` (`on`), `status` (`met`/`missing`), `segmented`, `slot` (`empty`),
+  `stat-tiles`, `switch-rows`, `page-head`, `page-tabs` (a badge for a count), `tally`, `cta`,
+  `danger` (selling), `champion-strip`, `gear-pair` (`gear-card` `candidate`/`worn` over the optimiser's `piece` card), `meter`,
+  `weight-chip`. Build pages from those rather than overriding Pico per element.
 
 ## Commands
 
@@ -222,7 +249,7 @@ uv run --group dev pytest   # tests/ (not part of just check)
 ```
 
 The web server reloads itself when Python under `optimiser/` or `webui/` changes
-(watchfiles; `--no-reload` turns it off); templates and static files are read fresh anyway. Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
+(watchfiles; `--no-reload` turns it off); templates are compiled afresh per render (no Jinja cache: it missed changes to imported templates) and static files are read fresh anyway. Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
 that also matches your own shell command.
 
 ## Conventions
@@ -289,7 +316,9 @@ Anaxia's in-game stats matched exactly.
 
 ## Solver
 
-MILP in HiGHS (`highspy`). A binary per wearable piece (faction, `GearFilter`, `above_level` filter),
+MILP in HiGHS (`highspy`). A binary per wearable piece (faction, open slot: `slot_unlocked`, the game's
+`RequiredHeroGradeByKindId` Ring 4 / Amulet 5 / Banner 6 stars, Amulet and Banner also ascended that
+far; `GearFilter`, `above_level` filter),
 one per armour slot, ≤ 1 per accessory slot; set bonuses exact via piece-count variables
 tied with equalities. Ranking is lexicographic: maximise each goal, then hold it within
 `slack` (relative; for damage, applied to damage not its log). Builds after the first exclude

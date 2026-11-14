@@ -19,6 +19,7 @@ mod layout;
 mod process;
 mod relics;
 mod roots;
+mod stages;
 mod teams;
 
 use std::collections::BTreeMap;
@@ -51,6 +52,8 @@ struct Snapshot {
     arena_defense: Vec<i32>,
     arena3x3_defense: Vec<Vec<i32>>,
     chimera: Option<chimera::Raid>,
+    /// stage id → how far the account has got (stages it has fought)
+    stages: BTreeMap<i32, stages::Progress>,
 }
 
 fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
@@ -77,6 +80,7 @@ fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
         arena_defense: teams::arena_defense(process, layout, user)?,
         arena3x3_defense: teams::arena3x3_defense(process, layout, user)?,
         chimera: chimera::read(process, layout)?,
+        stages: stages::read(process, layout, user)?,
     })
 }
 

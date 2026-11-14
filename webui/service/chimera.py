@@ -13,7 +13,7 @@ team shown can clear it in one Ultra Nightmare fight.
 - `rotation_column`: the column the game's current raid puts the mythical materials in
 - `column_views`, `easy_ram_trials`, `trial_terms`, `slot_view`, `option_view`, `form_rows`,
   `trial_view`, `need_view`, `waits_on`, `WANT_GROUPS`, `want_groups`, `want_view`,
-  `gear_groups`, `gear_view`, `assumed_views`, `assumed_view`, `choice_label`, `percent`: its
+  `gear_groups`, `gear_view`, `assumed_views`, `assumed_view`, `percent`: its
   pieces
 - `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
   effects
@@ -40,7 +40,7 @@ from webui.forms.chimera import (
     SlotPick,
     Unmatched,
 )
-from webui.service.views import ChampionRow, asset_url, champion_row
+from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
 
 MORE = 9  # teams each "show more" adds
 
@@ -482,7 +482,3 @@ def waits_on(cover: TrialCover) -> str | None:
         return None
 
     return LEVELS[LEVELS.index(cover.trial.level) - 1]
-
-
-def choice_label(champion: Champion) -> str:
-    return f"{champion.name}, {champion.grade}★ L{champion.level} #{champion.id}"

@@ -35,10 +35,10 @@ from optimiser.accessories.roles import (
     set_factor,
     set_role,
 )
-from optimiser.account import Account, Stat
+from optimiser.account import Account, Champion, Stat
 from optimiser.labels import STAT_LABELS, format_line, line_label
 from optimiser.paths import POTENTIALS, STORE
-from optimiser.reserve import reservations
+from optimiser.reserve import Reservations, reservations
 from optimiser.settings import read_standard_types, set_type_weight
 from optimiser.store import read_number, read_protected, write_number, write_protected
 from webui.service.current import (
@@ -48,6 +48,7 @@ from webui.service.current import (
     roster_types,
     snapshot_mtime,
 )
+from webui.service.results import PieceView, piece_view
 from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
@@ -144,8 +145,13 @@ class CandidateRow:
 
 @dataclass(frozen=True)
 class SwapRow:
+    """Each piece twice: as the lists show it (scores) and as the optimiser's piece card
+    draws it (`PieceView`, through the champion's eyes: the worn one is theirs)."""
+
     better: AccessoryRow  # to equip
     worn: AccessoryRow  # coming off
+    better_piece: PieceView
+    worn_piece: PieceView
     gain: str
     then_sell: bool
 
@@ -410,6 +416,7 @@ def set_summaries(account: Account, plan: Plan) -> list[SetSummary]:
 def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
     """By champion, the biggest total gain first."""
     context = row_context(account)
+    reserved = reservations(account, current_reserve_rules())
     by_champion: dict[int, list[Swap]] = {}
 
     for swap in plan.swaps:
@@ -421,7 +428,9 @@ def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
     return [
         SwapGroup(
             champion=champion_row(account.champions[champion_id]),
-            swaps=[swap_row(context, swap) for swap in swaps],
+            swaps=[
+                swap_row(context, swap, account.champions[champion_id], reserved) for swap in swaps
+            ],
             gain=f"+{gain(swaps):.1f}",
             artifact_ids=",".join(str(swap.pairing.better.artifact.id) for swap in swaps),
         )
@@ -430,10 +439,16 @@ def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
     ]
 
 
-def swap_row(context: RowContext, swap: Swap) -> SwapRow:
+def swap_row(
+    context: RowContext, swap: Swap, champion: Champion, reserved: Reservations
+) -> SwapRow:
+    better, worn = swap.pairing.better.artifact, swap.pairing.worn.artifact
+    account = context.account
     return SwapRow(
         better=accessory_row(context, swap.pairing.better),
         worn=accessory_row(context, swap.pairing.worn),
+        better_piece=piece_view(better, account, champion, reserved),
+        worn_piece=piece_view(worn, account, champion, reserved),
         gain=f"+{swap.pairing.gain():.1f}",
         then_sell=swap.then_sell,
     )

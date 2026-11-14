@@ -1,4 +1,5 @@
 {% from "_macros.html" import piece %}
+{% set slot_names = ["Weapon", "Helmet", "Shield", "Gloves", "Chest", "Boots", "Ring", "Amulet", "Banner"] %}
 
 {# A build's details: what's still to do for it, the buttons that send it to the game, and its
    pieces. #}
@@ -17,12 +18,12 @@
       {%- if todo %}<span class="planned">{{ todo | join(", ") }}</span>{% endif -%}
     </p>
     <div class="equip">
-      <button hx-post="/champions/{{ results.champion.id }}/preview"
+      <button class="secondary outline" hx-post="/champions/{{ results.champion.id }}/preview"
               hx-vals='{"artifact_ids": "{{ build.artifact_ids | join(",") }}"}'
               hx-target="next .equip-result" hx-disabled-elt="this" hx-indicator="this">
         Preview in game
       </button>
-      <button class="outline" hx-post="/champions/{{ results.champion.id }}/equip"
+      <button hx-post="/champions/{{ results.champion.id }}/equip"
               hx-vals='{"artifact_ids": "{{ build.artifact_ids | join(",") }}"}'
               hx-target="next .equip-result" hx-disabled-elt="this" hx-indicator="this"
               hx-confirm="Equip build {{ build.number }} on {{ results.champion.name }} in game?{% if build.from_others %} {{ build.from_others }} piece{{ 's' if build.from_others != 1 }} will be taken off other champions.{% endif %}">
@@ -32,15 +33,16 @@
     </div>
   </div>
   <div class="pieces">
-    {% for p in build.slots %}{% if p %}{{ piece(p, results.champion) }}{% else %}<article class="piece empty"><small>Empty</small></article>{% endif %}{% endfor %}
+    {% for p in build.slots %}{% if p %}{{ piece(p, results.champion) }}{% else %}<article class="piece slot empty"><small>{{ slot_names[loop.index0] }}: empty</small></article>{% endif %}{% endfor %}
   </div>
 {% endmacro %}
 
+<div class="panel results-panel">
 <p class="run-head">
-  Found {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s.
+  <span class="badge info">Found {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s</span>
   {% if results.champion_level_note %}<span class="planned">{{ results.champion.name }} {{ results.champion_level_note }}.</span>{% endif %}
-  {% if results.lore_of_steel %}Lore of Steel applied.{% endif %}
-  {% if results.damage %}The DMG row is {{ results.damage }}.{% endif %}
+  {% if results.lore_of_steel %}<span>Lore of Steel applied.</span>{% endif %}
+  {% if results.damage %}<span>The DMG row is {{ results.damage }}.</span>{% endif %}
 </p>
 
 {# The ledger: the gear worn now, then a build a row, each change beside its value. Picking a
@@ -71,6 +73,7 @@
       {% endfor %}
     </tbody>
   </table>
+</div>
 </div>
 {% for build in results.builds %}
   <section class="build-detail" id="build-{{ build.number }}"{% if not loop.first %} hidden{% endif %}>

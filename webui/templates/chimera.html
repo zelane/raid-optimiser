@@ -14,7 +14,7 @@
 {%- endmacro %}
 
 {% macro need_item(need) -%}
-<li class="{{ 'met' if need.met else 'unmet' }}">
+<li class="status {{ 'met' if need.met else 'missing' }}">
   <span class="need-mark" aria-label="{{ 'met' if need.met else 'not met' }}">{{ "✓" if need.met else "✗" }}</span>
   <div class="need-body">
     <span class="need-head">
@@ -22,6 +22,7 @@
       <span class="need-label">{{ need.label }}</span>
       {% if need.met %}{{ score_pill(need.score, "How far the team can count on it: uptime × reliability × reach") }}{% endif %}
     </span>
+    {% if need.met %}<span class="meter {{ 'high' if need.score >= 75 else 'mid' if need.score >= 45 else 'low' }}" aria-hidden="true"><span style="width: {{ need.score }}%"></span></span>{% endif %}
     {% if need.contributors or need.notes or need.brought %}
       <div class="need-by">
         {% for contributor in need.contributors %}
@@ -48,123 +49,166 @@
 
 {% block title %}Chimera trials: Raid optimiser{% endblock %}
 {% block content %}
-  <h1>Chimera trials</h1>
-  <p class="lede">
-    Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the buffs,
-    debuffs and effects their skills bring against each trial's rules and each form's
-    immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
-  </p>
+  {# One GET form for everything the search takes: the page's state is all in its URL. The
+     trial board, under it, only shows. #}
+  <form method="get" action="/chimera" class="chimera-page">
+    <header class="chimera-head">
+      <div class="chimera-title">
+        <h1>Chimera trials</h1>
+        <p class="lede">
+          Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the
+          buffs, debuffs and effects their skills bring against each trial's rules and each form's
+          immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
+        </p>
+      </div>
+      <div class="chimera-rotation">
+        <span class="caps">Mythical materials in</span>
+        <fieldset class="segmented" role="radiogroup" aria-label="Rotation">
+          {% for column in page.columns %}
+            <label title="Its Easy Ram trial: {{ column.hint }}">
+              <input type="radio" name="column" value="{{ column.part }}" {% if column.part == page.column %}checked{% endif %} onchange="this.form.submit()">
+              {{ column.part }}{% if column.mythical %} <span class="badge">this raid</span>{% endif %}
+            </label>
+          {% endfor %}
+        </fieldset>
+        <small class="muted">{% for column in page.columns if column.part == page.column %}Easy Ram: {{ column.hint }}{% endfor %}</small>
+      </div>
+      <div class="tally" title="Trials the team shown clears">
+        <strong class="{{ 'cleared-all' if page.cleared == 9 else 'cleared-some' }}">{{ page.cleared }}<small>/9</small></strong>
+        <span class="caps">trials</span>
+        {{ score_pill(page.score, "Team score: how far it can count on what the trials need") }}
+      </div>
+    </header>
 
-  {% if page.problems %}
-    <article class="chimera-problems">
-      <strong>The trial rules no longer match the game's data</strong> (a game update?): these trials may be judged wrongly.
-      <ul>{% for problem in page.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
-    </article>
-  {% endif %}
+    {% if page.problems %}
+      <article class="chimera-problems">
+        <strong>The trial rules no longer match the game's data</strong> (a game update?): these trials may be judged wrongly.
+        <ul>{% for problem in page.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+      </article>
+    {% endif %}
 
-  <form method="get" action="/chimera" class="chimera-form-steps">
-    <section class="chimera-step">
-      <h2><span class="step-number">1</span> Rotation</h2>
-      <fieldset class="chimera-columns" role="radiogroup" aria-label="Rotation">
-        {% for column in page.columns %}
-          <label class="chimera-column" title="Its Easy Ram trial: {{ column.hint }}">
-            <input type="radio" name="column" value="{{ column.part }}" {% if column.part == page.column %}checked{% endif %} onchange="this.form.submit()">
-            <span class="chimera-column-title">Mythicals in {{ column.part }}{% if column.mythical %} <mark>this raid</mark>{% endif %}</span>
-            <small class="chimera-column-hint">{{ column.hint }}</small>
-          </label>
-        {% endfor %}
-      </fieldset>
-    </section>
-
-    <section class="chimera-step">
-      <h2><span class="step-number">2</span> Your champions</h2>
+    <section class="panel">
+      <header class="panel-head">
+        <h2>Your champions</h2>
+        {% set placed = page.slots | selectattr("champion") | list | length %}
+        <span class="badge">{{ placed }} placed · {{ 5 - placed }} open</span>
+        <a href="{{ page_url([]) }}" class="caps empty-all">Empty all</a>
+      </header>
       <datalist id="chimera-champions">
         {% for choice in page.choices %}<option value="{{ choice.label }}"></option>{% endfor %}
       </datalist>
       <div class="chimera-slots">
         {% for slot in page.slots %}
-          <div class="chimera-slot {{ 'suggested' if slot.suggested }} {{ 'open' if not slot.champion }}">
+          {# The slot's field is hidden: the finder (+, Change) fills it and submits. #}
+          <div class="slot chimera-slot{{ ' suggested' if slot.suggested }}{{ ' empty' if not slot.champion }}">
+            <span class="caps">Slot {{ loop.index }}{% if slot.suggested %} · suggested{% endif %}</span>
+            <input type="hidden" name="slot" id="slot-{{ loop.index }}" value="{{ slot.choice }}">
             {% if slot.champion %}
-              <a href="/champions/{{ slot.champion.id }}" class="card-tile" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
-              <span class="chimera-slot-name">{{ slot.champion.name }}</span>
-              {% if slot.suggested %}<small class="slot-note">suggested</small>{% endif %}
+              <div class="slot-champion">
+                <a href="/champions/{{ slot.champion.id }}" class="card-tile" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
+                <span class="chimera-slot-name">{{ slot.champion.name }}</span>
+              </div>
             {% else %}
-              <span class="chimera-slot-empty">Open</span>
+              <button type="button" class="slot-plus" data-finder="slot" data-finder-target="slot-{{ loop.index }}" aria-label="Find a champion for slot {{ loop.index }}" title="Find a champion">+</button>
               {% if slot.problem %}<small class="slot-problem">“{{ slot.choice }}”: {{ slot.problem }}</small>{% endif %}
             {% endif %}
-            <div class="chimera-slot-pick">
-              <input type="search" name="slot" list="chimera-champions" value="{{ slot.choice }}" placeholder="Search champions" aria-label="Slot {{ loop.index }}" autocomplete="off" onchange="this.form.submit()">
-              {% if slot.choice %}<button type="button" class="secondary outline" title="Empty this slot" aria-label="Empty slot {{ loop.index }}" onclick="this.previousElementSibling.value=''; this.form.submit()">×</button>{% endif %}
-            </div>
+            {% if slot.choice %}
+              <div class="slot-actions">
+                {% if slot.champion %}<button type="button" class="secondary outline" data-finder="slot" data-finder-target="slot-{{ loop.index }}">Change</button>{% endif %}
+                <button type="button" class="secondary outline" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
+                        onclick="document.getElementById('slot-{{ loop.index }}').value = ''; this.form.submit()">×</button>
+              </div>
+            {% endif %}
           </div>
         {% endfor %}
       </div>
     </section>
 
-    <section class="chimera-step">
-      <h2><span class="step-number">3</span> Also bring <small>every team must, besides the trials</small></h2>
-      {% if page.ran %}<input type="hidden" name="run" value="true">{% endif %}
-      <div class="wants-chosen">
-        {% for want in page.wanted %}
-          <a class="want-chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', want.key) }}" title="Stop asking for {{ want.label }}">
-            {{ status_icon(want.icon_url, want.label) }}{{ want.label }}<span class="want-remove" aria-hidden="true">×</span>
-          </a>
-        {% else %}
-          <small>Nothing extra: pick from the lists below.</small>
-        {% endfor %}
-      </div>
-      <div class="want-groups">
-        {% for group in page.wants %}
-          <details class="want-group" data-group="{{ group.title }}">
-            <summary>{{ group.title }} <small>{{ group.wants | length }}{% if group.chosen %} · {{ group.chosen }} wanted{% endif %}</small></summary>
-            <div class="want-chips">
-              {% for want in group.wants %}
-                <label class="want-chip {{ 'on' if want.wanted }}" title="{{ want.label }}{% if want.note %} ({{ want.note }}){% endif %}">
-                  <input type="checkbox" name="want" value="{{ want.key }}" {% if want.wanted %}checked{% endif %} onchange="this.form.submit()">
-                  {{ status_icon(want.icon_url, want.label) }}
-                  <span>{{ want.label }}{% if want.note %} <small>{{ want.note }}</small>{% endif %}</span>
-                </label>
-              {% endfor %}
-            </div>
-          </details>
-        {% endfor %}
-      </div>
-    </section>
+    {# What the team needs besides the trials, and how it brings it: two panels side by side,
+       each with its chosen ones as removable chips in its head (kept as hidden fields) and a
+       searchable picker under it whose pick adds one (chimera.js). #}
+    <div class="chimera-bring">
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Also bring <small class="muted">every team must, besides the trials</small></h2>
+          <div class="chips-chosen">
+            {% for want in page.wanted %}
+              <a class="chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', want.key) }}" title="Stop asking for {{ want.label }}">
+                {{ status_icon(want.icon_url, want.label, "small") }}{{ want.label }}<span class="chip-remove" aria-hidden="true">×</span>
+              </a>
+            {% else %}
+              <small class="muted">Nothing extra yet</small>
+            {% endfor %}
+          </div>
+        </header>
+        {% if page.ran %}<input type="hidden" name="run" value="true">{% endif %}
+        {% for want in page.wanted %}<input type="hidden" name="want" value="{{ want.key }}">{% endfor %}
+        <div class="picker" data-picker="want">
+          <input type="search" class="picker-search" role="combobox" aria-expanded="false" aria-controls="want-options" aria-autocomplete="list"
+                 placeholder="Add a buff, debuff or effect…" aria-label="Add something to bring" autocomplete="off">
+          <div class="picker-options" id="want-options" role="listbox" aria-label="What to bring" hidden>
+            {% for group in page.wants %}
+              {% set left = group.wants | rejectattr("wanted") | list %}
+              {% if left %}
+                <div class="picker-group">
+                  <div class="picker-group-title caps">{{ group.title }}</div>
+                  {% for want in left %}
+                    <button type="button" class="picker-option" role="option" data-value="{{ want.key }}" title="{{ want.label }}{% if want.note %} ({{ want.note }}){% endif %}">
+                      {{ status_icon(want.icon_url, want.label, "small") }}
+                      <span>{{ want.label }}{% if want.note %} <small class="muted">{{ want.note }}</small>{% endif %}</span>
+                    </button>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            {% endfor %}
+            <p class="picker-empty muted" hidden>Nothing matches</p>
+          </div>
+        </div>
+      </section>
 
-    <section class="chimera-step">
-      <h2><span class="step-number">4</span> Gear, relics &amp; assumptions <small>other ways a team brings what it needs</small></h2>
-      <input type="hidden" name="gear_set" value="true">
-      {% for assumed in page.assumed %}<input type="hidden" name="assume" value="{{ assumed.key }}">{% endfor %}
-      <div class="wants-chosen">
-        {% for gear in page.gear_on %}
-          <a class="want-chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', gear.key) }}" title="Stop allowing {{ gear.name }}">
-            {% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label) }}{% endfor %}{{ gear.name }}<span class="want-remove" aria-hidden="true">×</span>
-          </a>
-        {% endfor %}
-        {% for assumed in page.assumed %}
-          <a class="want-chip on assumed" href="{{ page_url(page.slots, '&run=true' if page.ran else '', assumed.key) }}" title="Stop assuming it">
-            {{ status_icon(assumed.icon.url, assumed.icon.label) }}{{ assumed.champion or "Team" }}: {{ assumed.label }} <small>assumed</small><span class="want-remove" aria-hidden="true">×</span>
-          </a>
-        {% endfor %}
-        {% if not page.gear_on and not page.assumed %}<small>Skills only: allow gear or relics below.</small>{% endif %}
-      </div>
-      <div class="want-groups">
-        {% for group in page.gear %}
-          <details class="want-group" data-group="{{ group.title }}">
-            <summary>{{ group.title }} <small>{{ group.gear | length }}{% if group.chosen %} · {{ group.chosen }} allowed{% endif %}</small></summary>
-            <div class="want-chips gear-chips">
-              {% for gear in group.gear %}
-                <label class="want-chip {{ 'on' if gear.on }}" title="{{ gear.name }}: {{ gear.brings | map(attribute='label') | join(', ') }}">
-                  <input type="checkbox" name="gear" value="{{ gear.key }}" {% if gear.on %}checked{% endif %} onchange="this.form.submit()">
-                  <span class="gear-icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
-                  <span>{{ gear.name }}{% if gear.faction %} <small>{{ gear.faction }} only</small>{% endif %}</span>
-                </label>
-              {% endfor %}
-            </div>
-          </details>
-        {% endfor %}
-        <details class="want-group" data-group="Assume">
-          <summary>Assume something else <small>a blessing, a book to come: a champion (or the team) brings it</small></summary>
+      <section class="panel">
+        <header class="panel-head">
+          <h2>Gear, relics &amp; assumptions <small class="muted">how the team brings it, besides skills</small></h2>
+          <div class="chips-chosen">
+            {% for gear in page.gear_on %}
+              <a class="chip on" href="{{ page_url(page.slots, '&run=true' if page.ran else '', gear.key) }}" title="Stop allowing {{ gear.name }}">
+                {% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}{{ gear.name }}<span class="chip-remove" aria-hidden="true">×</span>
+              </a>
+            {% endfor %}
+            {% for assumed in page.assumed %}
+              <a class="chip on assumed" href="{{ page_url(page.slots, '&run=true' if page.ran else '', assumed.key) }}" title="Stop assuming it">
+                {{ status_icon(assumed.icon.url, assumed.icon.label, "small") }}{{ assumed.champion or "Team" }}: {{ assumed.label }}<span class="chip-remove" aria-hidden="true">×</span>
+              </a>
+            {% endfor %}
+            {% if not page.gear_on and not page.assumed %}<small class="muted">Skills only</small>{% endif %}
+          </div>
+        </header>
+        <input type="hidden" name="gear_set" value="true">
+        {% for gear in page.gear_on %}<input type="hidden" name="gear" value="{{ gear.key }}">{% endfor %}
+        {% for assumed in page.assumed %}<input type="hidden" name="assume" value="{{ assumed.key }}">{% endfor %}
+        <div class="picker" data-picker="gear">
+          <input type="search" class="picker-search" role="combobox" aria-expanded="false" aria-controls="gear-options" aria-autocomplete="list"
+                 placeholder="Add a set or relic…" aria-label="Add gear or a relic" autocomplete="off">
+          <div class="picker-options" id="gear-options" role="listbox" aria-label="Gear and relics" hidden>
+            {% for group in page.gear %}
+              {% set left = group.gear | rejectattr("on") | list %}
+              {% if left %}
+                <div class="picker-group">
+                  <div class="picker-group-title caps">{{ group.title }}</div>
+                  {% for gear in left %}
+                    <button type="button" class="picker-option" role="option" data-value="{{ gear.key }}" title="{{ gear.name }}: {{ gear.brings | map(attribute='label') | join(', ') }}">
+                      <span class="gear-icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
+                      <span>{{ gear.name }}{% if gear.faction %} <small class="muted">{{ gear.faction }} only</small>{% endif %}</span>
+                    </button>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            {% endfor %}
+            <p class="picker-empty muted" hidden>Nothing matches</p>
+          </div>
+        </div>
+        <div class="assume">
+          <p class="panel-note">Assume: a blessing, a book to come. A champion (or the team, left empty) brings what you name.</p>
           <div class="assume-form">
             <input type="search" name="assume_who" list="chimera-champions" placeholder="Champion (empty: the team)" autocomplete="off" aria-label="Who brings it">
             <select name="assume_what" aria-label="What they bring">
@@ -175,27 +219,26 @@
                 </optgroup>
               {% endfor %}
             </select>
-            <button type="submit" name="run" value="{{ 'true' if page.ran else 'false' }}" class="secondary">Assume</button>
+            <button type="submit" name="run" value="{{ 'true' if page.ran else 'false' }}" class="secondary outline">Assume</button>
           </div>
-        </details>
-      </div>
-    </section>
+        </div>
+      </section>
+    </div>
 
-    <section class="chimera-step">
-      <h2><span class="step-number">5</span> Find teams</h2>
-      <div class="chimera-run">
-        <label>
-          From champions at
-          <select name="min_grade">
-            {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>{{ grade }}★ and up</option>{% endfor %}
-          </select>
-        </label>
-        <button type="submit" name="run" value="true">Run</button>
-        <a href="{{ page_url([]) }}" class="secondary">Empty all slots</a>
-        {% if page.ran %}<small>Searched {{ page.candidates }} champions (the best copy of each).</small>{% endif %}
-      </div>
+    <div class="panel chimera-run">
+      <label>
+        <span class="caps">Search from</span>
+        <select name="min_grade">
+          {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>Champions at {{ grade }}★ and up</option>{% endfor %}
+        </select>
+      </label>
+      {% if page.ran %}<span class="run-note"><span class="dot" aria-hidden="true">●</span> Searched {{ page.candidates }} champions (the best copy of each)</span>{% endif %}
+      <button type="submit" name="run" value="true" class="cta">Find teams</button>
+    </div>
 
-      {% if page.ran %}
+    {% if page.ran %}
+      <section class="chimera-results">
+        <h2 class="section-title">Teams</h2>
         <p class="chimera-found">
           {% if page.partial %}
             No team clears all nine trials: these clear the most.
@@ -218,7 +261,7 @@
                 {% for slot in option.slots %}
                   {% if not slot.champion %}
                     <span class="chimera-option-member free" title="Any champion"><span class="free-slot">any</span><span>Any champion</span></span>
-                  {% elif slot.champion %}
+                  {% else %}
                     <a href="/champions/{{ slot.champion.id }}" class="chimera-option-member {{ 'suggested' if slot.suggested }}" title="{{ slot.champion.name }}{{ ' (suggested)' if slot.suggested }}{{ ', not needed' if not slot.needed }}">
                       {{ tile(slot.champion, "small") }}
                       <span>{{ slot.champion.name }}</span>
@@ -242,71 +285,63 @@
         </div>
         {% if page.more %}
           <p class="chimera-more">
-            <a href="{{ page_url(page.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="secondary">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
+            <a href="{{ page_url(page.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="secondary outline">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
           </p>
         {% endif %}
-      {% endif %}
-    </section>
+      </section>
+    {% endif %}
   </form>
 
-  <section class="chimera-step">
-    <h2>
-      <span class="step-number">6</span> Trials{% if page.shown %}: option {{ page.shown }}{% endif %}
-      <strong class="{{ 'cleared-all' if page.cleared == 9 else 'cleared-some' }}">{{ page.cleared }} / 9</strong>
-      {{ score_pill(page.score, "Team score: how far it can count on what the trials need") }}
+  <section class="chimera-trials">
+    <h2 class="section-title">
+      Trials{% if page.shown %}: option {{ page.shown }}{% endif %}
+      <span class="badge {{ 'good' if page.cleared == 9 else 'bad' }}">{{ page.cleared }} / 9 cleared</span>
     </h2>
+    {# A row per form (its accent colour), Easy → Normal → Hard across it. #}
     <div class="chimera-board">
       {% for row in page.rows %}
-        <section class="chimera-row form-{{ row.form | lower }}">
-          <header class="chimera-row-head">
+        <section class="panel chimera-form form-{{ row.form | lower }}">
+          <header class="chimera-form-head">
             {% if row.icon_url %}<img class="form-icon" src="{{ row.icon_url }}" alt="" aria-hidden="true">{% else %}<span class="form-glyph" aria-hidden="true">{{ row.form[0] }}</span>{% endif %}
             <h3>{{ row.form }} form</h3>
-            <span class="row-score {{ 'all' if row.cleared == row.trials | length }}">{{ row.cleared }} / {{ row.trials | length }}</span>
+            <span class="badge {{ 'good' if row.cleared == row.trials | length else 'bad' }}">{{ row.cleared }} / {{ row.trials | length }}</span>
           </header>
           <div class="chimera-row-trials">
-            {% for trial in row.trials %}
-              <article class="trial level-{{ trial.level | lower }} {{ 'met' if trial.met else 'unmet' }}">
-                <header>
-                  <span class="level-pill">{{ trial.level }}</span>
-                  <span class="trial-state {{ 'waiting' if trial.waits_on }}">{% if trial.met %}Cleared{% elif trial.waits_on %}Needs {{ trial.waits_on }} first{% else %}Not cleared{% endif %}</span>
-                </header>
-                <p class="trial-text">{{ trial.description }}</p>
-                <p class="trial-target"><span>Target</span> <strong>{{ trial.target }}</strong>{% if trial.damage %} damage{% endif %}</p>
-                {% if trial.needs %}
-                  <ul class="trial-needs">
-                    {% for need in trial.needs %}{{ need_item(need) }}{% endfor %}
-                  </ul>
-                {% else %}
-                  <p class="trial-free">Nothing to bring: it's down to the fight.</p>
-                {% endif %}
-              </article>
-            {% endfor %}
+          {% for trial in row.trials %}
+            <article class="trial level-{{ trial.level | lower }} {{ 'met' if trial.met else 'unmet' }}">
+              <header>
+                <span class="level-pill">{{ trial.level }}</span>
+                <span class="trial-state {{ 'waiting' if trial.waits_on }}">{% if trial.met %}Cleared{% elif trial.waits_on %}Needs {{ trial.waits_on }} first{% else %}Not cleared{% endif %}</span>
+              </header>
+              <p class="trial-text">{{ trial.description }}</p>
+              <p class="trial-target"><span>Target</span> <strong>{{ trial.target }}</strong>{% if trial.damage %} damage{% endif %}</p>
+              {% if trial.needs %}
+                <ul class="trial-needs">
+                  {% for need in trial.needs %}{{ need_item(need) }}{% endfor %}
+                </ul>
+              {% else %}
+                <p class="trial-free">Nothing to bring: it's down to the fight.</p>
+              {% endif %}
+            </article>
+          {% endfor %}
           </div>
         </section>
       {% endfor %}
-      {% if page.extras %}
-        <section class="chimera-row chimera-extras">
-          <header class="chimera-row-head">
-            <span class="form-glyph" aria-hidden="true">+</span>
-            <h3>Also bringing</h3>
-            {% set brought = page.extras | selectattr("met") | list | length %}
-            <span class="row-score {{ 'all' if brought == page.extras | length }}">{{ brought }} / {{ page.extras | length }}</span>
-          </header>
-          <ul class="trial-needs extras-list">
-            {% for need in page.extras %}{{ need_item(need) }}{% endfor %}
-          </ul>
-        </section>
-      {% endif %}
     </div>
+    {% if page.extras %}
+      <section class="panel chimera-extras">
+        <header class="chimera-form-head">
+          <span class="form-glyph" aria-hidden="true">+</span>
+          <h3>Also bringing</h3>
+          {% set brought = page.extras | selectattr("met") | list | length %}
+          <span class="badge {{ 'good' if brought == page.extras | length else 'bad' }}">{{ brought }} / {{ page.extras | length }}</span>
+        </header>
+        <ul class="trial-needs extras-list">
+          {% for need in page.extras %}{{ need_item(need) }}{% endfor %}
+        </ul>
+      </section>
+    {% endif %}
   </section>
-  <script>
-    // The "also bring" groups stay as the user left them across the page's reloads.
-    for (const group of document.querySelectorAll("details.want-group")) {
-      const key = "chimera-group:" + group.dataset.group;
-      try { group.open = sessionStorage.getItem(key) === "open"; } catch {}
-      group.addEventListener("toggle", () => {
-        try { sessionStorage.setItem(key, group.open ? "open" : "closed"); } catch {}
-      });
-    }
-  </script>
+  {% include "_finder.html" %}
 {% endblock %}
+{% block scripts %}<script src="{{ static_url('chimera.js') }}"></script><script src="{{ static_url('finder.js') }}"></script>{% endblock %}

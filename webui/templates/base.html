@@ -1,8 +1,6 @@
 <!doctype html>
-{%- set palette = request.cookies.get("raid_palette", default_palette) %}
-{%- if palette not in palettes %}{% set palette = default_palette %}{% endif %}
 {#- Vault is dark only: Pico's own dark theme underneath, so its icons and controls match. #}
-<html lang="en" data-palette="{{ palette }}"{% if palette == "vault" %} data-theme="dark"{% endif %}>
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -12,7 +10,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Alegreya:wght@500;700&display=swap">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
   <link rel="stylesheet" href="{{ static_url('app.css') }}">
-  <link rel="stylesheet" href="{{ static_url('palettes.css') }}">
+  <link rel="stylesheet" href="{{ static_url('theme.css') }}">
   {#- app.css's frames, fetched with the page rather than once the stylesheet is parsed. #}
   {%- for rarity in ["common", "rare", "epic", "legendary", "mythical"] %}
   <link rel="preload" as="image" href="/static/assets/frames/{{ rarity }}.png">
@@ -20,31 +18,49 @@
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
 </head>
 <body>
+  {%- set here = request.url.path %}
+  {#- The menu's sections: (label, link, its tabs as (link, label, open now)). A section
+      with tabs shows them in the bar's second row on its pages. Optimiser: the champion
+      list, the champion last solved for (their optimiser), the settings solves use; Info:
+      the account's progress. #}
+  {%- set sections = [
+        ("Optimiser", "/", [("/", "Champions", here == "/"),
+                            (optimiser_url(), "Optimiser", here.startswith("/champions/")),
+                            ("/config", "Config", here == "/config")]),
+        ("Accessories", "/accessories", [("/accessories", "Accessories", here.startswith("/accessories"))]),
+        ("Chimera", "/chimera", [("/chimera", "Chimera", here.startswith("/chimera"))]),
+        ("Info", "/info", [("/info", "Faction Wars", here == "/info"),
+                           ("/empower", "Empower", here.startswith("/empower"))]),
+      ] %}
   <header class="topbar">
     <nav class="container">
-      {%- set here = request.url.path %}
       <ul><li><a href="/" class="wordmark">Raid optimiser</a></li></ul>
       <ul class="menu">
-        {%- for path, label in [("/", "Champions"), ("/accessories", "Accessories"), ("/empower", "Empower"), ("/chimera", "Chimera"), ("/assumptions", "Assumptions")] %}
-        {%- set current = here == path or (path == "/" and here.startswith("/champions")) or (path != "/" and here.startswith(path)) %}
-        <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a></li>
+        {%- for label, link, tabs in sections %}
+        {%- set open = tabs | selectattr(2) | list %}
+        <li><a href="{{ link }}"{% if open %} aria-current="page"{% endif %}>{{ label }}</a></li>
         {%- endfor %}
+      </ul>
+      <ul class="tools">
         <li class="sync">
-          <button class="outline secondary" hx-post="/sync" hx-target="next .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
           <small class="sync-status">{{ synced_ago() }}</small>
-        </li>
-        <li>
-          <select class="palette" aria-label="Colour palette">
-            {% for key, label in palettes.items() %}<option value="{{ key }}" {% if key == palette %}selected{% endif %}>{{ label }}</option>{% endfor %}
-          </select>
+          <button class="outline secondary" hx-post="/sync" hx-target="previous .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
         </li>
       </ul>
     </nav>
+    {%- for label, link, tabs in sections if tabs | length > 1 and tabs | selectattr(2) | list %}
+      <nav class="container tabs" aria-label="{{ label }}">
+        <ul>
+          {%- for path, tab, current in tabs %}
+          <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ tab }}</a></li>
+          {%- endfor %}
+        </ul>
+      </nav>
+    {%- endfor %}
   </header>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
-  <script src="{{ static_url('palette.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

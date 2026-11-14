@@ -37,6 +37,10 @@ document.addEventListener("click", (event) => {
     if (remove) remove.closest(".set-row").remove();
   });
 
+  setRows.addEventListener("change", (event) => {
+    if (event.target.matches("select")) showSetIcon(event.target.closest(".set-row"));
+  });
+
   // Reset also clears the set rows (it fires during restore, before the saved ones go back),
   // and goes back to the first form once the fields have been reset.
   form.addEventListener("reset", () => {
@@ -114,6 +118,15 @@ document.addEventListener("click", (event) => {
     }
   }
 
+  // A set row's icon: the picked set's, if it has one.
+  function showSetIcon(row) {
+    const select = row.querySelector("select");
+    const icon = row.querySelector(".set-icon img");
+    const url = select.selectedOptions[0]?.dataset.icon;
+    icon.hidden = !url;
+    if (url) icon.src = url;
+  }
+
   function addSetRow() {
     const n = setRowsAdded++;
     const row = setRow.content.firstElementChild.cloneNode(true);
@@ -138,6 +151,7 @@ document.addEventListener("click", (event) => {
       const row = addSetRow();
       row.querySelector("select").value = value;
       row.querySelector("input").value = values[`pieces_${n}`] ?? "4";
+      showSetIcon(row);
     }
 
     // Only ticked boxes are saved, so every box is set: some are ticked by default.

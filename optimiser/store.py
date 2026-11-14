@@ -33,7 +33,7 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `read_reserve_rules`, `write_reserve_rule`: reserve rules
 - `read_protected`, `write_protected`: protected accessories
 - `read_number`, `write_number`: numeric settings
-- `save_run`, `list_runs`, `read_run`, `latest_run`, `delete_run`: runs
+- `save_run`, `list_runs`, `read_run`, `latest_run`, `latest_champion`, `delete_run`: runs
 - `write_member`, `connect`, `run_from_row`: what they share
 """
 
@@ -285,6 +285,17 @@ def latest_run(path: Path, champion_id: int) -> Run | None:
         ).fetchone()
 
     return run_from_row(row) if row else None
+
+
+def latest_champion(path: Path) -> int | None:
+    """The champion of the newest run of all, if there's been one."""
+    if not path.exists():
+        return None
+
+    with connect(path) as db:
+        row = db.execute("SELECT champion_id FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+
+    return row[0] if row else None
 
 
 def delete_run(path: Path, champion_id: int, run_id: int) -> None:

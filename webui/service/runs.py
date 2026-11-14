@@ -3,8 +3,9 @@ runs.py - a champion's runs, kept in the store: what was asked, in a line, and t
 view as `dataclasses.asdict` JSON, revived into views (or None once the views have changed
 shape).
 
-- `HISTORY_LIMIT`, `RunEntryView`, `RunView`: a run, as listed and in full
-- `record_run`, `run_history`, `saved_run`, `forget_run`: what the pages ask for
+- `HISTORY_LIMIT`, `GEAR_SEPARATOR`, `NO_BUILD`: how runs are listed and summed up
+- `RunEntryView`, `RunView`: a run, as listed and in full
+- `record_run`, `run_history`, `saved_run`, `forget_run`, `last_solved`: what the pages ask for
 - `describe_request`, `describe_ranked`, `outcome_note`: a run's summary and note
 - `outcome_json`, `revive_outcome`, `revive`, `revive_value`: outcomes saved and revived
 - `run_view`, `entry_view`: what they share
@@ -20,19 +21,35 @@ from optimiser.damage import DamageGoal
 from optimiser.labels import STAT_LABELS, format_stat, gear_filter_label
 from optimiser.paths import STORE
 from optimiser.solve import Goal, Request
-from optimiser.store import NewRun, Run, RunEntry, delete_run, list_runs, read_run, save_run
+from optimiser.store import (
+    NewRun,
+    Run,
+    RunEntry,
+    delete_run,
+    latest_champion,
+    list_runs,
+    read_run,
+    save_run,
+)
 from webui.service.results import Outcome, ResultsView, ShortfallView
 from webui.service.views import champion_row
 
 HISTORY_LIMIT = 30  # runs listed per champion
+GEAR_SEPARATOR = " · gear: "  # `describe_request`'s last part
+NO_BUILD = "no build"  # `outcome_note` when nothing was found
 
 
 @dataclass(frozen=True)
 class RunEntryView:
+    """`summary` is what was asked, `gear` the gear it left out ("gear: …", or "" in
+    runs from before it was noted); `found`: whether it found a build."""
+
     id: int
     ran_at: str  # local time, "08 Nov 14:03"
     summary: str
+    gear: str
     note: str
+    found: bool
 
 
 @dataclass(frozen=True)
@@ -71,6 +88,11 @@ def saved_run(champion: Champion, run_id: int) -> RunView | None:
 
 def forget_run(champion: Champion, run_id: int) -> None:
     delete_run(STORE, champion.id, run_id)
+
+
+def last_solved() -> int | None:
+    """The champion the newest run was for."""
+    return latest_champion(STORE)
 
 
 def describe_request(request: Request, account: Account) -> str:
@@ -112,7 +134,7 @@ def outcome_note(outcome: Outcome) -> str:
             return f"{len(builds)} build{'s' if len(builds) != 1 else ''}"
 
         case ShortfallView():
-            return "no build"
+            return NO_BUILD
 
 
 def outcome_json(outcome: Outcome) -> dict:
@@ -170,4 +192,6 @@ def run_view(run: Run, champion: Champion) -> RunView:
 
 def entry_view(entry: RunEntry) -> RunEntryView:
     ran_at = entry.ran_at.astimezone().strftime("%d %b %H:%M")
-    return RunEntryView(entry.id, ran_at, entry.summary, entry.note)
+    summary, _, gear = entry.summary.partition(GEAR_SEPARATOR)
+    found = entry.note != NO_BUILD
+    return RunEntryView(entry.id, ran_at, summary, gear and f"gear: {gear}", entry.note, found)

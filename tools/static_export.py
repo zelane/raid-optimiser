@@ -341,7 +341,8 @@ def build_glyphs(market):
 def build_gear(art):
     """Gear stats by level: `primary` (main stat at levels 0..max_level, by rank) and
     `ascension` (the ascension bonus at ascension levels 1..rank, ranks 4-6), each per stat
-    and the slots it applies to. Rarity doesn't change either."""
+    and the slots it applies to. Rarity doesn't change either. `required_grade`: the stars a
+    champion needs before a slot opens (the accessories: Ring 4, Cloak 5, Banner 6)."""
 
     def tables(infos):
         return [
@@ -361,6 +362,10 @@ def build_gear(art):
         "max_level": art["MaxArtifactLevel"],
         "primary": tables(art["PrimaryBonusInfos"]),
         "ascension": tables(art["AscendBonusInfos"]),
+        "required_grade": {
+            kind: int(grade.removeprefix("Stars"))
+            for kind, grade in (art.get("RequiredHeroGradeByKindId") or {}).items()
+        },
     }
 
 
@@ -716,7 +721,8 @@ def or3(a, b):
 def build_enemies(data, skills):
     """Every stage's enemy teams (types and base stats are in hero_types.json), the restrictions
     on the player's team, the stages' stat modifiers, which types are bosses, the enemies'
-    skills (text and effects), and the boss modes' own tables: clan boss difficulties,
+    skills (text and effects), the stages' battle quests (the stars: "Beat Stage", a
+    challenge…, with their texts), and the boss modes' own tables: clan boss difficulties,
     the Chimera's form sequence and trials, and per-area shield caps."""
     areas, stage_places = build_areas(data["StageData"]["Areas"])
     stages = {}
@@ -736,6 +742,10 @@ def build_enemies(data, skills):
             "formations": [
                 [build_placement(p) for p in f["HeroSlotsSetup"] or []]
                 for f in stage.get("Formations") or []
+            ],
+            "quests": [
+                {"id": q["QuestId"], "parameter": q["Parameter"]}
+                for q in stage.get("BattleQuests") or []
             ],
         }
     enemy_types = {p["type"] for s in stages.values() for f in s["formations"] for p in f}
@@ -764,6 +774,9 @@ def build_enemies(data, skills):
         "bosses": bosses,
         "skills": {str(i): build_enemy_skill(skills[i]) for i in sorted(skill_ids) if i in skills},
         "shield_caps": data["GameplayData"].get("SpecificShieldCapByArea") or {},
+        "quests": {
+            str(q["Id"]): q["Description"] for q in data["BattleQuestData"]["BattleQuestTypes"]
+        },
         "clan_boss": [
             {
                 "difficulty": b["Id"],

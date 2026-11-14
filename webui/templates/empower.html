@@ -18,14 +18,14 @@
 
 {% block title %}Empower: Raid optimiser{% endblock %}
 {% block content %}
-  <h1>Empower</h1>
-  <nav class="tabs">
-    <ul>
+  <header class="page-head">
+    <h1>Empower</h1>
+    <nav class="page-tabs" aria-label="Rarity">
       {% for rarity in page.rarities %}
-        <li><a href="/empower?rarity={{ rarity }}"{% if page.rarity == rarity %} aria-current="page"{% endif %}>{{ rarity }}</a></li>
+        <a href="/empower?rarity={{ rarity }}"{% if page.rarity == rarity %} aria-current="page"{% endif %}>{{ rarity }}</a>
       {% endfor %}
-    </ul>
-  </nav>
+    </nav>
+  </header>
 
   <h2>Safe to feed ({{ page.spare | sum(attribute="count") }})</h2>
   <p class="lede">

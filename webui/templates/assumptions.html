@@ -1,35 +1,52 @@
 {% extends "base.html" %}
-{% block title %}Assumptions: Raid optimiser{% endblock %}
+{% block title %}Config: Raid optimiser{% endblock %}
 {% block content %}
-  <h1>Assumptions</h1>
-  <p class="lede">
-    What solves take as done beyond the gear as it is now. Builds mark each assumed value, so
-    you can see what still needs doing. Current stats keep the gear as it is.
-  </p>
-  <fieldset>
-    {% for flag in page.flags %}{% include "_flag.html" %}{% endfor %}
-  </fieldset>
+  <header class="page-head">
+    <div>
+      <h1>Config</h1>
+      <p class="lede">What every solve assumes and leaves out, for all champions.</p>
+    </div>
+  </header>
+  {# Three panels: what's assumed done, the glyphs assumed, the gear kept back. #}
+  <div class="config-grid">
+    <section class="panel">
+      <header class="panel-head"><h2>Assumptions</h2></header>
+      <p class="panel-note">
+        What solves take as done beyond the gear as it is now. Builds mark each assumed value, so
+        you can see what still needs doing. Current stats keep the gear as it is.
+      </p>
+      <div class="switch-rows well">
+        {% for flag in page.flags %}{% include "_flag.html" %}{% endfor %}
+      </div>
+    </section>
 
-  <h2>Glyphs</h2>
-  <p class="lede">
-    Every substat of a kind chosen here is taken as carrying that glyph at its top roll, unless
-    the glyph already on it is better. Gear below 6★ takes glyphs up to its own rank, so there
-    it's capped at that rank's top roll. A solve only glyphs stats it wants more of: a minimum,
-    a priority, or a stat the ranked skill's damage uses (and C.DMG); a stat with only a
-    maximum isn't glyphed. Main stats can't be glyphed, and the game has no C.RATE or C.DMG
-    glyphs.
-  </p>
-  <table class="glyphs">
-    <thead><tr><th>Stat</th><th>Assume</th></tr></thead>
-    <tbody>{% for row in page.glyphs %}{% include "_glyph_row.html" %}{% endfor %}</tbody>
-  </table>
+    <section class="panel">
+      <header class="panel-head"><h2>Glyphs</h2><span class="caps">top roll of the grade</span></header>
+      <p class="panel-note">
+        Every substat of a kind chosen here is taken as carrying that glyph at its top roll, unless
+        the glyph already on it is better. Gear below 6★ takes glyphs up to its own rank, so there
+        it's capped at that rank's top roll. A solve only glyphs stats it wants more of: a minimum,
+        a priority, or a stat the ranked skill's damage uses (and C.DMG); a stat with only a
+        maximum isn't glyphed. Main stats can't be glyphed, and the game has no C.RATE or C.DMG
+        glyphs.
+      </p>
+      <div class="table-well">
+        <table class="glyphs">
+          <thead><tr><th>Stat</th><th>Assume</th></tr></thead>
+          <tbody>{% for row in page.glyphs %}{% include "_glyph_row.html" %}{% endfor %}</tbody>
+        </table>
+      </div>
+    </section>
 
-  <h2>Reserved gear</h2>
-  <p class="lede">
-    Gear kept for something else, read fresh from the game on every sync. Each rule is its own
-    switch on the champion page (on by default), builds that take reserved gear say so, and the
-    accessory clean-up never sells it (swaps may still move it). Global presets reserve their
-    pieces even when no one wears them. A champion's own gear is always theirs to use.
-  </p>
-  {% with reserve = page.reserve %}{% include "_reserve.html" %}{% endwith %}
+    <section class="panel">
+      <header class="panel-head"><h2>Reserved gear</h2><span class="caps">read fresh on every sync</span></header>
+      <p class="panel-note">
+        Gear kept for something else. Each rule is its own switch on the champion page (on by
+        default), builds that take reserved gear say so, and the accessory clean-up never sells
+        it (swaps may still move it). Global presets reserve their pieces even when no one wears
+        them. A champion's own gear is always theirs to use.
+      </p>
+      {% with reserve = page.reserve %}{% include "_reserve.html" %}{% endwith %}
+    </section>
+  </div>
 {% endblock %}

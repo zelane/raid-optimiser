@@ -2,13 +2,14 @@
 app.py - the web entry point: routes that render the service's views as HTML. Only this
 module and the templates know about HTTP or HTML; a JSON API would sit beside it.
 
-- `app`, `templates`: the FastAPI app and its Jinja templates
-- `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`,
+- `app`, `templates`: the FastAPI app and its Jinja templates (uncached: edits show at once)
+- `index`, `champion_list`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_weight`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `targets`, `sync`: the routes
+  `chimera`, `targets`, `finder`, `info`, `sync`: the routes
 - `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
+- `optimiser_url`: the nav's Optimiser link: the champion last solved for, else the list
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
 
@@ -17,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
@@ -29,6 +30,9 @@ from optimiser.reserve import reservations
 from webui import extractor, reader
 from webui.forms.chimera import Offers, Unknown, parse_chimera
 from webui.forms.common import FormErrors
+from webui.forms.finder import GRADES as FINDER_GRADES
+from webui.forms.finder import RARITIES as FINDER_RARITIES
+from webui.forms.finder import parse_finder_query
 from webui.forms.request import parse_equip, parse_request
 from webui.forms.settings import (
     FlagSetting,
@@ -52,6 +56,8 @@ from webui.service import champions as champion_pages
 from webui.service import chimera as chimera_pages
 from webui.service import current, results, runs
 from webui.service import empower as empower_pages
+from webui.service import finder as finder_pages
+from webui.service import info as info_pages
 from webui.service import targets as target_pages
 
 HERE = Path(__file__).resolve().parent
@@ -78,12 +84,16 @@ class CachedStatic(StaticFiles):
 app = FastAPI(title="Raid optimiser")
 app.mount("/static", CachedStatic(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
+# No template cache: Jinja reloads a changed template but not the ones that import it (a page
+# importing `_accessory.html`, which imports `_macros.html`, kept the old macros), so every
+# render compiles afresh. Cheap at this size.
+templates.env.cache = None
 templates.env.globals["lock_levels"] = LOCK_LEVELS
-# palettes.css; a first visit (no cookie) gets Vault.
-templates.env.globals["palettes"] = {"vault": "Vault", "default": "Pico", "hana": "Hana"}
-templates.env.globals["default_palette"] = "vault"
 templates.env.globals["static_url"] = lambda path: static_url(path)
 templates.env.globals["synced_ago"] = reader.synced_ago
+templates.env.globals["finder_rarities"] = FINDER_RARITIES
+templates.env.globals["finder_grades"] = FINDER_GRADES
+templates.env.globals["optimiser_url"] = lambda: optimiser_url()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -116,10 +126,17 @@ async def lock(request: Request, champion_id: int):
             return templates.TemplateResponse(request, "_lock.html", {"listed": listed})
 
 
-@app.get("/assumptions", response_class=HTMLResponse)
-def assumptions(request: Request):
+@app.get("/config", response_class=HTMLResponse)
+def config(request: Request):
+    """What solves assume and what gear they keep out (the store's settings)."""
     page = assumption_pages.assumptions_page(current.current_account())
     return templates.TemplateResponse(request, "assumptions.html", {"page": page})
+
+
+@app.get("/assumptions")
+def old_config():
+    """The page's old address."""
+    return RedirectResponse("/config", status_code=301)
 
 
 @app.post("/assumptions", response_class=HTMLResponse)
@@ -266,6 +283,12 @@ def champion(request: Request, champion_id: int):
     return templates.TemplateResponse(request, "champion.html", context)
 
 
+@app.get("/info", response_class=HTMLResponse)
+def info(request: Request):
+    page = info_pages.info_page(current.current_account(), current.current_enemies())
+    return templates.TemplateResponse(request, "info.html", {"page": page})
+
+
 @app.get("/targets", response_class=HTMLResponse)
 def targets(request: Request):
     """The target picker after a change (htmx names the field changed); a saved target
@@ -274,6 +297,15 @@ def targets(request: Request):
     picker = target_pages.target_picker(current.current_enemies(), query)
     context = {"picker": picker, "fill": query.target is None}
     return templates.TemplateResponse(request, "_target_picker.html", context)
+
+
+@app.get("/finder", response_class=HTMLResponse)
+def finder(request: Request):
+    """The champion finder's list, for its query (`_finder.html` asks as the user types)."""
+    view = finder_pages.find_champions(
+        current.current_account(), parse_finder_query(request.query_params)
+    )
+    return templates.TemplateResponse(request, "_finder_results.html", {"finder": view})
 
 
 @app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)
@@ -393,6 +425,13 @@ def find_run(champion: Champion, run_id: int) -> runs.RunView:
         raise HTTPException(404, f"no run {run_id} for champion {champion.id}")
 
     return saved
+
+
+def optimiser_url() -> str:
+    if (champion_id := runs.last_solved()) is not None:
+        return f"/champions/{champion_id}"
+
+    return "/"
 
 
 def static_url(path: str) -> str:

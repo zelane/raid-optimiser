@@ -5,7 +5,8 @@ starts: base at their rank and level (`levels`), then the stage's and the slot's
 The boss modes' own tables come with them: the clan boss's difficulties, the Chimera's forms,
 trials, reward lists and raid timing, and the areas' shield caps.
 
-- `Modifier`, `Restriction`, `Placement`, `Stage`, `EnemyType`, `Skill`: stages and who's in them
+- `Modifier`, `Restriction`, `Placement`, `Quest`, `Stage`, `EnemyType`, `Skill`: stages and
+  who's in them
 - `Region`, `Area`: how the game groups the stages, with their display names
 - `ClanBossTier`, `Trial`, `Reward`, `TrialRewards`, `RaidTiming`, `ChimeraTier`, `Chimera`: the
   boss modes' tables
@@ -14,6 +15,7 @@ trials, reward lists and raid timing, and the areas' shield caps.
 - `load_enemies`: the loader
 - `enemy_stats`: an enemy's stats in a stage
 - `modifier_applies`, `is_boss`: what the stats depend on
+- `quest_text`: a battle quest's text with its parameter
 - `parse_stage`, `parse_placement`, `parse_modifier`, `parse_restriction`, `parse_type`,
   `parse_skill`, `parse_area`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's
   steps
@@ -66,6 +68,15 @@ class Placement:
 
 
 @dataclass(frozen=True)
+class Quest:
+    """One of a stage's battle quests, each a star ("Beat Stage", "5 Champions, no losses",
+    then its challenge), as the game words it."""
+
+    id: int
+    text: str
+
+
+@dataclass(frozen=True)
 class Stage:
     """A stage: where it is, the team it takes, and the enemies it fields (each formation is
     one possible line-up, all waves)."""
@@ -78,6 +89,7 @@ class Stage:
     restrictions: tuple[Restriction, ...]
     modifiers: tuple[Modifier, ...]
     formations: tuple[tuple[Placement, ...], ...]
+    quests: tuple[Quest, ...]  # the stars, in the game's order
 
 
 @dataclass(frozen=True)
@@ -215,7 +227,7 @@ class Enemies:
 
 def load_enemies(static: Path) -> Enemies:
     raw = read_json(static / "enemies.json")
-    stages = {int(k): parse_stage(int(k), v) for k, v in raw["stages"].items()}
+    stages = {int(k): parse_stage(int(k), v, raw["quests"]) for k, v in raw["stages"].items()}
     used = {p.type_id for stage in stages.values() for line in stage.formations for p in line}
     bosses = raw["bosses"]
     types = {
@@ -264,7 +276,7 @@ def is_boss(placement: Placement, enemy: EnemyType) -> bool:
     return placement.boss or enemy.boss_kind is not None
 
 
-def parse_stage(stage_id: int, raw: dict) -> Stage:
+def parse_stage(stage_id: int, raw: dict, texts: dict[str, str]) -> Stage:
     return Stage(
         id=stage_id,
         area=raw["area"],
@@ -274,7 +286,20 @@ def parse_stage(stage_id: int, raw: dict) -> Stage:
         restrictions=tuple(parse_restriction(c) for c in raw["conditions"]),
         modifiers=parse_modifiers(raw["modifiers"]),
         formations=tuple(tuple(parse_placement(p) for p in line) for line in raw["formations"]),
+        quests=tuple(
+            Quest(q["id"], quest_text(texts.get(str(q["id"]), ""), q["parameter"]))
+            for q in raw["quests"]
+        ),
     )
+
+
+def quest_text(text: str, parameter: float) -> str:
+    """ "Defeat {0}+ enemies…" with its parameter; a percentage the game keeps as a fraction
+    ("above {0}%" with 0.5) as one."""
+    if "{0}%" in text and parameter <= 1:
+        parameter *= 100
+
+    return text.replace("{0}", f"{parameter:g}")
 
 
 def parse_placement(raw: dict) -> Placement:

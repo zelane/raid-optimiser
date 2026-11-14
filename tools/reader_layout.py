@@ -28,6 +28,7 @@ CLASSES = {
         "Inbox",
         "Relics",
         "Arena3x3",
+        "Stages",
     ),
     ("Client.Model.Gameplay.Heroes", "HeroesWrapperReadOnly"): ("HeroData",),
     ("SharedModel.Meta.Heroes", "UserHeroData"): ("HeroById", "HeroesAiPresets"),
@@ -117,6 +118,9 @@ CLASSES = {
     ("SharedModel.Meta.Relics.UserData", "UserRelicData"): ("Relics", "RelicDataByHeroId"),
     ("SharedModel.Meta.Relics.UserData", "Relic"): ("Id", "TypeId", "Rank", "Level"),
     ("SharedModel.Meta.Relics.UserData", "HeroRelicData"): ("RelicIds",),
+    ("Client.Model.Gameplay.Stages", "StageWrapperReadOnly"): ("StageData",),
+    ("SharedModel.Meta.Stages", "UserStageData"): ("BattleResultsByStageId",),
+    ("SharedModel.Meta.Stages", "StageStats"): ("Passed", "Stars"),
 }
 ROOTS = (
     "Client.Model.AppModel",

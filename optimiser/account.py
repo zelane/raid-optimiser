@@ -7,14 +7,15 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `Slot`, `ARMOUR`, `StatLine`, `Artifact`, `Champion`: what can be worn, and by whom
 - `LOCK_LEVELS`, `Locks`: champion locks, which keep gear on its champion
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
-- `GearLine`, `GearTables`: gear stats by level and by ascension level
+- `GearLine`, `GearTables`, `slot_unlocked`: gear stats by level and by ascension level, and the
+  slots a champion has open
 - `IgnoreDefence`, `DamageBonus`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by
   piece count
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
-- `Preset`, `GearPreset`, `ChimeraRaid`: saved teams, global gear presets, and the Chimera's
-  current raid
+- `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
+  the Chimera's current raid, and progress on a stage
 - `Account`: everything a solve needs, and the account's saved teams (`preset`: one by id)
 - `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
   `faction_name`: what the game's words mean
@@ -29,7 +30,7 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum, StrEnum
 from functools import lru_cache
@@ -197,11 +198,27 @@ class GearLine:
 @dataclass(frozen=True)
 class GearTables:
     """`primary`: main stat at each level (0 first), by rank. `ascension`: the ascension
-    bonus at each ascension level (1 first), by rank. Rarity changes neither."""
+    bonus at each ascension level (1 first), by rank. Rarity changes neither.
+    `required_grade`: the stars a slot needs (`slot_unlocked`); slots absent are always open."""
 
     max_level: int
     primary: dict[GearLine, dict[int, tuple[float, ...]]]
     ascension: dict[GearLine, dict[int, tuple[float, ...]]]
+    required_grade: dict[Slot, int]
+
+
+def slot_unlocked(champion: "Champion", slot: Slot, gear: GearTables) -> bool:
+    """Whether the champion can wear gear in the slot. The game's table gives the stars each
+    accessory slot needs (Ring 4, Amulet 5, Banner 6); the Amulet and Banner also need them
+    ascended (no rank 5 below ascension 5 wears an amulet, though they wear rings), the Ring
+    only the rank (rank 4s at ascension 0 wear rings)."""
+    if (required := gear.required_grade.get(slot)) is None:
+        return True
+
+    if champion.grade < required:
+        return False
+
+    return slot == Slot.RING or champion.ascension >= required
 
 
 @dataclass(frozen=True)
@@ -423,11 +440,21 @@ class ChimeraRaid:
 
 
 @dataclass(frozen=True)
+class StageProgress:
+    """How far the account has got on a stage it has fought: the game counts its stars
+    (battle quests done), not which ones."""
+
+    passed: bool
+    stars: int
+
+
+@dataclass(frozen=True)
 class Account:
     """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed;
     `relic_types`: the relic types the account has (worn or not); `presets`, the arena
     defenses (classic, and 3v3's three teams), `gear_presets` (the global ones; champions' own
-    presets are left out) and `chimera_raid`: what the game holds besides gear."""
+    presets are left out), `chimera_raid` and `stages` (progress on the stages fought): what
+    the game holds besides gear."""
 
     user_id: int  # the Raid account
     champions: dict[int, Champion]
@@ -441,6 +468,7 @@ class Account:
     arena3x3_defense: tuple[tuple[int, ...], ...] = ()
     gear_presets: tuple[GearPreset, ...] = ()
     chimera_raid: ChimeraRaid | None = None
+    stages: dict[int, StageProgress] = field(default_factory=dict)
 
     def preset(self, preset_id: int) -> Preset | None:
         """The saved team with this id; None once it's gone."""
@@ -498,6 +526,10 @@ def load_account(snapshot: Path, static: Path, schema: Path) -> Account:
             parse_gear_preset(raw) for raw in account["gear_presets"] if raw["hero_id"] is None
         ),
         chimera_raid=parse_raid(account["chimera"]) if account["chimera"] else None,
+        stages={
+            int(stage_id): StageProgress(raw["passed"], raw["stars"])
+            for stage_id, raw in account.get("stages", {}).items()
+        },
     )
 
 
@@ -776,6 +808,7 @@ def parse_gear(raw: dict) -> GearTables:
         max_level=raw["max_level"],
         primary=by_line(raw["primary"]),
         ascension=by_line(raw["ascension"]),
+        required_grade={Slot(kind): grade for kind, grade in raw["required_grade"].items()},
     )
 
 

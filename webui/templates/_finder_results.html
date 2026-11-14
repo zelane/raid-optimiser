@@ -1,0 +1,20 @@
+{% from "_macros.html" import tile %}
+{# The finder's list: each a link to the champion's optimiser, carrying what a Chimera slot
+   takes (`data-choice`). #}
+<p class="finder-count caps">
+  {{ finder.found }} champion{{ "s" if finder.found != 1 }}
+  {%- if finder.found > finder.picks | length %}: the first {{ finder.picks | length }}, narrow the search for the rest{% endif %}
+</p>
+{% if finder.picks %}
+  <div class="finder-grid">
+    {% for pick in finder.picks %}
+      <a href="/champions/{{ pick.champion.id }}" class="finder-pick" data-choice="{{ pick.choice }}"
+         title="{{ pick.choice }}">
+        {{ tile(pick.champion, "small") }}
+        <span>{{ pick.champion.name }}</span>
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="muted">No champion matches: try fewer letters, or another rarity.</p>
+{% endif %}

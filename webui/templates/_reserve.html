@@ -1,5 +1,6 @@
 <div id="reserve" class="reserve">
   {% if reserve.rules %}
+  <div class="table-well">
   <table>
     <thead><tr><th>Reserves</th><th>Pieces</th><th></th></tr></thead>
     <tbody>
@@ -14,6 +15,7 @@
     </tbody>
     <tfoot><tr><td>Together</td><td>{{ reserve.pieces }}</td><td></td></tr></tfoot>
   </table>
+  </div>
   {% else %}
   <p><small class="muted">Nothing is reserved.</small></p>
   {% endif %}
