@@ -36,6 +36,9 @@
       {% endfor %}
     </aside>
     <div class="champion-request">
+    <section class="target-section" aria-label="Target">
+      {% include "_target_picker.html" %}
+    </section>
     <form class="champion-main" id="request"
           data-champion="{{ champion.id }}"
           hx-post="/champions/{{ champion.id }}/builds"
@@ -82,7 +85,7 @@
             </tr>
           </tbody>
         </table>
-        <small class="hint">Damage ranks the skill's critical hit against that much enemy DEF: pair it with C.RATE at least 100.</small>
+        <small class="hint">Damage ranks the skill's critical hit against that much enemy DEF (the target's, once one is picked above): pair it with C.RATE at least 100.</small>
       </fieldset>
       <fieldset>
         <legend>Sets, at least</legend>
@@ -156,4 +159,4 @@
     {% endif %}
   </section>
 {% endblock %}
-{% block scripts %}<script src="{{ static_url('app.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ static_url('target.js') }}"></script><script src="{{ static_url('app.js') }}"></script>{% endblock %}

@@ -61,7 +61,10 @@ the game itself.
   `hero_types.json`): every stage's formations, team restrictions (every champion must match;
   `MinCount`/`MaxCount` are the team size), stat modifiers (stage-wide and per slot: a relative
   `value` multiplies base by 1 + value, checked against the Chimera's listed HP; slot modifiers
-  give UNM clan boss its 190 SPD / 225 RES / 225 ACC), boss kinds, enemy skills, clan boss tiers,
+  give UNM clan boss its 190 SPD / 225 RES / 225 ACC; a stage modifier reaches a wave's bosses
+  if `boss_only`, else its other enemies, never both: `BossOnly == heroType.IsBoss`, the type
+  having `BossData`, in `BattleBonuses.InitModifiers`; slot modifiers always apply), the areas
+  (`Area`/`Region`: display names, stages in order per difficulty), boss kinds, enemy skills, clan boss tiers,
   the Chimera (forms in type order Ultimate/Ram/Lion/Snake, form sequence, trials with targets
   from their hidden `StartChallenge` skills) and per-area shield caps. `enemy_stats` is stats as
   a battle starts (no in-battle passives). `just enemies` (`optimiser/enemy_report.py`) prints it.
@@ -178,6 +181,15 @@ the game itself.
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
+- Target picker (`webui/service/targets.py`, `forms/targets.py`, `_target_picker.html`,
+  `static/target.js`, route `/targets`): a reusable component, top of the champion page. Zone
+  (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
+  Grim Forest, Cursed City, co-op Demon Lord, Campaign) → group (region; shared names get what
+  tells their ids apart) → difficulty → stage, then one enemy of the last wave (boss, else most
+  HP). htmx re-renders it on change (`HX-Trigger-Name`: lower levels reset); a user's pick fires
+  `target:picked` (the champion page sets `enemy_def`); its hidden `target`
+  ("stage:wave:slot", `form="request"`) is saved with runs and restored quietly. The panel dims
+  when `enemy_def` no longer matches it.
 - `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
@@ -264,6 +276,11 @@ Anaxia's in-game stats matched exactly.
 - DEF multiplier = `1 − 0.85 × (1 − e^(−effDEF/1500))`; effDEF = DEF × (1 + defenceModifier);
   defenceModifier = skill's `DefenceModifier` − sets' ignore DEF (they **add**).
 - Crit hit bonus = C.DMG + skill crit extra, **no cap** anywhere. C.RATE is a probability.
+- Sets' damage bonus (`ChangeDamageMultiplier` passives on the owner's own hits, exported as
+  `damage_bonus` at full HP): Zeal +12 % per set (`sameSkillCount`), capped at 36 %; Fury +10 %
+  once (more below 75 % HP, not modelled). They add, × (1 + bonus). Zeal scales with the
+  wearer's HP, not the target's; no set adds damage by target HP (Slayer 9's extra hit is only
+  capped by it). Feral/Protection 9 (per buff/debuff on the target) are left out.
 - Set ignore DEF comes from `ChangeDefenceModifier` passives on set skills: Lethal/Savage share
   skill 100010 (25 %, once); Cruel 5 % × sets; Slayer AoE only; values are multiples of 5 %.
 - Skill formulas (`MultiplierFormula`) are mostly `k*STAT`; anything using target/battle
@@ -281,9 +298,13 @@ same slot/set/faction match or beat on every stat the request uses.
 
 Damage is ranked by its log: tangent lines under log(formula) and log(1 + C.DMG) (20 each,
 over the reachable range: fewer, tighter tangents were several times faster); the DEF term
-(convex in ignore DEF) is exact with a binary per 5 % step. HiGHS has no MIQP and damage is a
-non-convex product anyway, hence the log form. Damage-then-stat solves take ~25 s per build;
-the user is fine with that.
+(convex in ignore DEF) is exact with a binary per 5 % step, the steps stopping at the most any
+build ignores (`most_ignore`, a small side solve): the relaxation takes the chord to the top
+step, and topping out at every source summed (DEF multiplier 1) left the gap ~5x wider.
+Tangent rows go through one variable per term (`log_under_tangents`), not a term per piece.
+HiGHS has no MIQP and damage is a non-convex product anyway, hence the log form. A damage
+solve with four stat minimums takes ~15 s per build; the slack left in the bound is fractional
+set counts (parts of Merciless and Lethal both claiming their ignore).
 
 ## Raider oracle (game-code calls)
 
@@ -309,7 +330,8 @@ data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.c
 
 ## Assets
 
-Portraits are named by type id with ascension 0 (`9990`), piece art `<set id>_<slot>`, set
+Portraits are named by type id with ascension 0 (`9990`); enemies' (bosses, Hydra heads, from
+`HeroAvatars_Bosses`/`HeroAvatarsHydra`) by full type id, via their type's `avatar`. Piece art `<set id>_<slot>`, set
 icons by set id. Affinity icons by lower-case affinity, faction banners by display name
 (`account.FACTION_NAMES`: Samurai → Shadowkin, Olympians → Argonites), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
 portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only

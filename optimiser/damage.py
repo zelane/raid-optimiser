@@ -1,19 +1,20 @@
 """
 damage.py - a skill's crit-hit damage against a target's DEF, as the game computes it
 (`DamageCalculator`, read from the game code): the skill's multiplier formula
-× (1 + book bonuses) × (1 + C.DMG) × the DEF multiplier, 1 - 0.85 (1 - e^(-effDEF / 1500)),
-where effDEF = DEF × (1 - ignored). Ignored DEF is the skill's own plus the sets' passives;
-they add.
+× (1 + book bonuses) × (1 + C.DMG) × (1 + the sets' damage bonus) × the DEF multiplier,
+1 - 0.85 (1 - e^(-effDEF / 1500)), where effDEF = DEF × (1 - ignored). Ignored DEF is the
+skill's own plus the sets' passives; they add. The damage bonus (Zeal, Fury) is the wearer's
+at full HP.
 
 Left out, as gear doesn't change them: buffs and debuffs, affinity, the random roll, and the
 dealt-damage substats (PvP, boss, dungeon).
 
 - `DEF_REDUCTION_CAP`, `DEF_SCALE`, `STAT_NAMES`: the game's constants, and formula names
 - `LinearFormula`, `DamageGoal`, `Unsupported`: what's ranked, or why a skill can't be
-- `ActiveIgnore`: a set's ignore-DEF passive, as worn
+- `ActiveIgnore`, `ActiveBonus`: a set's ignore-DEF passive or damage bonus, as worn
 - `damage_goal`: a champion's skill and a target's DEF into a goal (the boundary)
-- `estimate_damage`, `ignored_by_sets`, `ignore_sources`, `applies`, `defence_multiplier`:
-  the model
+- `estimate_damage`, `ignored_by_sets`, `ignore_sources`, `applies`, `bonus_from_sets`,
+  `bonus_sources`, `defence_multiplier`: the model
 - `parse_formula`, `linearise`: formula text to a linear function of stats
 """
 
@@ -27,6 +28,7 @@ from optimiser.account import (
     Artifact,
     ArtifactSet,
     Champion,
+    DamageBonus,
     FixedSet,
     IgnoreDefence,
     Skill,
@@ -99,6 +101,15 @@ class ActiveIgnore[T]:
     times: T
 
 
+@dataclass(frozen=True)
+class ActiveBonus[T]:
+    """A set's damage bonus and how many times it's active: a count, or the solver's
+    expression for one."""
+
+    source: DamageBonus
+    times: T
+
+
 def damage_goal(skill: Skill, champion: Champion, enemy_defence: float) -> DamageGoal | Unsupported:
     """The goal for `skill`, if its damage depends only on the champion's own stats."""
     if not skill.hits:
@@ -130,11 +141,13 @@ def estimate_damage(
     goal: DamageGoal, stats: Stats, artifacts: Iterable[Artifact], sets: dict[int, ArtifactSet]
 ) -> float:
     """The skill's crit-hit damage with these stats, wearing these artifacts."""
+    artifacts = tuple(artifacts)
     ignored = goal.skill_ignore + ignored_by_sets(goal, artifacts, sets)
     return (
         goal.formula.value(stats)
         * (1 + goal.book_bonus)
         * (1 + stats[Stat.CD])
+        * (1 + bonus_from_sets(artifacts, sets))
         * defence_multiplier(goal.enemy_defence, ignored)
     )
 
@@ -183,6 +196,41 @@ def ignore_sources(artifact_set: ArtifactSet, count: int) -> list[ActiveIgnore[i
 def applies(goal: DamageGoal, source: IgnoreDefence) -> bool:
     """AoE-only passives help AoE skills only."""
     return goal.aoe or not source.aoe_only
+
+
+def bonus_from_sets(artifacts: Iterable[Artifact], sets: dict[int, ArtifactSet]) -> float:
+    """The worn sets' extra damage: bonuses add, each skill's capped."""
+    pieces = Counter(a.set_id for a in artifacts)
+    per_skill: dict[int, float] = {}
+    caps: dict[int, float] = {}
+
+    for set_id, count in pieces.items():
+        if set_id not in sets:
+            continue
+
+        for bonus in bonus_sources(sets[set_id], count):
+            source = bonus.source
+            each = source.value * bonus.times if source.per_set else source.value
+            per_skill[source.skill_id] = (
+                per_skill.get(source.skill_id, 0) + each if source.per_set else each
+            )
+
+            if source.cap is not None:
+                caps[source.skill_id] = source.cap
+
+    return sum(min(total, caps.get(skill, total)) for skill, total in per_skill.items())
+
+
+def bonus_sources(artifact_set: ArtifactSet, count: int) -> list[ActiveBonus[int]]:
+    """The set's damage bonuses active with `count` pieces."""
+    match artifact_set:
+        case FixedSet(pieces=pieces, damage=damage):
+            times = count // pieces
+            return [ActiveBonus(source, times) for source in damage] if times else []
+
+        case VariableSet(damage_at=damage_at):
+            reached = [pieces for pieces in damage_at if pieces <= count]
+            return [ActiveBonus(source, 1) for source in damage_at[max(reached)]] if reached else []
 
 
 def defence_multiplier(enemy_defence: float, ignored: float) -> float:

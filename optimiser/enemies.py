@@ -6,6 +6,7 @@ The boss modes' own tables come with them: the clan boss's difficulties, the Chi
 trials, reward lists and raid timing, and the areas' shield caps.
 
 - `Modifier`, `Restriction`, `Placement`, `Stage`, `EnemyType`, `Skill`: stages and who's in them
+- `Region`, `Area`: how the game groups the stages, with their display names
 - `ClanBossTier`, `Trial`, `Reward`, `TrialRewards`, `RaidTiming`, `ChimeraTier`, `Chimera`: the
   boss modes' tables
 - `Enemies`: all of it
@@ -14,7 +15,8 @@ trials, reward lists and raid timing, and the areas' shield caps.
 - `enemy_stats`: an enemy's stats in a stage
 - `modifier_applies`, `is_boss`: what the stats depend on
 - `parse_stage`, `parse_placement`, `parse_modifier`, `parse_restriction`, `parse_type`,
-  `parse_skill`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's steps
+  `parse_skill`, `parse_area`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's
+  steps
 """
 
 from dataclasses import dataclass
@@ -109,6 +111,23 @@ class Skill:
 
 
 @dataclass(frozen=True)
+class Region:
+    """A part of an area (a dungeon, a crypt, a Doom Tower rotation) and its stages in play
+    order by difficulty, in the game's order (`None`: an area without difficulties)."""
+
+    id: str
+    name: str
+    stages: dict[str, tuple[int, ...]]
+
+
+@dataclass(frozen=True)
+class Area:
+    id: str  # what `Stage.area` holds
+    name: str
+    regions: tuple[Region, ...]
+
+
+@dataclass(frozen=True)
 class ClanBossTier:
     difficulty: str
     health: int
@@ -188,6 +207,7 @@ class Enemies:
     shield_caps: dict[str, float]  # area -> the most one shield can hold
     clan_boss: tuple[ClanBossTier, ...]
     chimera: Chimera
+    areas: tuple[Area, ...]
 
     def area_stages(self, area: str) -> list[Stage]:
         return [stage for stage in self.stages.values() if stage.area == area]
@@ -213,19 +233,19 @@ def load_enemies(static: Path) -> Enemies:
         shield_caps=raw["shield_caps"],
         clan_boss=clan_boss,
         chimera=parse_chimera(raw["chimera"]),
+        areas=tuple(parse_area(a) for a in raw["areas"]),
     )
 
 
 def enemy_stats(stage: Stage, placement: Placement, enemy: EnemyType, form: int = 0) -> Stats:
     """The enemy's stats as the battle starts: base at its rank and level, plus the stage's
-    and the slot's modifiers for its wave. Passives that change stats in battle aren't in."""
+    modifiers for its wave and kind (`modifier_applies`) and its slot's, which always apply.
+    Passives that change stats in battle aren't in."""
     base = base_stats(enemy.forms[form].unscaled, placement.grade, placement.level)
     stats = dict(base)
+    staged = [m for m in stage.modifiers if modifier_applies(m, placement, enemy)]
 
-    for modifier in stage.modifiers + placement.modifiers:
-        if not modifier_applies(modifier, placement, enemy):
-            continue
-
+    for modifier in staged + list(placement.modifiers):
         change = modifier.value if modifier.absolute else base[modifier.stat] * modifier.value
         stats[modifier.stat] += change
 
@@ -233,7 +253,11 @@ def enemy_stats(stage: Stage, placement: Placement, enemy: EnemyType, form: int 
 
 
 def modifier_applies(modifier: Modifier, placement: Placement, enemy: EnemyType) -> bool:
-    return modifier.wave == placement.wave and (not modifier.boss_only or is_boss(placement, enemy))
+    """A stage modifier applies to its wave's bosses if `boss_only`, else to the wave's other
+    enemies, never both (`BattleBonuses.InitModifiers`: `BossOnly == heroType.IsBoss`, which
+    is the type having `BossData`, not the slot's boss flag). Stages list the boss's copy of a
+    general modifier separately, so applying both doubled it (Dragon 20's boss at 0 DEF)."""
+    return modifier.wave == placement.wave and modifier.boss_only == (enemy.boss_kind is not None)
 
 
 def is_boss(placement: Placement, enemy: EnemyType) -> bool:
@@ -314,6 +338,14 @@ def parse_skill(raw: dict) -> Skill:
         description=raw["description"],
         effects=tuple(raw["effects"]),
     )
+
+
+def parse_area(raw: dict) -> Area:
+    regions = tuple(
+        Region(r["id"], r["name"], {d: tuple(ids) for d, ids in r["stages"].items()})
+        for r in raw["regions"]
+    )
+    return Area(raw["id"], raw["name"], regions)
 
 
 def parse_chimera(raw: dict) -> Chimera:

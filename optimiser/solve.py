@@ -7,9 +7,10 @@ a per-champion constant plus a sum over the pieces chosen; set bonuses are exact
 piece-count variables. So each step is a MILP, solved with HiGHS.
 
 A ranked goal is a stat, or a skill's damage (`DamageGoal`). Damage is a product, so it's
-ranked by its log: log(formula) + log(1 + C.DMG) + log(DEF multiplier). The first two are
-concave, held under tangent lines; the third depends only on the DEF the sets ignore, which
-comes in 5 % steps, so it's exact with a binary per step.
+ranked by its log: log(formula) + log(1 + C.DMG) + log(1 + sets' damage bonus) + log(DEF
+multiplier). The first three are concave, held under tangent lines (the bonus's at every total
+it can reach, so exact); the last depends only on the DEF the sets ignore, which comes in 5 %
+steps, so it's exact with a binary per step.
 
 - `GearFilter`, `Goal`, `Request`: what's asked
 - `Build`, `SetsRuleOut`, `Shortfall`: the outcomes
@@ -19,7 +20,7 @@ comes in 5 % steps, so it's exact with a binary per step.
 - `Problem`, `Milp`, `Expression`, `SetTerms`, `formulate`, `set_terms`, `add_limits`,
   `Ranked`, `ranked`, `hold`, `maximise`: the model the steps share
 - `log_damage`, `reach`, `geometric_points`, `even_points`, `log_under_tangents`,
-  `log_defence_multiplier`: the damage goal
+  `log_damage_bonus`, `log_defence_multiplier` (`most_ignore`, `ignore_total`): the damage goal
 """
 
 import math
@@ -42,7 +43,14 @@ from optimiser.account import (
     Tables,
     VariableSet,
 )
-from optimiser.damage import ActiveIgnore, DamageGoal, LinearFormula, applies, defence_multiplier
+from optimiser.damage import (
+    ActiveBonus,
+    ActiveIgnore,
+    DamageGoal,
+    LinearFormula,
+    applies,
+    defence_multiplier,
+)
 from optimiser.reserve import Reservations, Rule
 from optimiser.stats import (
     artifact_stats,
@@ -330,14 +338,17 @@ class Milp:
     chosen: dict[int, highspy.highs_var]  # artifact id -> 1 if worn
     stats: dict[Stat, highspy.highs_linear_expression]
     ignore: list[ActiveIgnore[Expression]]
+    damage: list[ActiveBonus[Expression]]
 
 
 @dataclass(frozen=True)
 class SetTerms:
-    """What a set adds to the model: to each stat, and the ignore-DEF passives it turns on."""
+    """What a set adds to the model: to each stat, and the ignore-DEF passives and damage
+    bonuses it turns on."""
 
     stats: Sequence[tuple[Stat, Expression]]
     ignore: Sequence[ActiveIgnore[Expression]]
+    damage: Sequence[ActiveBonus[Expression]]
 
 
 def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Build]) -> Milp:
@@ -346,6 +357,7 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
     chosen = {a.id: highs.addBinary() for a in problem.pieces}
     terms: dict[Stat, list] = {stat: [] for stat in Stat}
     ignore: list[ActiveIgnore[Expression]] = []
+    damage: list[ActiveBonus[Expression]] = []
 
     for slot in Slot:
         if in_slot := [chosen[a.id] for a in problem.pieces if a.slot == slot]:
@@ -365,6 +377,7 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
 
         added = set_terms(highs, artifact_set, count, problem)
         ignore += added.ignore
+        damage += added.damage
 
         for stat, term in added.stats:
             terms[stat].append(term)
@@ -375,7 +388,7 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
         )
 
     stats = {stat: highs.qsum(terms[stat]) + problem.constant[stat] for stat in Stat}
-    return Milp(highs, chosen, stats, ignore)
+    return Milp(highs, chosen, stats, ignore, damage)
 
 
 def set_terms(
@@ -386,24 +399,32 @@ def set_terms(
     base, multiplier = problem.base, problem.set_multiplier
 
     match artifact_set:
-        case FixedSet(pieces=pieces, ignore=ignore):
+        case FixedSet(pieces=pieces, ignore=ignore, damage=damage):
             per_set = set_stats(artifact_set, pieces, base, multiplier)
-            if not any(per_set.values()) and not ignore:
-                return SetTerms([], [])
+            if not any(per_set.values()) and not ignore and not damage:
+                return SetTerms([], [], [])
 
             times = highs.addIntegral(lb=0, ub=MAX_PIECES // pieces)
             highs.addConstr(pieces * times <= count)
             highs.addConstr(pieces * times >= count - (pieces - 1))
             stat_terms = [(stat, amount * times) for stat, amount in per_set.items() if amount]
-            return SetTerms(stat_terms, [ActiveIgnore(source, times) for source in ignore])
+            return SetTerms(
+                stat_terms,
+                [ActiveIgnore(source, times) for source in ignore],
+                [ActiveBonus(source, times) for source in damage],
+            )
 
-        case VariableSet(ignore_at=ignore_at):
+        case VariableSet(ignore_at=ignore_at, damage_at=damage_at):
             totals = {
                 pieces: set_stats(artifact_set, pieces, base, multiplier)
                 for pieces in range(1, MAX_PIECES + 1)
             }
-            if not any(any(t.values()) for t in totals.values()) and not ignore_at:
-                return SetTerms([], [])
+            if (
+                not any(any(t.values()) for t in totals.values())
+                and not any(ignore_at.values())
+                and not any(damage_at.values())
+            ):
+                return SetTerms([], [], [])
 
             exactly = {pieces: highs.addBinary() for pieces in range(MAX_PIECES + 1)}
             highs.addConstr(highs.qsum(exactly.values()) == 1)
@@ -420,7 +441,13 @@ def set_terms(
                 if (reached := [tier for tier in ignore_at if tier <= pieces])
                 for source in ignore_at[max(reached)]
             ]
-            return SetTerms(stat_terms, ignore_terms)
+            damage_terms: list[ActiveBonus[Expression]] = [
+                ActiveBonus(source, exactly[pieces])
+                for pieces in range(1, MAX_PIECES + 1)
+                if (reached := [tier for tier in damage_at if tier <= pieces])
+                for source in damage_at[max(reached)]
+            ]
+            return SetTerms(stat_terms, ignore_terms, damage_terms)
 
 
 def add_limits(milp: Milp, request: Request) -> None:
@@ -473,7 +500,8 @@ def log_damage(milp: Milp, goal: DamageGoal, problem: Problem):
     log_crit = log_under_tangents(
         highs, 1 + milp.stats[Stat.CD], even_points(1 + crit_low, 1 + crit_high)
     )
-    return log_formula + log_crit + log_defence_multiplier(milp, goal)
+    log_bonus = log_damage_bonus(milp)
+    return log_formula + log_crit + log_bonus + log_defence_multiplier(milp, goal, problem)
 
 
 def reach(problem: Problem, gearless: float, adds) -> tuple[float, float]:
@@ -498,19 +526,94 @@ def even_points(low: float, high: float) -> list[float]:
 
 def log_under_tangents(highs: highspy.Highs, expression, points: list[float]):
     """A variable held under log(expression) by its tangents at `points`; maximising pushes
-    it up to the curve (log is concave, so tangents lie above it)."""
+    it up to the curve (log is concave, so tangents lie above it). The expression (a term
+    per piece) gets a variable of its own, so each tangent row holds two entries rather than
+    one per piece: the dense rows made every LP iteration several times slower."""
+    value = highs.addVariable(lb=-highspy.kHighsInf)
+    highs.addConstr(value == expression)
     log = highs.addVariable(lb=-highspy.kHighsInf)
 
     for point in points:
-        highs.addConstr(log <= math.log(point) + (expression - point) / point)
+        highs.addConstr(log <= math.log(point) + (value - point) / point)
 
     return log
 
 
-def log_defence_multiplier(milp: Milp, goal: DamageGoal):
+def log_damage_bonus(milp: Milp):
+    """log(1 + the sets' damage bonus), exact: log is concave, so tangents at every total the
+    sets can reach hold it to the curve at each of them. Bonuses granted by several sets count
+    once unless they stack per set, and then up to their cap."""
+    highs = milp.highs
+    by_skill: dict[int, list[ActiveBonus[Expression]]] = {}
+
+    for bonus in milp.damage:
+        by_skill.setdefault(bonus.source.skill_id, []).append(bonus)
+
+    if not by_skill:
+        return 0
+
+    parts = []
+    reachable = {0.0}
+
+    for group in by_skill.values():
+        source = group[0].source
+        active = highs.qsum(bonus.times for bonus in group)
+
+        if source.per_set:
+            cap = highspy.kHighsInf if source.cap is None else source.cap
+            part = highs.addVariable(lb=0, ub=cap)
+            highs.addConstr(part <= source.value * active)
+            values = {min(source.value * times, cap) for times in range(MAX_PIECES + 1)}
+        else:
+            once = highs.addBinary()
+            highs.addConstr(once <= active)
+            part = source.value * once
+            values = {0.0, source.value}
+
+        parts.append(part)
+        reachable = {total + value for total in reachable for value in values}
+
+    return log_under_tangents(highs, 1 + highs.qsum(parts), sorted(1 + v for v in reachable))
+
+
+def log_defence_multiplier(milp: Milp, goal: DamageGoal, problem: Problem):
     """log(DEF multiplier), exact: the sets' ignore DEF is a multiple of IGNORE_STEP, so a
-    binary per step carries its exact value. Passives granted by several sets count once
-    unless they stack per set."""
+    binary per step carries its exact value. The steps stop at the most any build ignores:
+    the term is convex, so the LP relaxation takes the chord from step 0 to the top one, and
+    a top past what's reachable (every source at once reaches DEF multiplier 1) made that
+    bound loose enough to double the solve."""
+    highs = milp.highs
+    top = most_ignore(problem, goal)
+    steps = range(round(top / IGNORE_STEP) + 1)
+    at_step = [highs.addBinary() for _ in steps]
+    highs.addConstr(highs.qsum(at_step) == 1)
+    # At most what the sets give: the term rises with ignore DEF, so maximising takes the
+    # highest step allowed, and step 0 is always feasible (an equality makes HiGHS struggle
+    # to find a first solution).
+    highs.addConstr(
+        highs.qsum(IGNORE_STEP * step * at for step, at in zip(steps, at_step, strict=True))
+        <= ignore_total(milp, goal)
+    )
+    return highs.qsum(
+        math.log(defence_multiplier(goal.enemy_defence, goal.skill_ignore + IGNORE_STEP * step))
+        * at
+        for step, at in zip(steps, at_step, strict=True)
+    )
+
+
+def most_ignore(problem: Problem, goal: DamageGoal) -> float:
+    """The most DEF the sets of any one build ignore for the goal's skill."""
+    milp = formulate(problem, {}, [])
+
+    if not any(applies(goal, passive.source) for passive in milp.ignore):
+        return 0.0
+
+    return maximise(milp, ignore_total(milp, goal)) or 0.0
+
+
+def ignore_total(milp: Milp, goal: DamageGoal) -> Expression:
+    """The DEF the chosen sets ignore for the goal's skill. Passives granted by several sets
+    count once unless they stack per set."""
     highs = milp.highs
     by_skill: dict[int, list[ActiveIgnore[Expression]]] = {}
 
@@ -519,39 +622,22 @@ def log_defence_multiplier(milp: Milp, goal: DamageGoal):
             by_skill.setdefault(passive.source.skill_id, []).append(passive)
 
     parts = []
-    most = 0.0
 
     for group in by_skill.values():
         source = group[0].source
         active = highs.qsum(passive.times for passive in group)
 
+        if abs(source.value / IGNORE_STEP - round(source.value / IGNORE_STEP)) > 1e-9:
+            raise ValueError(f"ignore DEF {source.value} isn't a multiple of {IGNORE_STEP}")
+
         if source.per_set:
             parts.append(source.value * active)
-            most += source.value * MAX_PIECES
         else:
             once = highs.addBinary()
             highs.addConstr(once <= active)
             parts.append(source.value * once)
-            most += source.value
 
-        if abs(source.value / IGNORE_STEP - round(source.value / IGNORE_STEP)) > 1e-9:
-            raise ValueError(f"ignore DEF {source.value} isn't a multiple of {IGNORE_STEP}")
-
-    steps = range(round(most / IGNORE_STEP) + 1)
-    at_step = [highs.addBinary() for _ in steps]
-    highs.addConstr(highs.qsum(at_step) == 1)
-    # At most what the sets give: the term rises with ignore DEF, so maximising takes the
-    # highest step allowed, and step 0 is always feasible (an equality makes HiGHS struggle
-    # to find a first solution).
-    highs.addConstr(
-        highs.qsum(IGNORE_STEP * step * at for step, at in zip(steps, at_step, strict=True))
-        <= highs.qsum(parts)
-    )
-    return highs.qsum(
-        math.log(defence_multiplier(goal.enemy_defence, goal.skill_ignore + IGNORE_STEP * step))
-        * at
-        for step, at in zip(steps, at_step, strict=True)
-    )
+    return highs.qsum(parts)
 
 
 def maximise(milp: Milp, goal) -> float | None:

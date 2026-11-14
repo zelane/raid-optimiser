@@ -6,7 +6,7 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `index`, `champion_list`, `lock`, `assumptions`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_weight`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `sync`: the routes
+  `chimera`, `targets`, `sync`: the routes
 - `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
@@ -44,6 +44,7 @@ from webui.forms.settings import (
     parse_target_free,
     parse_weight,
 )
+from webui.forms.targets import TargetQuery, parse_target_query
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
@@ -51,6 +52,7 @@ from webui.service import champions as champion_pages
 from webui.service import chimera as chimera_pages
 from webui.service import current, results, runs
 from webui.service import empower as empower_pages
+from webui.service import targets as target_pages
 
 HERE = Path(__file__).resolve().parent
 
@@ -259,8 +261,19 @@ def champion(request: Request, champion_id: int):
     page = champion_pages.champion_page(
         account, current.current_reserve_rules(), find_champion(account, champion_id)
     )
-    context = {"page": page}
+    picker = target_pages.target_picker(current.current_enemies(), TargetQuery())
+    context = {"page": page, "picker": picker, "fill": False}
     return templates.TemplateResponse(request, "champion.html", context)
+
+
+@app.get("/targets", response_class=HTMLResponse)
+def targets(request: Request):
+    """The target picker after a change (htmx names the field changed); a saved target
+    (`target=`) is shown without filling the page's fields in again."""
+    query = parse_target_query(request.query_params, request.headers.get("HX-Trigger-Name"))
+    picker = target_pages.target_picker(current.current_enemies(), query)
+    context = {"picker": picker, "fill": query.target is None}
+    return templates.TemplateResponse(request, "_target_picker.html", context)
 
 
 @app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)

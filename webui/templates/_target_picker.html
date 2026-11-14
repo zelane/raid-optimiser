@@ -1,0 +1,45 @@
+{# The target picker (`service.targets`): zone, group, difficulty and stage, then one enemy of
+   the stage's last wave, with its stats. A component: changes re-render it (`/targets`); its
+   `target` field belongs to the page's form (`for_form`, default "request"). `fill`: the
+   pick is the user's, so target.js tells the page to take its stats. #}
+{% set for_form = for_form | default("request") %}
+{% set picked = picker.picked %}
+<form class="target-picker" id="target-picker"
+      hx-get="/targets" hx-trigger="change, submit" hx-target="this" hx-swap="outerHTML"
+      data-fill="{{ 'true' if fill else 'false' }}"
+      data-defence="{{ picked.defence }}"
+      data-title="{{ picked.name }}, {{ picker.title }}">
+  <input type="hidden" name="target" value="{{ picker.target }}" form="{{ for_form }}">
+  <div class="target-levels">
+    {% for name, label, choices in [("zone", "Zone", picker.zones), ("group", "Group", picker.groups),
+                                    ("difficulty", "Difficulty", picker.difficulties), ("stage", "Stage", picker.stages)] %}
+      <select name="{{ name }}" aria-label="{{ label }}">
+        {% for option in choices %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+      </select>
+    {% endfor %}
+  </div>
+  <div class="target-card">
+    <div class="target-wave" role="radiogroup" aria-label="Enemy">
+      {% for enemy in picker.enemies %}
+        <button type="submit" name="enemy" value="{{ enemy.key }}" role="radio"
+                aria-checked="{{ 'true' if enemy.picked else 'false' }}"
+                class="target-enemy{{ ' picked' if enemy.picked }}{{ ' boss' if enemy.boss }}"
+                title="{{ enemy.name }}{{ ' (boss)' if enemy.boss }}">
+          <span class="tile-frame frame-common">
+            {% if enemy.portrait_url %}<img class="tile-art" src="{{ enemy.portrait_url }}" alt="{{ enemy.name }}">
+            {% else %}<span class="tile-missing">{{ enemy.name }}</span>{% endif %}
+            {% if enemy.affinity_url %}<img class="tile-affinity" src="{{ enemy.affinity_url }}" alt="{{ enemy.affinity }}">{% endif %}
+          </span>
+        </button>
+      {% endfor %}
+    </div>
+    <div class="target-facts">
+      <p class="target-name"><strong>{{ picked.name }}</strong>{% if picked.boss %} <small class="badge">Boss</small>{% endif %}
+        <small class="muted">{{ picker.title }} · {{ picked.affinity }}</small></p>
+      <dl class="target-stats">
+        {% for stat in picked.stats %}<div><dt>{{ stat.label }}</dt><dd>{{ stat.text }}</dd></div>{% endfor %}
+      </dl>
+      <small class="target-detached hint">Not in use: damage ranks against the DEF typed in below.</small>
+    </div>
+  </div>
+</form>

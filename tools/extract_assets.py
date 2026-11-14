@@ -7,6 +7,8 @@ Writes webui/static/assets/:
   portraits/<type id with the ascension digit 0>.png  (HeroAvatars, HeroAvatarsLocal,
                                                      FuseAvatarsLocal bundles; the sprite
                                                      the type's "avatar" names, if another)
+  portraits/<type id>.png                             (bosses and Hydra heads: HeroAvatars_Bosses,
+                                                     HeroAvatarsHydra, by their "avatar")
   sets/<set id>.png                                   (ArtifactSets)
   pieces/<set id>_<slot>.png, pieces/<faction>_<slot>.png  (Artifacts: the piece art the
                                                        game shows; faction accessories)
@@ -91,6 +93,9 @@ FORM_ICONS = {
     "metamorph_switch_form_button2_white": "2-white",
 }
 PORTRAIT_FAMILIES = ("HeroAvatars", "HeroAvatarsLocal", "FuseAvatarsLocal")
+# Enemies' portraits, named as the types' "avatar" names them ("Clan_Boss", "26480",
+# "22140_22170"): copied to each type's id below.
+BOSS_PORTRAIT_FAMILIES = ("HeroAvatars_Bosses", "HeroAvatarsHydra")
 PLACEHOLDER_PORTRAIT = re.compile(r"(\d+)(?:_?temp|_avatar)")
 VERSION = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
@@ -135,6 +140,14 @@ def main(game: Path) -> None:
     for name, sprite in placeholders.items():
         if name not in written["portraits"]:
             save(sprite, "portraits", name, written)
+
+    # Champions' portraits win where a boss sprite shares their name.
+    champion_portraits = set(written["portraits"])
+
+    for family in BOSS_PORTRAIT_FAMILIES:
+        for sprite in sprites(game, family):
+            if sprite.m_Name not in champion_portraits:
+                save(sprite, "portraits", sprite.m_Name, written)
 
     # Types whose portrait is another sprite (`hero_types.json` "avatar") get that one, as the
     # game shows it, even where a sprite has their own id.

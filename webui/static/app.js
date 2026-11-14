@@ -14,6 +14,8 @@ document.addEventListener("click", (event) => {
 });
 
 // Champion page: set rows are added and removed with their buttons (none to begin with).
+// A target picked (target.js) sets the DEF damage ranks against; the picker says so when that
+// DEF no longer matches it.
 // Time solves; when a run is shown (the latest on opening the page, a new
 // one, or one picked from the history), restore the form it was asked with and mark it in
 // the history. Runs themselves are kept server-side.
@@ -47,6 +49,16 @@ document.addEventListener("click", (event) => {
   document.addEventListener("change", (event) => {
     if (event.target.matches('input[name="form"]')) showForm();
   });
+  const enemyDef = form.elements.namedItem("enemy_def");
+
+  document.addEventListener("target:picked", (event) => {
+    enemyDef.value = event.detail.defence;
+    markTargetUse();
+  });
+
+  enemyDef.addEventListener("input", markTargetUse);
+  markTargetUse();
+
   const timer = document.getElementById("timer");
   let started = 0;
   let ticking = null;
@@ -76,6 +88,11 @@ document.addEventListener("click", (event) => {
       part.hidden = part.dataset.form !== picked;
       if (part.matches("select")) part.disabled = part.hidden;
     }
+  }
+
+  function markTargetUse() {
+    const picker = document.getElementById("target-picker");
+    if (picker) picker.classList.toggle("off-target", Number(enemyDef.value) !== Number(picker.dataset.defence));
   }
 
   function showElapsed() {
@@ -140,5 +157,8 @@ document.addEventListener("click", (event) => {
     showForm();
     const skill = form.querySelector('select[name="damage_skill"]:not([disabled])');
     if (skill && values.damage_skill) skill.value = values.damage_skill;
+
+    // The run's target, as it was picked (its DEF stays the run's, even if the game's changed).
+    showTarget(values.target).then(markTargetUse);
   }
 })();

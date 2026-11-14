@@ -8,7 +8,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `LOCK_LEVELS`, `Locks`: champion locks, which keep gear on its champion
 - `GlyphKind`, `GlyphGrade`: glyphs, by the stat they raise and how strong they are
 - `GearLine`, `GearTables`: gear stats by level and by ascension level
-- `IgnoreDefence`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by piece count
+- `IgnoreDefence`, `DamageBonus`, `FixedSet`, `VariableSet`, `ArtifactSet`: set bonuses by
+  piece count
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
@@ -215,6 +216,18 @@ class IgnoreDefence:
 
 
 @dataclass(frozen=True)
+class DamageBonus:
+    """A set's extra damage on its wearer's hits, as a fraction (0.12 is +12 %), with the
+    wearer at full HP (Zeal's and Fury's scale with it). Sets granting the same skill count
+    once unless `per_set` (Zeal), and then at most `cap` in all."""
+
+    skill_id: int
+    value: float
+    per_set: bool
+    cap: float | None
+
+
+@dataclass(frozen=True)
 class FixedSet:
     """A set whose bonus counts once per `pieces` pieces worn."""
 
@@ -223,6 +236,7 @@ class FixedSet:
     pieces: int
     bonuses: tuple[Bonus, ...]
     ignore: tuple[IgnoreDefence, ...]
+    damage: tuple[DamageBonus, ...]
 
 
 @dataclass(frozen=True)
@@ -233,6 +247,7 @@ class VariableSet:
     name: str
     totals: dict[int, tuple[Bonus, ...]]
     ignore_at: dict[int, tuple[IgnoreDefence, ...]]  # piece count -> ignore-DEF passives
+    damage_at: dict[int, tuple[DamageBonus, ...]]  # piece count -> damage bonuses
 
 
 type ArtifactSet = FixedSet | VariableSet
@@ -630,18 +645,25 @@ def parse_sets(static: Path, set_numbers: dict[str, int]) -> dict[int, ArtifactS
         }
 
         ignore = {tier["pieces"]: parse_ignore(tier["ignore_defence"]) for tier in raw["tiers"]}
+        damage = {tier["pieces"]: parse_damage(tier["damage_bonus"]) for tier in raw["tiers"]}
 
         if raw["variable"]:
-            sets[set_id] = VariableSet(set_id, raw["name"], totals, ignore)
+            sets[set_id] = VariableSet(set_id, raw["name"], totals, ignore, damage)
         else:
             pieces = raw["pieces"]
-            sets[set_id] = FixedSet(set_id, raw["name"], pieces, totals[pieces], ignore[pieces])
+            sets[set_id] = FixedSet(
+                set_id, raw["name"], pieces, totals[pieces], ignore[pieces], damage[pieces]
+            )
 
     return sets
 
 
 def parse_ignore(raw: list[dict]) -> tuple[IgnoreDefence, ...]:
     return tuple(IgnoreDefence(i["skill"], i["value"], i["per_set"], i["aoe_only"]) for i in raw)
+
+
+def parse_damage(raw: list[dict]) -> tuple[DamageBonus, ...]:
+    return tuple(DamageBonus(d["skill"], d["value"], d["per_set"], d["cap"]) for d in raw)
 
 
 def parse_skills(static: Path) -> dict[int, Skill]:
