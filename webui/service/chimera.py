@@ -24,13 +24,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from optimiser.account import Account, Champion
-from optimiser.chimera.cover import Lineup, Member, NeedCover, TrialCover
-from optimiser.chimera.gear import Assumed, Gear, Loadout
 from optimiser.chimera.plan import Brief, check_lineup, fill_lineup
 from optimiser.chimera.rotation import mythical_column
-from optimiser.chimera.tags import Side, Tag, only_in, plain_label
+from optimiser.chimera.tags import only_in
 from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS, PLAN_DIFFICULTY
 from optimiser.enemies import Enemies, Trial
+from optimiser.teams.cover import Lineup, Member, NeedCover, ObjectiveCover
+from optimiser.teams.gear import Assumed, Gear, Loadout
+from optimiser.teams.tags import Side, Tag, plain_label
 from webui.forms.chimera import (
     FIRST_SHOWN,
     GRADES,
@@ -263,7 +264,9 @@ def chimera_page(
         choices=[ChoiceView(choice_label(c)) for c in champions],
         ran=request.fill is not None,
         candidates=plan.candidates,
-        options=[option_view(number, team) for number, team in enumerate(plan.options, 1)],
+        options=[
+            option_view(number, team, plan.trials) for number, team in enumerate(plan.options, 1)
+        ],
         found=plan.found,
         complete=plan.complete,
         partial=plan.partial,
@@ -272,7 +275,7 @@ def chimera_page(
         shown=shown,
         cleared=lineup.cleared,
         score=percent(lineup.score),
-        rows=form_rows(lineup),
+        rows=form_rows(lineup, plan.trials),
         problems=list(plan.problems),
     )
 
@@ -314,8 +317,8 @@ def slot_view(member: Member | None, pick: SlotPick) -> SlotView:
     )
 
 
-def option_view(number: int, team: Lineup) -> OptionView:
-    rows = form_rows(team)
+def option_view(number: int, team: Lineup, trials: dict[int, Trial]) -> OptionView:
+    rows = form_rows(team, trials)
     return OptionView(
         number=number,
         slots=[slot_view(member, None) for member in team.slots],
@@ -325,32 +328,34 @@ def option_view(number: int, team: Lineup) -> OptionView:
     )
 
 
-def form_rows(lineup: Lineup) -> list[FormRow]:
-    by_form = {form: [c for c in lineup.trials if c.trial.form == form] for form in ANIMAL_FORMS}
+def form_rows(lineup: Lineup, trials: dict[int, Trial]) -> list[FormRow]:
+    """Each form's trials (the lineup's objectives are keyed by their skill), Easy first."""
+    covered = [(c, trials[c.objective.key]) for c in lineup.objectives]
+    by_form = {form: [(c, t) for c, t in covered if t.form == form] for form in ANIMAL_FORMS}
     return [
         FormRow(
             form,
-            [trial_view(c) for c in sorted(covers, key=level_order)],
-            sum(c.met for c in covers),
+            [trial_view(c, t) for c, t in sorted(pairs, key=lambda pair: level_order(pair[1]))],
+            sum(c.met for c, _ in pairs),
             asset_url("chimera", f"{form}_Hard"),
         )
-        for form, covers in by_form.items()
+        for form, pairs in by_form.items()
     ]
 
 
-def level_order(cover: TrialCover) -> int:
-    return LEVELS.index(cover.trial.level)
+def level_order(trial: Trial) -> int:
+    return LEVELS.index(trial.level)
 
 
-def trial_view(cover: TrialCover) -> TrialView:
+def trial_view(cover: ObjectiveCover, trial: Trial) -> TrialView:
     return TrialView(
-        level=cover.trial.level,
-        description=cover.trial.description,
-        target=f"{cover.trial.target:,.0f}",
-        damage=cover.trial.damage,
+        level=trial.level,
+        description=trial.description,
+        target=f"{trial.target:,.0f}",
+        damage=trial.damage,
         met=cover.met,
         needs=[need_view(n) for n in cover.needs],
-        waits_on=waits_on(cover),
+        waits_on=waits_on(cover, trial),
     )
 
 
@@ -477,8 +482,8 @@ def icon_view(tag: Tag) -> IconView:
     return IconView(plain_label(tag), icon_url(tag))
 
 
-def waits_on(cover: TrialCover) -> str | None:
+def waits_on(cover: ObjectiveCover, trial: Trial) -> str | None:
     if cover.met or not all(need.met for need in cover.needs):
         return None
 
-    return LEVELS[LEVELS.index(cover.trial.level) - 1]
+    return LEVELS[LEVELS.index(trial.level) - 1]

@@ -1,11 +1,12 @@
 """
-cover.py - a team against the trials: which it clears (each trial's needs met, and the one
-above it cleared), who brings what each needs, the champions it can't do without, and how far
-it can count on it all (`team_score`: the mean of its needs' scores; a team's sources of a tag
-combine, two 50% ones making 75%).
+cover.py - a team against its goals: which objectives it meets (each one's needs met, and the
+one it waits on met), who brings what each needs, the champions it can't do without, and how
+far it can count on it all (`team_score`: the mean of its needs' scores; a team's sources of a
+tag combine, two 50% ones making 75%).
 
-- `NeedCover`, `TrialCover`, `Member`, `Lineup`: a team against the trials
-- `lineup_of`, `trial_covers`, `need_cover` (`bare_cover`, `best_rating`): who covers what
+- `NeedCover`, `ObjectiveCover`, `Member`, `Lineup`: a team against its goals
+- `lineup_of`, `objective_covers`, `need_cover` (`bare_cover`, `best_rating`): who covers
+  what
 - `core_of`, `met_count`: the champions it needs
 - `team_score`, `need_score`, `team_rating`, `ranking`: how far it can count on them
 """
@@ -13,18 +14,18 @@ combine, two 50% ones making 75%).
 from dataclasses import dataclass, replace
 
 from optimiser.account import Champion
-from optimiser.chimera.kits import Kit, Rating, strength
-from optimiser.chimera.tags import Side, Tag, plain_label, tag_label
-from optimiser.chimera.trials import (
+from optimiser.teams.kits import Kit, Rating, strength
+from optimiser.teams.needs import (
     AnyOf,
     Distinct,
     Given,
     Goals,
+    Objective,
     Requirement,
     counts_toward,
     stacking_tags,
 )
-from optimiser.enemies import Trial
+from optimiser.teams.tags import Side, Tag, plain_label, tag_label
 
 
 @dataclass(frozen=True)
@@ -44,10 +45,10 @@ class NeedCover:
 
 
 @dataclass(frozen=True)
-class TrialCover:
-    """A trial and whether the team clears it: its needs met, and the one above it cleared."""
+class ObjectiveCover:
+    """An objective and whether the team meets it: its needs met, and the one it waits on."""
 
-    trial: Trial
+    objective: Objective
     met: bool
     needs: tuple[NeedCover, ...]
 
@@ -55,7 +56,7 @@ class TrialCover:
 @dataclass(frozen=True)
 class Member:
     """A champion in a slot: `chosen` by the user (else the search's suggestion), and
-    `needed`: dropping it clears fewer trials."""
+    `needed`: dropping it meets fewer objectives."""
 
     champion: Champion
     chosen: bool
@@ -64,22 +65,22 @@ class Member:
 
 @dataclass(frozen=True)
 class Lineup:
-    """The team's slots (`TEAM_SIZE`, None when open), the trials it clears, and who brings
-    the debuffs wanted besides (`Goals.extras`)."""
+    """The team's slots (`Goals.size`, None when open), the objectives it meets, and who
+    brings the debuffs wanted besides (`Goals.extras`)."""
 
     slots: tuple[Member | None, ...]
-    trials: tuple[TrialCover, ...]
+    objectives: tuple[ObjectiveCover, ...]
     extras: tuple[NeedCover, ...]
     score: float  # `team_score`
 
     @property
     def cleared(self) -> int:
-        return sum(cover.met for cover in self.trials)
+        return sum(cover.met for cover in self.objectives)
 
 
 def met_count(kits: list[Kit], goals: Goals) -> int:
-    """The trials the team clears and the extras it brings."""
-    cleared = sum(cover.met for cover in trial_covers(kits, goals))
+    """The objectives the team meets and the extras it brings."""
+    cleared = sum(cover.met for cover in objective_covers(kits, goals))
     return cleared + sum(need_cover(r, kits).met for r in goals.extra_requirements)
 
 
@@ -89,9 +90,9 @@ def lineup_of(
     goals: Goals,
 ) -> Lineup:
     """The slots as members (`suggested`: the ids of the kits the search added), what the
-    team clears, and who brings the extras."""
+    team meets, and who brings the extras."""
     kits = [kit for kit in slots if kit]
-    covers = trial_covers(kits, goals)
+    covers = objective_covers(kits, goals)
     extras = tuple(need_cover(r, kits) for r in goals.extra_requirements)
     core = core_of(kits, goals, sum(c.met for c in covers) + sum(e.met for e in extras))
     members = tuple(
@@ -101,15 +102,16 @@ def lineup_of(
     return Lineup(members, covers, extras, team_score(kits, goals))
 
 
-def trial_covers(kits: list[Kit], goals: Goals) -> tuple[TrialCover, ...]:
+def objective_covers(kits: list[Kit], goals: Goals) -> tuple[ObjectiveCover, ...]:
     met: dict[int, bool] = {}
     covers = []
 
-    for trial in goals.trials:
-        need_covers = tuple(need_cover(r, kits) for r in goals.trial_requirements(trial))
-        above = met.get(trial.requires, True) if trial.requires else True
-        met[trial.skill] = above and all(n.met for n in need_covers)
-        covers.append(TrialCover(trial, met[trial.skill], need_covers))
+    for objective in goals.objectives:
+        requirements = goals.objective_requirements(objective)
+        need_covers = tuple(need_cover(r, kits) for r in requirements)
+        before = met.get(objective.requires, True) if objective.requires else True
+        met[objective.key] = before and all(n.met for n in need_covers)
+        covers.append(ObjectiveCover(objective, met[objective.key], need_covers))
 
     return tuple(covers)
 
@@ -123,7 +125,7 @@ def need_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
 
 
 def bare_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
-    need, form = requirement.need, requirement.form
+    need, target = requirement.need, requirement.target
     match need:
         case Given(need=inner, gear=gear):
             cover = bare_cover(replace(requirement, need=inner), kits)
@@ -131,18 +133,19 @@ def bare_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
 
         case AnyOf(tags=tags):
             by = tuple(kit.champion for kit in kits if kit.tags & tags)
-            asks = tuple(sorted(tags, key=tag_label))
-            return NeedCover(" or ".join(tag_label(tag) for tag in asks), bool(by), by, (), asks)
+            asks = tuple(sorted(tags, key=lambda tag: tag_label(tag, target.name)))
+            label = " or ".join(tag_label(tag, target.name) for tag in asks)
+            return NeedCover(label, bool(by), by, (), asks)
 
         case Distinct(side=side, count=count, instances=instances):
-            counted = [k for k in kits if any(counts_toward(t, need, form) for t in k.tags)]
+            counted = [k for k in kits if any(counts_toward(t, need, target) for t in k.tags)]
             brought = tuple(
                 sorted(
-                    {t for k in counted for t in k.tags if counts_toward(t, need, form)},
+                    {t for k in counted for t in k.tags if counts_toward(t, need, target)},
                     key=plain_label,
                 )
             )
-            where = "on the Chimera" if side == Side.DEBUFF else "on the team"
+            where = f"on {target.name}" if side == Side.DEBUFF else "on the team"
 
             if instances:
                 poisoners = tuple(k.champion for k in kits if k.tags & stacking_tags(need))
@@ -161,7 +164,7 @@ def bare_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
 
 def best_rating(kit: Kit, requirement: Requirement) -> Rating:
     """The champion's best source of what the need asks."""
-    need, form = requirement.need, requirement.form
+    need, target = requirement.need, requirement.target
     match need:
         case Given(need=inner):
             return best_rating(kit, replace(requirement, need=inner))
@@ -172,15 +175,15 @@ def best_rating(kit: Kit, requirement: Requirement) -> Rating:
             useful = [
                 rating
                 for tag, rating in kit.ratings.items()
-                if counts_toward(tag, need, form) or tag in stacking
+                if counts_toward(tag, need, target) or tag in stacking
             ]
 
     return max(useful, key=lambda r: r.score)
 
 
 def team_score(kits: list[Kit], goals: Goals) -> float:
-    """How far the team can count on what the trials and the extras need: the mean of their
-    `need_score`s (trials needing nothing left out), 0 to 1."""
+    """How far the team can count on what the objectives and the extras need: the mean of
+    their `need_score`s (objectives needing nothing left out), 0 to 1."""
     requirements = goals.requirements
     if not requirements:
         return 0.0
@@ -192,7 +195,7 @@ def need_score(requirement: Requirement, kits: list[Kit]) -> float:
     """0 to 1: for one of several tags, the team's best; for a count, the mean of its best
     `count` different ones (a Poison stacks: its own score meets an instance count); gear, its
     own rating."""
-    need, form = requirement.need, requirement.form
+    need, target = requirement.need, requirement.target
     match need:
         case Given(score=score):
             return score
@@ -201,7 +204,7 @@ def need_score(requirement: Requirement, kits: list[Kit]) -> float:
             return max((team_rating(kits, tag) for tag in tags), default=0.0)
 
         case Distinct(count=count, instances=instances):
-            counting = {t for kit in kits for t in kit.tags if counts_toward(t, need, form)}
+            counting = {t for kit in kits for t in kit.tags if counts_toward(t, need, target)}
             best = sorted((team_rating(kits, tag) for tag in counting), reverse=True)[:count]
             spread = sum(best) / count
 

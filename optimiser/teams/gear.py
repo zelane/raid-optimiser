@@ -16,9 +16,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from optimiser.account import Account, Champion, read_json
-from optimiser.chimera.kits import Kit, Rating, best_ratings, skill_ratings
-from optimiser.chimera.tags import NEVER_LANDS, Side, Tag, plain_label
-from optimiser.chimera.trials import AnyOf, Distinct, Given, Need, stacking_tags
+from optimiser.teams.kits import Kit, Rating, best_ratings, skill_ratings
+from optimiser.teams.needs import AnyOf, Distinct, Given, Need, stacking_tags
+from optimiser.teams.tags import Side, Tag, plain_label
 
 
 @dataclass(frozen=True)
@@ -157,10 +157,14 @@ def load_effect_sources(static: Path) -> tuple[tuple[SetSource, ...], tuple[Reli
 
 
 def gear_options(
-    account: Account, sets: tuple[SetSource, ...], relics: tuple[RelicSource, ...]
+    account: Account,
+    sets: tuple[SetSource, ...],
+    relics: tuple[RelicSource, ...],
+    never: frozenset[str],
 ) -> list[Gear]:
-    """The sets, and the relics the account has, that bring anything a trial could use
-    (debuffs the Chimera takes in some form, buffs, effects): sets by name, then relics."""
+    """The sets, and the relics the account has, that bring anything a team could use
+    (debuffs but those in `never`: no target takes them, buffs, effects): sets by name, then
+    relics."""
     sources = [
         GearSource(f"set:{s.id}", f"{s.name} set", "set", None, tuple(i for _, i in s.skills))
         for s in sorted(sets, key=lambda s: s.name)
@@ -170,7 +174,7 @@ def gear_options(
         if relic.id in account.relic_types:
             sources += relic_sources(relic)
 
-    return [gear for source in sources if (gear := gear_of(account, source))]
+    return [gear for source in sources if (gear := gear_of(account, source, never))]
 
 
 def relic_sources(relic: RelicSource) -> list[GearSource]:
@@ -191,15 +195,15 @@ def assumed_gear(tag: Tag) -> Gear:
     )
 
 
-def gear_of(account: Account, source: GearSource) -> Gear | None:
-    """The gear, if its skills bring anything useful (a debuff some form takes, a buff, an
+def gear_of(account: Account, source: GearSource, never: frozenset[str]) -> Gear | None:
+    """The gear, if its skills bring anything useful (a debuff not in `never`, a buff, an
     effect), each tag at its best `Rating`."""
     rated = [
         (tag, replace(rating, detail=f"{source.name}: {rating.detail}"))
         for skill_id in source.skills
         if (skill := account.tables.skills.get(skill_id))
         for tag, rating in skill_ratings(skill, 1, 1.0)
-        if not (tag.side == Side.DEBUFF and tag.name in NEVER_LANDS)
+        if not (tag.side == Side.DEBUFF and tag.name in never)
     ]
     if not rated:
         return None

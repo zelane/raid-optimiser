@@ -24,9 +24,10 @@ from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
-from optimiser.chimera.gear import gear_options
-from optimiser.chimera.kits import wantable
+from optimiser.chimera.tags import NEVER_LANDS
 from optimiser.reserve import reservations
+from optimiser.teams.gear import gear_options
+from optimiser.teams.kits import wantable
 from webui import extractor, reader
 from webui.forms.chimera import Offers, Unknown, parse_chimera
 from webui.forms.common import FormErrors
@@ -256,7 +257,9 @@ def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
 def chimera(request: Request):
     account = current.current_account()
     sets, relics = current.current_effect_sources()
-    offers = Offers(wantable(account), gear_options(account, sets, relics))
+    offers = Offers(
+        wantable(account, NEVER_LANDS), gear_options(account, sets, relics, NEVER_LANDS)
+    )
     query = {name: request.query_params.getlist(name) for name in request.query_params}
     enemies = current.current_enemies()
     rotation = chimera_pages.rotation_column(account, enemies, datetime.now(UTC))

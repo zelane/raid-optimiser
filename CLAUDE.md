@@ -71,19 +71,17 @@ the game itself.
   from their hidden `StartChallenge` skills) and per-area shield caps. `enemy_stats` is stats as
   a battle starts (no in-battle passives). `just enemies` (`optimiser/enemy_report.py`) prints it.
   The co-op event world boss (Tainted Demon Lord) is area `CooperationEventWorldBoss`.
-- Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
-  column (Wing/Tail/Paw: where this raid's mythical materials are; the game doesn't name its
-  columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
-  only count for trials cleared in the same fight). Judged on what champions can place and do,
-  not damage (targets are shown, not checked), nor turn order, nor ACC against the RES.
+- Teams (`optimiser/teams/`): finding a team by what its champions bring, against `Goals`:
+  objectives (each its needs, a `Target` they're met against: a name for labels and the
+  debuffs it's immune to, and `requires`: an objective met first), extras every team brings
+  (against `extras_target`) and a team `size`. Judged on what champions can place and do, not
+  damage, nor turn order, nor ACC against RES. The Chimera page is its one user so far.
   - `tags`: `Tag` (debuff/buff status kind with strengths merged by `status_kind`, a skill
-    effect from the curated `EFFECT_LABELS`, or a `Mechanic`); immunities: `BOSS_IMMUNE` minus
-    `FORM_ALLOWS` (Ram takes Fear, Snake Block Active Skills; `NEVER_LANDS`, `only_in`).
-  - `trials`: `trial_needs` (a `match` per trial; counts from the trial's target or `rules`),
-    checked against the trial's own status list (`check_needs`; the page warns on a
-    mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
-    count instances (`Distinct.instances`): any Poison source meets them, given speed.
-    `Goals` (trials' needs + wanted extras) → `Requirement`s (a need and its form).
+    effect from the curated `EFFECT_LABELS`, or a `Mechanic`), `Target`; `tag_label(tag,
+    enemy)` ("Decrease DEF on the Chimera").
+  - `needs`: `AnyOf`, `Distinct` (debuffs the target isn't immune to, `counts_toward`;
+    `instances`: any Poison source meets it, given speed), `Given`; `Requirement` (a need and
+    its target), `Objective`, `Goals`.
   - `kits`: a champion's `Kit` from `skills.json` (`placements`, `books`, `effect_kinds`,
     `target_hp_damage`), all forms of a mythical, each tag's best `Rating` = uptime (turns ÷
     cooldown less cooldown books; passives and A1s every turn; instant: 1 ÷ cooldown) ×
@@ -92,25 +90,41 @@ the game itself.
     mythical's other form. Own skill levels count (`Cast`). Each placement's `on_boss`
     (`static_export.on_boss`: its effect and target conditions read three-valued with the
     boss atoms, `BOSS_FACTS`, true) drops what never lands on a boss (Lamasu's True Fear goes
-    to non-bosses; bosses get Decrease SPD), and only what depends on more is `CONDITIONAL`.
+    to non-bosses; bosses get Decrease SPD), and only what depends on more is `CONDITIONAL`:
+    ratings are against a boss. Secret skills (`ShowSecretSkill`, Mortu-Macaab's Peril) are
+    rated as if cast every turn, not at the passive's chance. `wantable(account, never)`.
   - `gear`: `effect_sources.json` (each set's set skills, each relic type's skills and faction
     skills, factions by display name) → `Gear` options (every set, relics the account owns,
-    `Account.relic_types`), rated like skills. Allowed ones (`gear=<Gear.key>`, `gear_set`
-    marks the list as sent; default `DEFAULT_GEAR`, Toxic) and team-wide assumptions make needs
-    `Given` (`with_gear`); faction relic skills (Bloatshield Totem's Demonspawn reflect) and
-    per-champion assumptions (`assume=<champion id>@<tag key>`) join those kits (`equip`).
-    Gear doesn't count toward "N different" needs.
-  - `cover`: who covers what (`Lineup`), the members a team needs (`core_of`), the score: a
-    team's sources of a tag combine as 1 − Π(1 − s); a need scores its best tag (a count: its
-    best N's mean; `Given`: the gear's rating); `team_score` is the mean over `Goals`'
-    requirements and ranks the options (`ranking`: then fewest champions, then strength).
-  - `search`: `every_team` lists every minimal team clearing all nine and bringing the extras
-    (branch on the unmet need fewest champions bring; "any champion" fills the rest), within
-    `SEARCH_BUDGET` (20,000 teams or 1 s: with nothing pinned there are hundreds of thousands,
-    mostly from the "N different" trials); if none clears all nine, `partial_teams` (HiGHS)
-    gives the best partial ones.
+    `Account.relic_types`; `gear_options(…, never)`), rated like skills. Allowed ones
+    (`gear=<Gear.key>`, `gear_set` marks the list as sent; default `DEFAULT_GEAR`, Toxic) and
+    team-wide assumptions make needs `Given` (`with_gear`); faction relic skills (Bloatshield
+    Totem's Demonspawn reflect) and per-champion assumptions (`assume=<champion id>@<tag key>`)
+    join those kits (`equip`). Gear doesn't count toward "N different" needs.
+  - `cover`: who covers what (`Lineup`, `ObjectiveCover`), the members a team needs
+    (`core_of`), the score: a team's sources of a tag combine as 1 − Π(1 − s); a need scores
+    its best tag (a count: its best N's mean; `Given`: the gear's rating); `team_score` is the
+    mean over `Goals`' requirements and ranks the options (`ranking`: then fewest champions,
+    then strength).
+  - `search`: `every_team` lists every minimal team meeting every objective and bringing the
+    extras (branch on the unmet need fewest champions bring; "any champion" fills the rest),
+    within `SEARCH_BUDGET` (20,000 teams or 1 s: for the Chimera with nothing pinned there are
+    hundreds of thousands, mostly from the "N different" trials); if none meets them all,
+    `partial_teams` (HiGHS) gives the best partial ones.
+- Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
+  column (Wing/Tail/Paw: where this raid's mythical materials are; the game doesn't name its
+  columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
+  only count for trials cleared in the same fight), found by `optimiser.teams`. Targets are
+  shown, not checked.
+  - `tags`: the Chimera's immunities, `BOSS_IMMUNE` minus `FORM_ALLOWS` (Ram takes Fear, Snake
+    Block Active Skills; `NEVER_LANDS`, `only_in`), and its targets: `form_target(form)` for a
+    trial, `ANY_FORM` for the extras.
+  - `trials`: `trial_needs` (a `match` per trial; counts from the trial's target or `rules`),
+    checked against the trial's own status list (`check_needs`; the page warns on a
+    mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
+    count instances (`Distinct.instances`).
   - `plan`: `check_lineup` (the slots alone) and `fill_lineup`, from a `Brief` (column,
-    wanted, loadout).
+    wanted, loadout); `column_goals` makes the column's trials objectives (keyed by the
+    trial's skill, waiting on the one above), and `Plan.trials` maps them back for the board.
   - `rotation`: which trial gives what this raid, read from the game's code
     (`ChimeraExtensions.GetChimeraChallengeRewardWithOffset`, `GetPrizeOffset`): a tier's 9
     reward lists (`enemies.json`, game order Ram/Lion/Snake × Wing/Tail/Paw) shift over the

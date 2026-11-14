@@ -16,12 +16,12 @@ from functools import lru_cache
 from optimiser.accessories.roles import ChampionType
 from optimiser.accessories.scaling import faction_types
 from optimiser.account import Account, Locks, load_account
-from optimiser.chimera.gear import RelicSource, SetSource, load_effect_sources
 from optimiser.enemies import Enemies, load_enemies
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT, STORE
 from optimiser.reserve import Rule
 from optimiser.settings import read_reserve_rules
 from optimiser.store import read_locks
+from optimiser.teams.gear import RelicSource, SetSource, load_effect_sources
 
 
 def current_enemies() -> Enemies:

@@ -12,9 +12,9 @@ immunities, and is scored on how far it can count on them. Damage isn't modelled
 target is shown, not checked), nor turn order, nor who holds a buff when it counts, nor ACC
 against the Chimera's RES.
 
-What can be brought, the Chimera's immunities and their names are `tags`; the trials and what
-each needs, `trials`; what a champion brings and how far it can be counted on, `kits`; sets,
-relics and assumptions, `gear`; who in a team covers what and its score, `cover`; finding
-teams, `search`; the entry points, `plan`. Builds on `optimiser.account` and
-`optimiser.enemies` (the trials); the gear solver doesn't come into it.
+The Chimera's immunities and its targets are `tags`; the trials and what each needs,
+`trials`; which trials give what this raid, `rotation`; the entry points, `plan`, which ask
+`optimiser.teams` (what champions bring, gear, cover and the search) for teams clearing the
+column. Builds on `optimiser.account` and `optimiser.enemies` (the trials); the gear solver
+doesn't come into it.
 """

@@ -1,10 +1,10 @@
 """
-search.py - finding teams: every smallest team clearing all the trials and bringing the extras
-(`every_team`, up to a cap or a time budget), or failing that the few clearing the most (a
-HiGHS MILP, `partial_teams`).
+search.py - finding teams: every smallest team meeting all the objectives and bringing the
+extras (`every_team`, up to a cap or a time budget), or failing that the few meeting the most
+(a HiGHS MILP, `partial_teams`).
 
 - `Budget`, `SEARCH_BUDGET`, `PARTIAL_OPTIONS`: how far it looks
-- `every_team` (`Check`, `check_of`, `holds`, `bringing`): every team clearing them all
+- `every_team` (`Check`, `check_of`, `holds`, `bringing`): every team meeting them all
 - `partial_teams` (`TeamModel`, `team_model`, `add_need`): the best partial teams
 """
 
@@ -13,11 +13,9 @@ from dataclasses import dataclass
 
 import highspy
 
-from optimiser.chimera.cover import core_of, met_count
-from optimiser.chimera.kits import Kit, strength
-from optimiser.chimera.tags import Tag
-from optimiser.chimera.trials import (
-    TEAM_SIZE,
+from optimiser.teams.cover import core_of, met_count
+from optimiser.teams.kits import Kit, strength
+from optimiser.teams.needs import (
     AnyOf,
     Distinct,
     Given,
@@ -26,6 +24,7 @@ from optimiser.chimera.trials import (
     counts_toward,
     stacking_tags,
 )
+from optimiser.teams.tags import Tag
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,7 @@ class Budget:
 # Enough to rank well, quick enough for a page (with nothing pinned there are far more).
 SEARCH_BUDGET = Budget(teams=20_000, seconds=1.0)
 
-PARTIAL_OPTIONS = 3  # teams offered when none clears every trial
+PARTIAL_OPTIONS = 3  # teams offered when none meets every objective
 
 
 @dataclass(frozen=True)
@@ -58,11 +57,11 @@ def every_team(
     goals: Goals,
     budget: Budget,
 ) -> tuple[list[list[Kit]], bool]:
-    """Every smallest set of champions to add to `pinned` so the team clears all the trials
-    and brings the extras (no one in it can be dropped), as many as the `budget` allows, and
-    whether that's all there are. It adds, each time, a champion bringing the unmet need
-    fewest can bring: every such set is reached, once."""
-    open_slots = TEAM_SIZE - len(pinned)
+    """Every smallest set of champions to add to `pinned` so the team meets all the
+    objectives and brings the extras (no one in it can be dropped), as many as the `budget`
+    allows, and whether that's all there are. It adds, each time, a champion bringing the
+    unmet need fewest can bring: every such set is reached, once."""
+    open_slots = goals.size - len(pinned)
     checks = [
         check_of(requirement, pinned + others)
         for requirement in goals.requirements
@@ -109,13 +108,13 @@ def every_team(
 
 def check_of(requirement: Requirement, kits: list[Kit]) -> Check:
     """`requirement`'s need isn't `Given` (any team meets those)."""
-    need, form = requirement.need, requirement.form
+    need, target = requirement.need, requirement.target
     match need:
         case AnyOf(tags=tags):
             return Check(tags, 1, frozenset())
 
         case Distinct(count=count, instances=instances):
-            counting = {tag for kit in kits for tag in kit.tags if counts_toward(tag, need, form)}
+            counting = {t for kit in kits for t in kit.tags if counts_toward(t, need, target)}
             stacking = stacking_tags(need) if instances else frozenset()
             return Check(frozenset(counting), count, stacking)
 
@@ -142,35 +141,35 @@ def partial_teams(
     options: int,
 ) -> list[list[Kit]]:
     """Up to `options` sets of champions to add to `pinned`, best first: each the team
-    clearing the most trials (and bringing every extra), then of the strongest champions,
+    meeting the most objectives (and bringing every extra), then of the strongest champions,
     and each changing one of the newcomers a team before it needs (any newcomer, if it needs
     none)."""
-    model = team_model(pinned + others)
+    model = team_model(pinned + others, goals.size)
     highs, kits, picked = model.highs, model.kits, model.picked
-    cleared = {trial.skill: highs.addBinary() for trial in goals.trials}
+    cleared = {objective.key: highs.addBinary() for objective in goals.objectives}
 
     for x in picked[: len(pinned)]:
         highs.addConstr(x == 1)
 
-    for trial in goals.trials:
-        if trial.requires in cleared:
-            highs.addConstr(cleared[trial.skill] <= cleared[trial.requires])
+    for objective in goals.objectives:
+        if objective.requires in cleared:
+            highs.addConstr(cleared[objective.key] <= cleared[objective.requires])
 
-        for requirement in goals.trial_requirements(trial):
-            add_need(model, requirement, cleared[trial.skill])
+        for requirement in goals.objective_requirements(objective):
+            add_need(model, requirement, cleared[objective.key])
 
     for requirement in goals.extra_requirements:
         add_need(model, requirement, 1)
 
-    # A trial outweighs any team's strength (`strength` is under 1 per champion).
-    objective = 10 * TEAM_SIZE * highs.qsum(cleared.values()) + highs.qsum(
+    # An objective outweighs any team's strength (`strength` is under 1 per champion).
+    score = 10 * goals.size * highs.qsum(cleared.values()) + highs.qsum(
         strength(kit.champion) * x for kit, x in zip(kits, picked, strict=True)
     )
     newcomer_vars = picked[len(pinned) :]
     found: list[list[Kit]] = []
 
     while len(found) < options:
-        highs.maximize(objective)
+        highs.maximize(score)
 
         if highs.getModelStatus() != highspy.HighsModelStatus.kOptimal:
             break
@@ -191,25 +190,25 @@ def partial_teams(
 
 @dataclass(frozen=True)
 class TeamModel:
-    """The MILP choosing a team: a binary per kit (`picked`), at most `TEAM_SIZE` of them."""
+    """The MILP choosing a team: a binary per kit (`picked`), at most the team's size."""
 
     highs: highspy.Highs
     kits: list[Kit]
     picked: list[highspy.highs_var]
 
 
-def team_model(kits: list[Kit]) -> TeamModel:
+def team_model(kits: list[Kit], size: int) -> TeamModel:
     highs = highspy.Highs()
     highs.setOptionValue("output_flag", False)
     picked = [highs.addBinary() for _ in kits]
-    highs.addConstr(highs.qsum(picked) <= TEAM_SIZE)
+    highs.addConstr(highs.qsum(picked) <= size)
     return TeamModel(highs, kits, picked)
 
 
 def add_need(model: TeamModel, requirement: Requirement, on) -> None:
-    """Holds the need whenever `on` (the trial cleared; 1 for an extra) is 1."""
+    """Holds the need whenever `on` (the objective met; 1 for an extra) is 1."""
     highs, kits, picked = model.highs, model.kits, model.picked
-    need, form = requirement.need, requirement.form
+    need, target = requirement.need, requirement.target
     match need:
         case Given():
             pass
@@ -220,7 +219,7 @@ def add_need(model: TeamModel, requirement: Requirement, on) -> None:
 
         case Distinct(side=side, count=count, instances=instances):
             pool = sorted(
-                {tag.name for kit in kits for tag in kit.tags if counts_toward(tag, need, form)}
+                {t.name for kit in kits for t in kit.tags if counts_toward(t, need, target)}
             )
             present = []
 

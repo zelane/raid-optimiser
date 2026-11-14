@@ -4,7 +4,8 @@ any of its forms, each rated (`Rating`) for how far it can be counted on: uptime
 lasts against how often the skill comes round, with the champion's cooldown books) ×
 reliability (its chance with chance books, less for a condition) × reach (the team, one ally,
 the caster alone; debuffs in full). Effects the game never applies against a boss (Lamasu's
-True Fear) don't count. A mythical's other form counts at `OTHER_FORM`.
+True Fear) don't count: the ratings are against a boss. A mythical's other form counts at
+`OTHER_FORM`.
 
 - `Rating`, `Kit`: a champion's kit
 - `REACH_TEAM`, `REACH_ALLY`, `REACH_SELF`, `SELF`, `TEAM`, `CONDITIONAL`, `OTHER_FORM`,
@@ -22,21 +23,14 @@ from dataclasses import dataclass
 from functools import cached_property
 
 from optimiser.account import Account, Champion, Placement, Skill
-from optimiser.chimera.tags import (
-    EFFECT_LABELS,
-    NEVER_LANDS,
-    Mechanic,
-    Side,
-    Tag,
-    status_kind,
-    tag_label,
-)
+from optimiser.teams.tags import EFFECT_LABELS, Mechanic, Side, Tag, status_kind, tag_label
 
 # Scoring (`Rating`): how far each thing a champion brings can be counted on. Reach: a buff
 # or an ally-side effect on the whole team counts in full, on one ally less, on the caster
-# alone least (every debuff counts in full: there's one Chimera). A condition gating an effect
-# (on a crit, if the target has…) makes it less reliable; a mythical's other form's skills
-# count at half, since it must switch to use them; gear meets a need this reliably.
+# alone least (every debuff counts in full: there's one enemy to place it on). A condition
+# gating an effect (on a crit, if the target has…) makes it less reliable; a mythical's other
+# form's skills count at half, since it must switch to use them; gear meets a need this
+# reliably.
 REACH_TEAM, REACH_ALLY, REACH_SELF = 1.0, 0.5, 0.35
 
 SELF = frozenset({"Producer", "Owner", "RelationProducer"})
@@ -47,8 +41,8 @@ CONDITIONAL = 0.6
 
 OTHER_FORM = 0.5
 
-# Skill effects that land on the Chimera, not the team (their reach is in full).
-# Counterattacks and reflected damage count in full too: what matters is the Chimera is hit.
+# Skill effects that land on the enemy, not the team (their reach is in full).
+# Counterattacks and reflected damage count in full too: what matters is the enemy is hit.
 ENEMY_EFFECTS = frozenset(
     {"RemoveBuff", "StealBuff", "ReduceBuffLifetime", "MultiplyDebuff", "Detonate"}
     | {"IncreaseDebuffLifetime", "PassiveCounterattack", "PassiveReflectDamage"}
@@ -103,16 +97,16 @@ class Cast:
     switch: float
 
 
-def wantable(account: Account) -> list[Tag]:
-    """What a team can be asked to bring besides: every debuff (one some form of the Chimera
-    takes), buff and skill effect any champion on the account brings, by label."""
+def wantable(account: Account, never: frozenset[str]) -> list[Tag]:
+    """What a team can be asked to bring besides: every debuff (but those in `never`: no
+    target takes them), buff and skill effect any champion on the account brings, by label."""
     tags = {
         tag
         for champion in account.champions.values()
         for tag in kit_of(account, champion).tags
-        if tag.side != Side.MECHANIC and not (tag.side == Side.DEBUFF and tag.name in NEVER_LANDS)
+        if tag.side != Side.MECHANIC and not (tag.side == Side.DEBUFF and tag.name in never)
     }
-    return sorted(tags, key=lambda t: (list(Side).index(t.side), tag_label(t)))
+    return sorted(tags, key=lambda t: (list(Side).index(t.side), tag_label(t, "the enemy")))
 
 
 def candidates(account: Account, min_grade: int) -> list[Champion]:
@@ -247,8 +241,8 @@ def describe(placement: Placement, cast: Cast, chance: float, reach: float) -> s
 
 
 def reach_of(placement: Placement, tag: Tag) -> float:
-    """Debuffs, mechanics (what matters is the Chimera is hit) and effects on the Chimera
-    reach in full; buffs and effects on the team by who they land on."""
+    """Debuffs, mechanics (what matters is the enemy is hit) and effects on the enemy reach
+    in full; buffs and effects on the team by who they land on."""
     if tag.side in (Side.DEBUFF, Side.MECHANIC):
         return REACH_TEAM
 

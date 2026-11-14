@@ -1,29 +1,20 @@
 """
 trials.py - the Chimera's trials for a column (Ultra Nightmare's), and what each asks of a team
 (`trial_needs`, from the trial's rules, held against the game's own list of its statuses by
-`check_needs`). The debuff-count trials count debuffs, not kinds: Poisons stack, so a team
-placing them can reach the count if it's fast enough (Snake moves the Poisons on it to the
-team each of its turns).
+`check_needs`), as `optimiser.teams` needs. The debuff-count trials count debuffs, not kinds:
+Poisons stack, so a team placing them can reach the count if it's fast enough (Snake moves
+the Poisons on it to the team each of its turns).
 
 - `PARTS`, `ANIMAL_FORMS`, `LEVELS`, `PLAN_DIFFICULTY`, `TEAM_SIZE`: what's planned
-- `AnyOf`, `Distinct`, `Given`, `Need`, `Requirement`, `Goals`: what a team must bring
-- `column_trials`, `trial_needs`, `check_needs`: the trials and what they need
-- `STACKING`, `stacking_tags`, `counts_toward`, `rule_count`: what they share
+- `column_trials`, `trial_needs`, `check_needs`, `rule_count`: the trials and what they need
 """
 
 import re
-from dataclasses import dataclass
 
-from optimiser.chimera.tags import (
-    Mechanic,
-    Side,
-    Tag,
-    buff,
-    debuff,
-    immune_to,
-    status_kind,
-)
+from optimiser.chimera.tags import immune_to
 from optimiser.enemies import Enemies, Trial
+from optimiser.teams.needs import AnyOf, Distinct, Need
+from optimiser.teams.tags import Mechanic, Side, Tag, buff, debuff, status_kind
 
 PARTS = ("Wing", "Tail", "Paw")  # the trial columns
 
@@ -34,73 +25,6 @@ LEVELS = ("Easy", "Normal", "Hard")
 PLAN_DIFFICULTY = "UltraNightmare"
 
 TEAM_SIZE = 5
-
-# Status effects whose instances stack (Poisons): a team placing one can pile up a debuff
-# count on its own, if it's fast enough (or extends them).
-STACKING = frozenset({"ContinuousDamage"})
-
-
-@dataclass(frozen=True)
-class AnyOf:
-    """At least one of these on the team."""
-
-    tags: frozenset[Tag]
-
-
-@dataclass(frozen=True)
-class Distinct:
-    """At least `count` status effects of a side (debuffs the form isn't immune to, or buffs),
-    `excluded` not counting. Different ones, unless `instances`: the rule counts every debuff
-    on the Chimera, so a team placing Poisons (they stack) meets it too."""
-
-    side: Side
-    count: int
-    instances: bool = False
-    excluded: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True)
-class Given:
-    """A need every team meets, thanks to `gear` (any champion can wear it), as far as
-    `score` (its `Rating`)."""
-
-    need: AnyOf | Distinct
-    gear: str
-    score: float
-
-
-type Need = AnyOf | Distinct | Given
-
-
-@dataclass(frozen=True)
-class Requirement:
-    """A need, and the Chimera form it's met in: its trial's ("" for an extra: any)."""
-
-    need: Need
-    form: str
-
-
-@dataclass(frozen=True)
-class Goals:
-    """What a team is after: the column's trials (form by form, Easy first), what each needs,
-    and `extras`: debuffs, buffs and effects wanted besides, in every team the search offers."""
-
-    trials: tuple[Trial, ...]
-    needs: dict[int, tuple[Need, ...]]
-    extras: tuple[AnyOf, ...]
-
-    def trial_requirements(self, trial: Trial) -> list[Requirement]:
-        return [Requirement(need, trial.form) for need in self.needs[trial.skill]]
-
-    @property
-    def extra_requirements(self) -> list[Requirement]:
-        return [Requirement(extra, "") for extra in self.extras]
-
-    @property
-    def requirements(self) -> list[Requirement]:
-        """Every trial's, then the extras'."""
-        trials = [r for trial in self.trials for r in self.trial_requirements(trial)]
-        return trials + self.extra_requirements
 
 
 def column_trials(enemies: Enemies, column: str) -> list[Trial]:
@@ -206,18 +130,6 @@ def check_needs(trial: Trial, needs: tuple[Need, ...]) -> str | None:
         return f"{trial.form} {trial.part} {trial.level}: asks for {', '.join(immune)}, immune"
 
     return None
-
-
-def counts_toward(tag: Tag, need: Distinct, form: str) -> bool:
-    """Whether the tag is one of the effects the need counts."""
-    if tag.side != need.side or tag.name in need.excluded:
-        return False
-
-    return tag.side != Side.DEBUFF or tag.name not in immune_to(form)
-
-
-def stacking_tags(need: Distinct) -> frozenset[Tag]:
-    return frozenset(Tag(need.side, name) for name in STACKING)
 
 
 def rule_count(trial: Trial, term: str) -> int:

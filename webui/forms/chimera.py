@@ -19,9 +19,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from optimiser.account import Account, Champion
-from optimiser.chimera.gear import DEFAULT_GEAR, Assumed, Gear, Loadout, assumed_gear
-from optimiser.chimera.tags import Tag
 from optimiser.chimera.trials import PARTS, TEAM_SIZE
+from optimiser.teams.gear import DEFAULT_GEAR, Assumed, Gear, Loadout, assumed_gear
+from optimiser.teams.tags import Tag
 from webui.forms.common import FormErrors
 
 # Where the mythical materials are at prize offset 0, if the game doesn't say.
