@@ -5,18 +5,14 @@ finds around them (every way to clear all the trials, listed a few at a time), a
 column's nine trials (Ram, Lion and Snake; Easy, Normal and Hard), each highlighted when the
 team shown can clear it in one Ultra Nightmare fight.
 
+The team's panels (slots, what to bring, gear) and each need's view are `service.team`'s.
+
 - `MORE`: how many more teams "show more" lists
-- `ColumnView`, `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `TrialView`,
-  `FormRow`, `OptionView`, `WantView`, `WantGroup`, `GearView`, `GearGroup`, `AssumedView`,
-  `ChimeraPage`: the views
+- `ColumnView`, `TrialView`, `FormRow`, `OptionView`, `ChimeraPage`: the views
 - `chimera_page`: what the page asks for
 - `rotation_column`: the column the game's current raid puts the mythical materials in
-- `column_views`, `easy_ram_trials`, `trial_terms`, `slot_view`, `option_view`, `form_rows`,
-  `trial_view`, `need_view`, `waits_on`, `WANT_GROUPS`, `want_groups`, `want_view`,
-  `gear_groups`, `gear_view`, `assumed_views`, `assumed_view`, `percent`: its
-  pieces
-- `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
-  effects
+- `column_views`, `easy_ram_trials`, `trial_terms`, `form_note`, `option_view`, `form_rows`,
+  `level_order`, `trial_view`, `waits_on`: its pieces
 """
 
 import re
@@ -26,22 +22,23 @@ from datetime import datetime
 from optimiser.account import Account, Champion
 from optimiser.chimera.plan import Brief, check_lineup, fill_lineup
 from optimiser.chimera.rotation import mythical_column
-from optimiser.chimera.tags import only_in
+from optimiser.chimera.tags import CHIMERA, only_in
 from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS, PLAN_DIFFICULTY
 from optimiser.enemies import Enemies, Trial
-from optimiser.teams.cover import Lineup, Member, NeedCover, ObjectiveCover
-from optimiser.teams.gear import Assumed, Gear, Loadout
-from optimiser.teams.tags import Side, Tag, plain_label
-from webui.forms.chimera import (
-    FIRST_SHOWN,
-    GRADES,
-    ChimeraRequest,
-    Fill,
-    Offers,
-    SlotPick,
-    Unmatched,
+from optimiser.teams.cover import Lineup, ObjectiveCover
+from optimiser.teams.tags import Tag
+from webui.forms.chimera import FIRST_SHOWN, GRADES, ChimeraRequest, Fill
+from webui.forms.team import Offers
+from webui.service.team import (
+    NeedView,
+    SlotView,
+    TeamView,
+    need_view,
+    percent,
+    slot_view,
+    team_view,
 )
-from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
+from webui.service.views import asset_url
 
 MORE = 9  # teams each "show more" adds
 
@@ -54,57 +51,6 @@ class ColumnView:
     part: str
     hint: str
     mythical: bool
-
-
-@dataclass(frozen=True)
-class ChoiceView:
-    """A champion as the slot picker lists it: "Name, 6★ L60 #id" (the form reads the id)."""
-
-    label: str
-
-
-@dataclass(frozen=True)
-class SlotView:
-    """A team slot: its champion (None when open), as the picker shows it, and whether the
-    search suggested it (else the user chose it) and the team needs it. `problem`: why the
-    text typed in it isn't a champion (the slot stays open, the text kept)."""
-
-    champion: ChampionRow | None
-    choice: str  # the picker's text; "" when open
-    suggested: bool
-    needed: bool
-    problem: str | None = None
-
-
-@dataclass(frozen=True)
-class IconView:
-    """A buff, debuff or effect as an icon: the game's art, or None (the page draws a glyph)."""
-
-    label: str
-    url: str | None
-
-
-@dataclass(frozen=True)
-class Contributor:
-    """A champion bringing a need, and how far its best source can be counted on."""
-
-    champion: ChampionRow
-    score: int  # %
-    detail: str  # "2 turns, every 3 turns, 75% chance"
-
-
-@dataclass(frozen=True)
-class NeedView:
-    """A need: who on the team brings it, `asks` (what would do), `brought` (for a count, the
-    effects the team brings), `notes` (gear that meets it) and its `score` (%)."""
-
-    label: str
-    met: bool
-    contributors: list[Contributor]
-    notes: list[str]
-    asks: list[IconView]
-    brought: list[IconView]
-    score: int
 
 
 @dataclass(frozen=True)
@@ -142,70 +88,13 @@ class OptionView:
 
 
 @dataclass(frozen=True)
-class WantView:
-    """Something the user can ask every team to bring, and whether they have; `note`: where
-    it only lands (Fear: the Ram form; `only_in`)."""
-
-    key: str  # `Tag.key`
-    label: str
-    wanted: bool
-    note: str | None
-    icon_url: str | None
-
-
-@dataclass(frozen=True)
-class WantGroup:
-    """The debuffs, the buffs or the effects on offer; `chosen`: how many are wanted."""
-
-    title: str
-    wants: list[WantView]
-    chosen: int
-
-
-@dataclass(frozen=True)
-class GearView:
-    """A set or relic the user can let any champion wear, what it brings, and whether they
-    have; `faction`: only a champion of it gets the relic's skill."""
-
-    key: str
-    name: str
-    faction: str | None
-    on: bool
-    brings: list[IconView]
-
-
-@dataclass(frozen=True)
-class GearGroup:
-    title: str
-    gear: list[GearView]
-    chosen: int
-
-
-@dataclass(frozen=True)
-class AssumedView:
-    """Something assumed: for the team (`champion` None) or one champion. `key` is how the
-    page's URL names it."""
-
-    key: str
-    label: str
-    champion: str | None
-    icon: IconView
-
-
-@dataclass(frozen=True)
 class ChimeraPage:
     column: str
     columns: list[ColumnView]
     min_grade: int
     grades: tuple[int, ...]
-    gear: list[GearGroup]  # sets, relics
-    gear_on: list[GearView]  # the allowed ones
-    assumed: list[AssumedView]
-    wants: list[WantGroup]  # debuffs, buffs, effects
-    wanted: list[WantView]  # the chosen ones, in that order
+    team: TeamView  # the slots, what to bring, gear
     extras: list[NeedView]  # who in the team shown brings the wanted debuffs
-    slots: list[SlotView]
-    choices: list[ChoiceView]  # every champion, by name
     ran: bool  # the search filled the open slots
     candidates: int  # champions it could add
     options: list[OptionView]  # best first, the first `listed` of `found`
@@ -231,9 +120,9 @@ def chimera_page(
     """With `request.fill`, the search fills the open slots (and those whose text isn't a
     champion) every way it can; else the slots are shown as they are. `rotation`: the column
     the current raid puts the mythical materials in (`rotation_column`), if known."""
-    picks, wanted, loadout = request.picks, request.wanted, request.loadout
-    brief = Brief(request.column, wanted, loadout)
-    slots = tuple(pick if isinstance(pick, Champion) else None for pick in picks)
+    ask = request.team
+    brief = Brief(request.column, ask.wanted, ask.loadout)
+    slots = tuple(pick if isinstance(pick, Champion) else None for pick in ask.picks)
 
     match request.fill:
         case None:
@@ -244,24 +133,14 @@ def chimera_page(
 
     shown = option if 1 <= option <= len(plan.options) else (1 if plan.options else None)
     lineup = plan.options[shown - 1] if shown else plan.lineup
-    allowed = {g.key for g in loadout.gear}
 
-    champions = sorted(account.champions.values(), key=lambda c: (c.name, -c.grade, -c.level))
     return ChimeraPage(
         column=request.column,
         columns=column_views(enemies, rotation),
         min_grade=request.min_grade,
         grades=GRADES,
-        gear=gear_groups(offers.gear, allowed),
-        gear_on=[gear_view(g, True) for g in offers.gear if g.key in allowed],
-        assumed=assumed_views(loadout),
-        wants=want_groups(offers.tags, wanted),
-        wanted=[want_view(tag, True) for tag in wanted],
+        team=team_view(account, plan.lineup.slots, ask, offers, CHIMERA, form_note),
         extras=[need_view(need) for need in lineup.extras],
-        slots=[
-            slot_view(member, pick) for member, pick in zip(plan.lineup.slots, picks, strict=True)
-        ],
-        choices=[ChoiceView(choice_label(c)) for c in champions],
         ran=request.fill is not None,
         candidates=plan.candidates,
         options=[
@@ -302,19 +181,10 @@ def trial_terms(trial: Trial) -> str:
     return " + ".join(dict.fromkeys(re.findall(r"\[([^\]]+)\]", trial.description)))
 
 
-def slot_view(member: Member | None, pick: SlotPick) -> SlotView:
-    if member is None and isinstance(pick, Unmatched):
-        return SlotView(None, pick.text, suggested=False, needed=False, problem=pick.reason)
-
-    if member is None:
-        return SlotView(None, "", suggested=False, needed=False)
-
-    return SlotView(
-        champion_row(member.champion),
-        choice_label(member.champion),
-        suggested=not member.chosen,
-        needed=member.needed,
-    )
+def form_note(tag: Tag) -> str | None:
+    """Where a debuff the Chimera is otherwise immune to lands: "Ram form only"."""
+    forms = only_in(tag)
+    return f"{' or '.join(forms)} form only" if forms else None
 
 
 def option_view(number: int, team: Lineup, trials: dict[int, Trial]) -> OptionView:
@@ -357,129 +227,6 @@ def trial_view(cover: ObjectiveCover, trial: Trial) -> TrialView:
         needs=[need_view(n) for n in cover.needs],
         waits_on=waits_on(cover, trial),
     )
-
-
-def gear_groups(offered: list[Gear], allowed: set[str]) -> list[GearGroup]:
-    groups = []
-
-    for kind, title in (("set", "Artifact sets"), ("relic", "Relics you own")):
-        views = [gear_view(g, g.key in allowed) for g in offered if g.kind == kind]
-        groups.append(GearGroup(title, views, sum(v.on for v in views)))
-
-    return groups
-
-
-def gear_view(gear: Gear, on: bool) -> GearView:
-    brings = [icon_view(tag) for tag in gear.tags if tag.side != Side.MECHANIC]
-    return GearView(gear.key, gear.name, gear.faction, on, sorted(brings, key=lambda i: i.label))
-
-
-def assumed_views(loadout: Loadout) -> list[AssumedView]:
-    """The team's assumptions (assumed gear) and the single champions'."""
-    team = [
-        AssumedView(tag.key, plain_label(tag), None, icon_view(tag))
-        for gear in loadout.gear
-        if gear.kind == "assumed"
-        for tag in gear.tags
-    ]
-    single = [assumed_view(a) for a in loadout.assumed]
-    return team + single
-
-
-def assumed_view(assumed: Assumed) -> AssumedView:
-    tag = assumed.tag
-    return AssumedView(assumed.key, plain_label(tag), assumed.champion.name, icon_view(tag))
-
-
-WANT_GROUPS = (
-    (Side.DEBUFF, "Debuffs on the Chimera"),
-    (Side.BUFF, "Buffs"),
-    (Side.EFFECT, "Effects"),
-)
-
-
-def want_groups(offered: list[Tag], wanted: tuple[Tag, ...]) -> list[WantGroup]:
-    groups = []
-
-    for side, title in WANT_GROUPS:
-        tags = [tag for tag in offered if tag.side == side]
-        views = [want_view(tag, tag in wanted) for tag in tags]
-        groups.append(WantGroup(title, views, sum(view.wanted for view in views)))
-
-    return groups
-
-
-def want_view(tag: Tag, wanted: bool) -> WantView:
-    forms = only_in(tag)
-    note = f"{' or '.join(forms)} form only" if forms else None
-    return WantView(tag.key, plain_label(tag), wanted, note, icon_url(tag))
-
-
-# Status kinds whose icon (`statuses/`, the game's sprite names) is named otherwise; the rest
-# follow `icon_name`'s rules.
-ICON_NAMES = {
-    "Burn": "AoEContinuousDamage",
-    "SimpleStoneSkin": "StoneSkin",
-    "ReflectiveStoneSkin": "StoneSkin",
-    "Counterattack": "StatusCounterattack",
-    "LesserSeal": "Seal",
-    "GreaterSeal": "Seal2",
-    "NecrosisSource": "Necrosis",
-    "DuelTargetMark": "Duel",
-    "ArtifactSet_Shield": "Shield",
-    # Skill effects with a status of the same sense.
-    "IncreaseStamina": "IncreaseStamina",
-    "Revive": "ReviveOnDeath",
-    "Heal": "ContinuousHeal",
-    "PassiveBlockDebuff": "BlockDebuff",
-    "PassiveCounterattack": "StatusCounterattack",
-    "PassiveReflectDamage": "ReflectDamage",
-    "PassiveUnkillable": "Unkillable",
-}
-STAT_STATUSES = ("Attack", "Defence", "Speed", "Accuracy", "Resistance", "CriticalChance")
-STAT_STATUSES += ("CriticalDamage",)
-
-
-def icon_url(tag: Tag) -> str | None:
-    """The game's icon for a buff, debuff or effect, if it has one."""
-    return asset_url("statuses", icon_name(tag))
-
-
-def icon_name(tag: Tag) -> str:
-    """Stat buffs and debuffs are "StatusIncrease…" / "StatusReduce…"."""
-    if name := ICON_NAMES.get(tag.name):
-        return name
-
-    for prefix, sprite in (("Increase", "StatusIncrease"), ("Decrease", "StatusReduce")):
-        stat = tag.name.removeprefix(prefix)
-        if tag.name.startswith(prefix) and stat in STAT_STATUSES:
-            return sprite + stat
-
-    return tag.name
-
-
-def need_view(need: NeedCover) -> NeedView:
-    contributors = [
-        Contributor(champion_row(champion), percent(rating.score), rating.detail)
-        for champion, rating in zip(need.by, need.ratings, strict=True)
-    ]
-    return NeedView(
-        label=need.label,
-        met=need.met,
-        contributors=sorted(contributors, key=lambda c: -c.score),
-        notes=list(need.notes),
-        score=percent(need.score),
-        asks=[icon_view(tag) for tag in need.asks],
-        brought=[icon_view(tag) for tag in need.brought],
-    )
-
-
-def percent(score: float) -> int:
-    return round(score * 100)
-
-
-def icon_view(tag: Tag) -> IconView:
-    return IconView(plain_label(tag), icon_url(tag))
 
 
 def waits_on(cover: ObjectiveCover, trial: Trial) -> str | None:

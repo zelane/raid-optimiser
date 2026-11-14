@@ -29,7 +29,7 @@ from optimiser.reserve import reservations
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, reader
-from webui.forms.chimera import Offers, Unknown, parse_chimera
+from webui.forms.chimera import Unknown, parse_chimera
 from webui.forms.common import FormErrors
 from webui.forms.finder import GRADES as FINDER_GRADES
 from webui.forms.finder import RARITIES as FINDER_RARITIES
@@ -50,6 +50,7 @@ from webui.forms.settings import (
     parse_weight,
 )
 from webui.forms.targets import TargetQuery, parse_target_query
+from webui.forms.team import Offers
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages

@@ -1,5 +1,5 @@
-// Chimera page: the "Also bring" and gear pickers. Each is a search box over a dropdown of what
-// isn't chosen yet, in groups; typing narrows it to the options whose text holds it, and a pick
+// A team finder's pickers (`_team.html`: what to bring, gear). Each is a search box over a
+// dropdown of what isn't chosen yet, in groups; typing narrows it to the options whose text holds it, and a pick
 // adds a field named by the picker's `data-picker` and reloads the page with it, where it shows
 // as a removable chip. Arrow keys move between the shown options; Enter picks the focused one,
 // or in the search box the only one left; Escape closes.

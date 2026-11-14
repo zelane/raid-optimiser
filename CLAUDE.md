@@ -134,16 +134,23 @@ the game itself.
     Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
     2, Paw). The page's default column.
   - Page (`webui/service/chimera.py`; `forms.chimera.parse_chimera` is its boundary, `ChimeraRequest`
-    with `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from the champion
+    with `team: TeamAsk` and `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from the champion
     finder, or part of a name in the URL), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
     assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
     the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
-    State is all in the URL; `static/chimera.js` only drives the pickers of "Also bring"
-    (what the team needs) and gear, relics & assumptions (how it brings it): a search over
-    what isn't chosen, grouped by kind; a pick adds a field and reloads, showing it as a
-    removable chip. Icons: `statuses/` (StatusEffectIcons, by status kind; `service.chimera.icon_name`
-    maps ours, e.g. DecreaseDefence → StatusReduceDefence) and `chimera/<Form>_<Level>`
-    (ChimeraChallengeIcons), from `tools/extract_assets.py`.
+    State is all in the URL. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
+    `tools/extract_assets.py`.
+- Team finder parts, shared by pages that find teams (the Chimera page so far): the slots,
+  "Also bring" and gear, relics & assumptions panels and each need's row. `forms/team.py`
+  (`parse_team` → `TeamAsk`: picks, wanted, loadout; `Offers`), `service/team.py` (`TeamView`,
+  `team_view(…, enemy, note)`: the want groups name the enemy, `note` says where a tag only
+  lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `wants_panel`,
+  `gear_panel`, `need_item`, `status_icon`, `score_pill`; a chip's × links to the page's
+  `without(key)` macro, passed in) and `static/picker.js` (a search over what isn't chosen,
+  grouped by kind; a pick adds a field and reloads, showing it as a removable chip). Icons:
+  `statuses/` (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g.
+  DecreaseDefence → StatusReduceDefence). Class names and the champion datalist's id still
+  say chimera.
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
