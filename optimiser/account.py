@@ -14,6 +14,7 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
 - `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
+- `Relic`: a relic the account has
 - `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
   the Chimera's current raid, and progress on a stage
 - `Account`: everything a solve needs, and the account's saved teams (`preset`: one by id)
@@ -294,7 +295,10 @@ class Placement:
     """One effect of a skill: its kind (ApplyBuff, ApplyDebuff, Revive, …), the status it
     places (None for other kinds) and for how many turns, its chance (None: always), who it
     lands on (the game's target type), whether it happens against a boss (`on_boss`: True
-    always, False never, None when a condition decides), and whether it can't be resisted."""
+    always, False never, None when a condition decides), whether it can't be resisted, and
+    `repeats`: how many of it the skill places (two Poisons, three hits each placing one). A
+    relic's effects may be for one relic skill level (`relic_level`), and may answer a status
+    being placed by placing another of it (`echo`: the status)."""
 
     kind: str
     status: str | None
@@ -303,6 +307,9 @@ class Placement:
     target: str
     on_boss: bool | None
     unresistable: bool
+    repeats: int = 1
+    relic_level: int | None = None
+    echo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -449,9 +456,20 @@ class StageProgress:
 
 
 @dataclass(frozen=True)
+class Relic:
+    """A relic the account has: its type, rank and level."""
+
+    id: int
+    type_id: int
+    rank: int
+    level: int
+
+
+@dataclass(frozen=True)
 class Account:
     """`mailbox`: gear that overflowed the inventory, waiting in the mailbox to be claimed;
-    `relic_types`: the relic types the account has (worn or not); `presets`, the arena
+    `relic_types`: the relic types the account has (worn or not), `relic_items` each relic,
+    `worn_relics` who wears which (champion id -> relic ids); `presets`, the arena
     defenses (classic, and 3v3's three teams), `gear_presets` (the global ones; champions' own
     presets are left out), `chimera_raid` and `stages` (progress on the stages fought): what
     the game holds besides gear."""
@@ -463,6 +481,8 @@ class Account:
     tables: Tables
     mailbox: tuple[Artifact, ...] = ()
     relic_types: frozenset[int] = frozenset()
+    relic_items: dict[int, Relic] = field(default_factory=dict)
+    worn_relics: dict[int, tuple[int, ...]] = field(default_factory=dict)
     presets: tuple[Preset, ...] = ()
     arena_defense: tuple[int, ...] = ()
     arena3x3_defense: tuple[tuple[int, ...], ...] = ()
@@ -519,6 +539,10 @@ def load_account(snapshot: Path, static: Path, schema: Path) -> Account:
         tables=tables,
         mailbox=mailbox,
         relic_types=frozenset(relic["type_id"] for relic in account["relics"]),
+        relic_items={
+            r["id"]: Relic(r["id"], r["type_id"], r["rank"], r["level"]) for r in account["relics"]
+        },
+        worn_relics={int(hero): tuple(ids) for hero, ids in account["worn_relics"].items() if ids},
         presets=tuple(parse_preset(raw) for raw in account["presets"]),
         arena_defense=team(account["arena_defense"]),
         arena3x3_defense=tuple(team(raw) for raw in account["arena3x3_defense"]),
@@ -722,6 +746,9 @@ def parse_skills(static: Path) -> dict[int, Skill]:
                     target=p["target"] or "",
                     on_boss=p["on_boss"],
                     unresistable=p["unresistable"],
+                    repeats=p.get("repeats", 1),
+                    relic_level=p.get("relic_level"),
+                    echo=p.get("echo"),
                 )
                 for p in raw["placements"]
             ),

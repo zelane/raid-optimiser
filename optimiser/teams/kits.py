@@ -5,7 +5,8 @@ lasts against how often the skill comes round, with the champion's cooldown book
 reliability (its chance with chance books, less for a condition) × reach (the team, one ally,
 the caster alone; debuffs in full). Effects the game never applies against a boss (Lamasu's
 True Fear) don't count: the ratings are against a boss. A mythical's other form counts at
-`OTHER_FORM`.
+`OTHER_FORM`. A kit also says how many of each tag one skill places at most (`counts`: two
+Poisons), for needs counting instances.
 
 - `Rating`, `Kit`: a champion's kit
 - `REACH_TEAM`, `REACH_ALLY`, `REACH_SELF`, `SELF`, `TEAM`, `CONDITIONAL`, `OTHER_FORM`,
@@ -14,12 +15,13 @@ True Fear) don't count: the ratings are against a boss. A mythical's other form 
 - `kit_of`: a champion's kit
 - `skill_ratings`, `cast_of`, `rate` (`describe`), `mechanic_rating`, `placement_tag`,
   `reach_of`, `skill_mechanics`: its steps
-- `best_ratings`: each tag's best rating, where several sources bring it
+- `best_ratings`, `skill_counts`, `most_counts`: each tag's best rating, and the most of it one
+  skill places, where several sources bring it
 - `wantable`, `candidates`, `strength`: champions, and what they can be asked to bring
 """
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 
 from optimiser.account import Account, Champion, Placement, Skill
@@ -76,10 +78,12 @@ class Rating:
 
 @dataclass(frozen=True)
 class Kit:
-    """A champion, and what it can bring: the best `Rating` of each tag."""
+    """A champion, and what it can bring: the best `Rating` of each tag, and `counts`: how many
+    of it one of its skills places at most (a tag missing places one)."""
 
     champion: Champion
     ratings: dict[Tag, Rating]
+    counts: dict[Tag, float] = field(default_factory=dict)
 
     @cached_property
     def tags(self) -> frozenset[Tag]:
@@ -130,6 +134,7 @@ def kit_of(account: Account, champion: Champion) -> Kit:
     how well (`Rating`, with its own skill books; the other form's at `OTHER_FORM`)."""
     forms = account.tables.hero_forms.get(champion.type_id, ())
     rated = []
+    counted = []
 
     for index, form in enumerate(forms):
         switch = OTHER_FORM if len(forms) > 1 and index != champion.form else 1.0
@@ -138,8 +143,9 @@ def kit_of(account: Account, champion: Champion) -> Kit:
             if skill := account.tables.skills.get(skill_id):
                 level = champion.skill_levels.get(skill_id, 1)
                 rated += skill_ratings(skill, level, switch)
+                counted.append(skill_counts(skill))
 
-    return Kit(champion, best_ratings(rated))
+    return Kit(champion, best_ratings(rated), most_counts(counted))
 
 
 def best_ratings(rated: Iterable[tuple[Tag, Rating]]) -> dict[Tag, Rating]:
@@ -151,6 +157,33 @@ def best_ratings(rated: Iterable[tuple[Tag, Rating]]) -> dict[Tag, Rating]:
             best[tag] = rating
 
     return best
+
+
+def skill_counts(skill: Skill) -> dict[Tag, float]:
+    """How many of each tag the skill places (each effect's `repeats`), those placing more
+    than one."""
+    counts: dict[Tag, float] = {}
+
+    for placement in skill.placements:
+        if (
+            placement.on_boss is not False
+            and not placement.echo
+            and (tag := placement_tag(placement))
+        ):
+            counts[tag] = counts.get(tag, 0) + placement.repeats
+
+    return {tag: placed for tag, placed in counts.items() if placed > 1}
+
+
+def most_counts(counted: Iterable[dict[Tag, float]]) -> dict[Tag, float]:
+    """The most of each tag any one of them places."""
+    most: dict[Tag, float] = {}
+
+    for counts in counted:
+        for tag, placed in counts.items():
+            most[tag] = max(most.get(tag, 1), placed)
+
+    return most
 
 
 def skill_ratings(skill: Skill, level: int, switch: float) -> list[tuple[Tag, Rating]]:

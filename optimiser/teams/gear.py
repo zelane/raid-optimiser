@@ -3,36 +3,48 @@ gear.py - what a team can wear or is assumed to have beyond its skills (`Loadout
 sets and owned relics any champion can wear (`Gear`, from `effect_sources.json`; a relic's
 faction skills only for a champion of that faction), and what the user assumes. Gear any
 champion can wear meets needs for any team (`Given`); faction skills and single champions'
-assumptions join those champions' kits (`equip`).
+assumptions join those champions' kits (`equip`). For a count of debuff instances, gear any
+champion can wear that places a Poison (the Toxic set) is one Poison more any team brings.
+
+A relic's skills come in tiers, one per relic skill level (its level reaches them:
+`RelicSource.skill_level`); only the tier the relic is at counts (for gear any champion can
+wear, the best copy the account has). A relic one champion wears (a team slot's: `worn_relic`)
+joins that champion's kit (`wear`), and an effect echoing a status (Sporeburst Rod: a placed
+Poison may place another) makes the champion's own count of it go up by its chance (`echoes`).
 
 - `Gear`, `Assumed`, `Loadout`, `DEFAULT_GEAR`, `ASSUMED`: what a team can wear or is
   assumed to have
 - `GearSource`, `SetSource`, `RelicSource`, `load_effect_sources`, `gear_options`
-  (`relic_sources`, `gear_of`), `assumed_gear`: where gear comes from
-- `with_gear` (`geared`), `equip`: what it changes
+  (`relic_sources`, `gear_of`, `best_level`), `assumed_gear`, `worn_relic`: where gear
+  comes from
+- `at_level`, `echoes_of`: a relic's skills at its level
+- `with_gear` (`geared`), `equip`, `wear`: what it changes
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from optimiser.account import Account, Champion, read_json
-from optimiser.teams.kits import Kit, Rating, best_ratings, skill_ratings
+from optimiser.account import Account, Champion, Relic, Skill, faction_name, read_json
+from optimiser.teams.kits import Kit, Rating, best_ratings, most_counts, skill_counts, skill_ratings
 from optimiser.teams.needs import AnyOf, Distinct, Given, Need, stacking_tags
-from optimiser.teams.tags import Side, Tag, plain_label
+from optimiser.teams.tags import Side, Tag, plain_label, status_kind
 
 
 @dataclass(frozen=True)
 class Gear:
     """Something a champion can wear that brings buffs, debuffs or effects: an artifact set's
     skills, a relic's (`faction`: skills only a champion of that faction gets), or something
-    the user assumes a team has. `ratings`: how far each can be counted on. `key` names it in
-    a URL ("set:DotRate", "relic:91:Demonspawn", "assumed:buff:Shield")."""
+    the user assumes a team has. `ratings`: how far each can be counted on; `counts`: how many
+    of it one skill places at most (`Kit.counts`). `key` names it in a URL ("set:DotRate",
+    "relic:91:Demonspawn", "assumed:buff:Shield")."""
 
     key: str
     name: str
     kind: str  # set, relic, assumed
     faction: str | None
     ratings: dict[Tag, Rating]
+    counts: dict[Tag, float] = field(default_factory=dict)
+    echoes: dict[Tag, float] = field(default_factory=dict)  # tag -> chance it's placed again
 
     @property
     def tags(self) -> frozenset[Tag]:
@@ -73,7 +85,8 @@ ASSUMED = Rating(1.0, 1.0, 1.0, 1.0, "assumed")
 
 
 def with_gear(needs: tuple[Need, ...], gear: tuple[Gear, ...]) -> tuple[Need, ...]:
-    """The needs, those the gear meets for any team made `Given` (by its best piece)."""
+    """The needs, those the gear meets for any team made `Given` (by its best piece); a count
+    of debuff instances counts one Poison more (`Distinct.gear`)."""
     return tuple(geared(need, gear) for need in needs)
 
 
@@ -91,6 +104,10 @@ def geared(need: Need, gear: tuple[Gear, ...]) -> Need:
         return need
 
     score, name = max(scored)
+
+    if isinstance(need, Distinct) and not need.accumulates:
+        return replace(need, gear=(name, score))
+
     return Given(need, name, score)
 
 
@@ -104,19 +121,21 @@ def equip(kit: Kit, loadout: Loadout) -> Kit:
     if not extra:
         return kit
 
-    return Kit(kit.champion, best_ratings([*kit.ratings.items(), *extra]))
+    counts = most_counts([kit.counts, *(g.counts for g in worn)])
+    return Kit(kit.champion, best_ratings([*kit.ratings.items(), *extra]), counts)
 
 
 @dataclass(frozen=True)
 class GearSource:
     """Gear before it's rated: its key and name, its kind (set, relic), the faction it's
-    only for, and its skills."""
+    only for, its skills, and (a relic's) the relic skill level they're at."""
 
     key: str
     name: str
     kind: str
     faction: str | None
     skills: tuple[int, ...]
+    level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -130,16 +149,23 @@ class SetSource:
 
 @dataclass(frozen=True)
 class RelicSource:
-    """A relic type's skills, and those only a champion of a faction gets (display names)."""
+    """A relic type's skills, and those only a champion of a faction gets (display names);
+    `skill_levels`: (relic level, the relic skill level it reaches), lowest first."""
 
     id: int
     name: str
     skills: tuple[int, ...]
     by_faction: dict[str, tuple[int, ...]]
+    skill_levels: tuple[tuple[int, int], ...] = ()
+
+    def skill_level(self, relic_level: int) -> int:
+        reached = [skill for level, skill in self.skill_levels if level <= relic_level]
+        return reached[-1] if reached else 1
 
 
 def load_effect_sources(static: Path) -> tuple[tuple[SetSource, ...], tuple[RelicSource, ...]]:
     raw = read_json(static / "effect_sources.json")
+    levels = tuple(sorted((int(k), v) for k, v in raw.get("relic_skill_levels", {}).items()))
     sets = tuple(
         SetSource(s["id"], s["name"], tuple((t["pieces"], t["skill"]) for t in s["skills"]))
         for s in raw["sets"]
@@ -150,6 +176,7 @@ def load_effect_sources(static: Path) -> tuple[tuple[SetSource, ...], tuple[Reli
             r["name"],
             tuple(r["skills"]),
             {faction: tuple(ids) for faction, ids in r["by_faction"].items()},
+            levels,
         )
         for r in raw["relics"]
     )
@@ -172,17 +199,28 @@ def gear_options(
 
     for relic in sorted(relics, key=lambda r: r.name):
         if relic.id in account.relic_types:
-            sources += relic_sources(relic)
+            sources += relic_sources(relic, best_level(account, relic))
 
     return [gear for source in sources if (gear := gear_of(account, source, never))]
 
 
-def relic_sources(relic: RelicSource) -> list[GearSource]:
-    """A relic's skills any champion gets, then each faction's own."""
-    general = GearSource(f"relic:{relic.id}", relic.name, "relic", None, relic.skills)
+def best_level(account: Account, relic: RelicSource) -> int:
+    """The relic skill level of the account's best copy of the relic."""
+    levels = [r.level for r in account.relic_items.values() if r.type_id == relic.id]
+    return relic.skill_level(max(levels, default=0))
+
+
+def relic_sources(relic: RelicSource, level: int) -> list[GearSource]:
+    """A relic's skills any champion gets, then each faction's own, at relic skill `level`."""
+    general = GearSource(f"relic:{relic.id}", relic.name, "relic", None, relic.skills, level)
     return [general] + [
         GearSource(
-            f"relic:{relic.id}:{faction}", f"{relic.name} ({faction})", "relic", faction, ids
+            f"relic:{relic.id}:{faction}",
+            f"{relic.name} ({faction})",
+            "relic",
+            faction,
+            ids,
+            level,
         )
         for faction, ids in sorted(relic.by_faction.items())
     ]
@@ -197,15 +235,85 @@ def assumed_gear(tag: Tag) -> Gear:
 
 def gear_of(account: Account, source: GearSource, never: frozenset[str]) -> Gear | None:
     """The gear, if its skills bring anything useful (a debuff not in `never`, a buff, an
-    effect), each tag at its best `Rating`."""
+    effect), each tag at its best `Rating` (a relic's at its level, echoes left out: they only
+    add to what a champion places itself)."""
+    skills = [
+        at_level(s, source.level)
+        for skill_id in source.skills
+        if (s := account.tables.skills.get(skill_id))
+    ]
     rated = [
         (tag, replace(rating, detail=f"{source.name}: {rating.detail}"))
-        for skill_id in source.skills
-        if (skill := account.tables.skills.get(skill_id))
+        for skill in skills
         for tag, rating in skill_ratings(skill, 1, 1.0)
         if not (tag.side == Side.DEBUFF and tag.name in never)
     ]
     if not rated:
         return None
 
-    return Gear(source.key, source.name, source.kind, source.faction, best_ratings(rated))
+    counts = most_counts(skill_counts(skill) for skill in skills)
+    return Gear(source.key, source.name, source.kind, source.faction, best_ratings(rated), counts)
+
+
+def at_level(skill: Skill, level: int | None, echoes: bool = False) -> Skill:
+    """The skill's effects at relic skill `level` (all, for a skill with no tiers or no
+    level), the echoes among them or the rest."""
+    placements = tuple(
+        placement
+        for placement in skill.placements
+        if level is None or placement.relic_level in (None, level)
+        if (placement.echo is not None) == echoes
+    )
+    return replace(skill, placements=placements)
+
+
+def echoes_of(skill: Skill) -> dict[Tag, float]:
+    """The chance each echoed status is placed again (the best, where several echo it)."""
+    chances: dict[Tag, float] = {}
+
+    for placement in skill.placements:
+        if placement.echo:
+            side = Side.DEBUFF if placement.kind == "ApplyDebuff" else Side.BUFF
+            tag = Tag(side, status_kind(placement.echo))
+            chances[tag] = max(chances.get(tag, 0.0), placement.chance or 1.0)
+
+    return chances
+
+
+def worn_relic(account: Account, relic: Relic, source: RelicSource, champion: Champion) -> Gear:
+    """A relic one champion wears: its skills (and its faction's, for the champion's) at the
+    relic's skill level, and what it echoes."""
+    level = source.skill_level(relic.level)
+    ids = source.skills + source.by_faction.get(faction_name(champion.faction), ())
+    skills = [s for i in ids if (s := account.tables.skills.get(i))]
+    own = [at_level(s, level) for s in skills]
+    rated = [
+        (tag, replace(rating, detail=f"{source.name}: {rating.detail}"))
+        for skill in own
+        for tag, rating in skill_ratings(skill, 1, 1.0)
+    ]
+    echoes: dict[Tag, float] = {}
+
+    for skill in skills:
+        for tag, chance in echoes_of(at_level(skill, level, echoes=True)).items():
+            echoes[tag] = max(echoes.get(tag, 0.0), chance)
+
+    counts = most_counts(skill_counts(skill) for skill in own)
+    return Gear(f"worn:{relic.id}", source.name, "relic", None, best_ratings(rated), counts, echoes)
+
+
+def wear(kit: Kit, worn: tuple[Gear, ...]) -> Kit:
+    """The kit with the relics the champion wears: their tags at their best `Rating`, and
+    the statuses they echo placed more often (its count times one plus the chance)."""
+    if not worn:
+        return kit
+
+    ratings = best_ratings([*kit.ratings.items(), *(i for g in worn for i in g.ratings.items())])
+    counts = dict(most_counts([kit.counts, *(g.counts for g in worn)]))
+
+    for gear in worn:
+        for tag, chance in gear.echoes.items():
+            if tag in ratings:
+                counts[tag] = counts.get(tag, 1) * (1 + chance)
+
+    return Kit(kit.champion, ratings, counts)

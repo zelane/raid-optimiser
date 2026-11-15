@@ -59,7 +59,11 @@ the game itself.
   their groups resolved through `static_export.EFFECT_KIND_GROUPS` (12, BossImmunitiesEffects,
   read from the game's code: `EffectKindGroupExtensions..cctor`'s arrays in global-metadata.dat;
   recheck after a game update). Not read yet: it's every boss's immunities (the Chimera's agree
-  with `chimera.tags` but for Rage, which that list lacks).
+  with `chimera.tags` but for Rage, which that list lacks). Skill placements also carry
+  `repeats` (the effect's Count × StackCount), a relic's `relic_level` (its tier: the relic
+  skill level it's for, from `relicSkillLevel==N`) and `echo` (a status it places again when
+  one is placed, from `StatusEffectWithTypeIdIsApplied`); `effect_sources.json` has
+  `relic_skill_levels` (`SkillLevelByRelicLevel`: relic level 0/6/9/12/15/18 → skill level 1–6).
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
   `tools/check_levels.py` checks its table is still in the game's metadata (`just static`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
@@ -87,8 +91,12 @@ the game itself.
     effect from the curated `EFFECT_LABELS`, or a `Mechanic`), `Target`; `tag_label(tag,
     enemy)` ("Decrease DEF on the Chimera").
   - `needs`: `AnyOf`, `Distinct` (debuffs the target isn't immune to, `counts_toward`;
-    `instances`: any Poison source meets it, given speed), `Given`; `Requirement` (a need and
-    its target), `Objective`, `Goals`.
+    `instances`: each different debuff counts one, each champion's Poisons as many as one of its
+    skills places, `Kit.counts` from placements' `repeats` (Count × StackCount), and a Toxic set
+    allowed for any champion one more, `Distinct.gear`; unless they `accumulate` over the fight:
+    the Chimera's, where the team gets several turns to each of its own and any Poison source
+    meets it, given speed), `Given`; `Requirement` (a need and its target), `Objective`,
+    `Goals`.
   - `kits`: a champion's `Kit` from `skills.json` (`placements`, `books`, `effect_kinds`,
     `target_hp_damage`), all forms of a mythical, each tag's best `Rating` = uptime (turns ÷
     cooldown less cooldown books; passives and A1s every turn; instant: 1 ÷ cooldown) ×
@@ -106,7 +114,12 @@ the game itself.
     (`gear=<Gear.key>`, `gear_set` marks the list as sent; default `DEFAULT_GEAR`, Toxic) and
     team-wide assumptions make needs `Given` (`with_gear`); faction relic skills (Bloatshield
     Totem's Demonspawn reflect) and per-champion assumptions (`assume=<champion id>@<tag key>`)
-    join those kits (`equip`). Gear doesn't count toward "N different" needs.
+    join those kits (`equip`). Gear doesn't count toward "N different" needs. Relics count only
+    their tier (team gear: the best copy owned, `best_level`). A team slot's champion wears
+    relics (`worn_relic` → `wear`; `find.Worn`, a tuple per slot): their skills at the copy's
+    level, and an echo (Sporeburst Rod: a placed Poison may place another) multiplies the
+    champion's own count by 1 + its chance (`Kit.counts` are floats: 2 Poisons → 2.5); echoes
+    alone bring nothing, so the rod isn't team gear.
   - `cover`: who covers what (`Lineup`, `ObjectiveCover`), the members a team needs
     (`core_of`), the score: a team's sources of a tag combine as 1 − Π(1 − s); a need scores
     its best tag (a count: its best N's mean; `Given`: the gear's rating); `team_score` is the
@@ -137,7 +150,7 @@ the game itself.
   - `trials`: `trial_needs` (a `match` per trial; counts from the trial's target or `rules`),
     checked against the trial's own status list (`check_needs`; the page warns on a
     mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
-    count instances (`Distinct.instances`).
+    count instances (`Distinct.instances`, `accumulates`).
   - `plan`: `check_lineup` (the slots alone) and `fill_lineup` (`teams.find`), from a `Brief`
     (column, wanted, loadout, counts); `column_goals` makes the column's trials objectives (keyed by the
     trial's skill, waiting on the one above), and `Plan.trials` maps them back for the board.
@@ -157,9 +170,13 @@ the game itself.
     State is all in the URL. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
     `tools/extract_assets.py`.
 - Team finder parts, shared by pages that find teams (the team finder and the Chimera page):
-  the slots, "Also bring" (with counts: `count=debuff:3`, so many different) and gear, relics
-  & assumptions panels and each need's row. `forms/team.py` (`parse_team` → `TeamAsk`: picks,
-  wanted, loadout, counts; `Offers`; a search's shape: `Fill`, `parse_fill`, `GRADES`),
+  the slots (each a `relic` field: empty for what the champion wears now, "none", or a relic
+  id; the dropdown lists each owned relic type's best copy; a new champion starts from what's
+  worn: the finder's `data-finder-reset`), "Also bring" (with counts: `count=debuff:3`, so
+  many different) and gear, relics & assumptions panels and each need's row. `forms/team.py`
+  (`parse_team` → `TeamAsk`: picks, wanted, loadout, counts, relics; `Offers`, with the relic
+  types; a search's shape: `Fill`, `parse_fill`, `GRADES`), `service/team.py` (`slot_worn`:
+  each slot's relics as gear),
   `service/team.py` (`TeamView`,
   `team_view(…, enemy, note)`: the want groups name the enemy, `note` says where a tag only
   lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `wants_panel`,

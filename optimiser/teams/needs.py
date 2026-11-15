@@ -3,16 +3,20 @@ needs.py - what a team must bring (`Goals`): objectives, each needs met against 
 maybe waiting on another objective met first, and extras every team must bring besides. A need
 is one of several tags (`AnyOf`), so many different buffs or debuffs (`Distinct`; debuffs the
 target isn't immune to), or one met for any team by what it can wear (`Given`). Counts of
-debuff instances count Poisons: they stack, so a team placing them can reach the count if it's
-fast enough.
+debuff instances count Poisons as many as there are: each champion's most from one skill (two
+Poisons at once), and one for gear any champion can wear that places one (the Toxic set).
+Where Poisons pile up over the fight (`Distinct.accumulates`: the Chimera, which gets several
+of the team's turns to each of its own), any Poison source meets the count, given speed.
 
 - `AnyOf`, `Distinct`, `Given`, `Need`, `Requirement`, `Objective`, `Goals`: what a team
   must bring
-- `STACKING`, `stacking_tags`, `counts_toward`: what counts toward a need
+- `STACKING`, `stacking_tags`, `counts_toward`, `kinds_toward`, `instances`, `stacked`: what
+  counts toward a need
 """
 
 from dataclasses import dataclass
 
+from optimiser.teams.kits import Kit
 from optimiser.teams.tags import Side, Tag, Target
 
 # Status effects whose instances stack (Poisons): a team placing one can pile up a debuff
@@ -31,12 +35,16 @@ class AnyOf:
 class Distinct:
     """At least `count` status effects of a side (debuffs the target isn't immune to, or
     buffs), `excluded` not counting. Different ones, unless `instances`: the rule counts every
-    debuff on the target, so a team placing Poisons (they stack) meets it too."""
+    debuff on the target, so Poisons (they stack) count as many as a team places (`stacked`),
+    and `gear` (its name and `Rating` score), worn by any champion, places one more; or,
+    when they `accumulate` over the fight, any Poison meets it."""
 
     side: Side
     count: int
     instances: bool = False
     excluded: frozenset[str] = frozenset()
+    gear: tuple[str, float] | None = None
+    accumulates: bool = False
 
 
 @dataclass(frozen=True)
@@ -107,3 +115,27 @@ def counts_toward(tag: Tag, need: Distinct, target: Target) -> bool:
 
 def stacking_tags(need: Distinct) -> frozenset[Tag]:
     return frozenset(Tag(need.side, name) for name in STACKING)
+
+
+def kinds_toward(need: Distinct, tags: frozenset[Tag], target: Target) -> frozenset[Tag]:
+    """The different effects among `tags` the need counts (for instances, those that don't
+    stack: `stacked` counts those)."""
+    counted = frozenset(t for t in tags if counts_toward(t, need, target))
+    return counted - stacking_tags(need) if need.instances else counted
+
+
+def stacked(need: Distinct, kit_tags: frozenset[Tag], counts: dict[Tag, int]) -> int:
+    """The instances of stacking effects one champion places toward the need: the most one of
+    its skills places (`Kit.counts`)."""
+    if not need.instances:
+        return 0
+
+    return sum(counts.get(t, 1) for t in stacking_tags(need) & kit_tags)
+
+
+def instances(need: Distinct, kits: list[Kit], target: Target) -> int:
+    """How many the team brings toward the need: its different effects, its Poisons, and
+    the gear's."""
+    tags = frozenset().union(*(kit.tags for kit in kits))
+    poisons = sum(stacked(need, kit.tags, kit.counts) for kit in kits)
+    return len(kinds_toward(need, tags, target)) + poisons + (1 if need.gear else 0)

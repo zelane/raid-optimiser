@@ -14,7 +14,7 @@ from optimiser.chimera.tags import ANY_FORM, form_target
 from optimiser.chimera.trials import TEAM_SIZE, check_needs, column_trials, trial_needs
 from optimiser.enemies import Enemies, Trial
 from optimiser.teams.cover import Lineup
-from optimiser.teams.find import check_slots, find_teams
+from optimiser.teams.find import Worn, check_slots, find_teams
 from optimiser.teams.gear import Loadout, with_gear
 from optimiser.teams.kits import candidates
 from optimiser.teams.needs import AnyOf, Distinct, Goals, Objective
@@ -25,12 +25,13 @@ from optimiser.teams.tags import Tag
 class Brief:
     """What a team is asked for and has: the rotation's column, what it must bring besides the
     trials (`wantable` tags; `counts`: so many different debuffs or buffs), and what it can
-    wear or is assumed to have."""
+    wear (`worn`: each slot's relics) or is assumed to have."""
 
     column: str
     wanted: tuple[Tag, ...]
     loadout: Loadout
     counts: tuple[Distinct, ...] = ()
+    worn: Worn = ()  # each slot's relics
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ def check_lineup(
     """What the champions in the slots clear on their own, and which of the wanted debuffs,
     buffs and effects they bring."""
     goals, trials, problems = column_goals(enemies, brief)
-    lineup = check_slots(account, brief.loadout, slots, goals)
+    lineup = check_slots(account, brief.loadout, slots, goals, brief.worn)
     return Plan(
         brief.column, trials, lineup, (), 0, complete=True, partial=False, problems=problems
     )
@@ -77,7 +78,7 @@ def fill_lineup(
     them all, a few teams clearing the most."""
     goals, trials, problems = column_goals(enemies, brief)
     pool = candidates(account, min_grade)
-    found = find_teams(account, brief.loadout, slots, goals, pool, shown)
+    found = find_teams(account, brief.loadout, slots, goals, pool, shown, brief.worn)
     return Plan(
         column=brief.column,
         trials=trials,

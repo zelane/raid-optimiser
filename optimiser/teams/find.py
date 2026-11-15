@@ -6,14 +6,16 @@ scored first; failing that, the few meeting the most).
 
 - `Found`: what a search found
 - `check_slots`, `find_teams`: the workflows
-- `slot_kits`: the slots' champions as kits, with what they could wear or are assumed to bring
+- `Worn`: what each slot wears (its relics)
+- `slot_kits`: the slots' champions as kits, with what they could wear, wear (their relics:
+  `worn`, a tuple per slot) or are assumed to bring
 """
 
 from dataclasses import dataclass
 
 from optimiser.account import Account, Champion
 from optimiser.teams.cover import Lineup, lineup_of, ranking
-from optimiser.teams.gear import Loadout, equip
+from optimiser.teams.gear import Gear, Loadout, equip, wear
 from optimiser.teams.kits import Kit, kit_of
 from optimiser.teams.needs import Goals
 from optimiser.teams.search import PARTIAL_OPTIONS, SEARCH_BUDGET, every_team, partial_teams
@@ -34,11 +36,18 @@ class Found:
     candidates: int
 
 
+type Worn = tuple[tuple[Gear, ...], ...]  # each slot's relics, as `gear.worn_relic` gives them
+
+
 def check_slots(
-    account: Account, loadout: Loadout, slots: tuple[Champion | None, ...], goals: Goals
+    account: Account,
+    loadout: Loadout,
+    slots: tuple[Champion | None, ...],
+    goals: Goals,
+    worn: Worn = (),
 ) -> Lineup:
     """What the champions in the slots meet on their own."""
-    return lineup_of(slot_kits(account, loadout, slots), set(), goals)
+    return lineup_of(slot_kits(account, loadout, slots, worn), set(), goals)
 
 
 def find_teams(
@@ -48,6 +57,7 @@ def find_teams(
     goals: Goals,
     pool: list[Champion],
     shown: int,
+    worn: Worn = (),
 ) -> Found:
     """The slots' champions kept, the open slots filled from `pool` (one copy of each
     champion, as `kits.candidates` gives): every smallest team meeting every objective and
@@ -55,7 +65,7 @@ def find_teams(
     them as lineups. If none meets them all, a few meeting the most."""
     # 1. Who's in the slots, and who could join them, each with what they could wear or are
     #    assumed to bring.
-    chosen = slot_kits(account, loadout, slots)
+    chosen = slot_kits(account, loadout, slots, worn)
     pinned = [kit for kit in chosen if kit]
     taken = {kit.champion.type_id // 10 for kit in pinned}
     others = [
@@ -91,7 +101,12 @@ def find_teams(
 
 
 def slot_kits(
-    account: Account, loadout: Loadout, slots: tuple[Champion | None, ...]
+    account: Account, loadout: Loadout, slots: tuple[Champion | None, ...], worn: Worn = ()
 ) -> list[Kit | None]:
-    """The slots' champions' kits, with what they could wear or are assumed to bring."""
-    return [equip(kit_of(account, c), loadout) if c else None for c in slots]
+    """The slots' champions' kits, with what they could wear, wear (`worn`: each slot's
+    relics; none past its end) or are assumed to bring."""
+    relics = worn + ((),) * (len(slots) - len(worn))
+    return [
+        wear(equip(kit_of(account, c), loadout), relics[i]) if c else None
+        for i, c in enumerate(slots)
+    ]

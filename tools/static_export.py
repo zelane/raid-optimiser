@@ -488,8 +488,8 @@ TARGET_HP = re.compile(r"TRG_(?:B_|M_|CUR_)?HP(?!_PERC)\b")
 def build_effect_sources(data):
     """What else can bring buffs, debuffs and effects to a team: each artifact set's set
     skills (the pieces they take), and each relic type's skills, with those only a champion of
-    one faction gets (by the factions' display names, `faction_name`). The skills are in
-    skills.json."""
+    one faction gets (by the factions' display names, `faction_name`), and the relic skill
+    level each relic level reaches (`relic_skill_levels`). The skills are in skills.json."""
     sets = []
     for s in data["ArtifactData"]["SetInfos"]:
         tiers = [s] + (s.get("SubSetInfos") or [])
@@ -519,7 +519,11 @@ def build_effect_sources(data):
                 "by_faction": by_faction,
             }
         )
-    return {"sets": sets, "relics": relics}
+    levels = data["RelicData"].get("SkillLevelByRelicLevel") or {}
+    skill_levels = {
+        str(level): skill for level, skill in sorted(levels.items(), key=lambda kv: int(kv[0]))
+    }
+    return {"sets": sets, "relics": relics, "relic_skill_levels": skill_levels}
 
 
 def source_skill_ids(sources):
@@ -586,8 +590,10 @@ def build_skills(skills, heroes, status_names, extra_ids=()):
 def skill_kit(skill, status_names):
     """What the skill places and does (`debuffs`, `buffs`, `effect_kinds`), and how: each
     effect's `placements` (status or effect kind, chance, turns, target, whether it happens
-    against a boss: `on_boss`, whether it can be resisted), and its `books` in order (type
-    and value: the chance, cooldown and the rest each adds)."""
+    against a boss: `on_boss`, whether it can be resisted, `repeats`: how many it places, the
+    effect's count times its stack count; a relic's: `relic_level`, the relic skill level it's
+    for; `echo`: the status whose placing it answers by placing another), and its `books` in
+    order (type and value: the chance, cooldown and the rest each adds)."""
     debuffs, buffs, placements = set(), set(), []
     for effect in skill["Effects"] or []:
         statuses = (effect.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or []
@@ -598,6 +604,8 @@ def skill_kit(skill, status_names):
             "chance": effect.get("Chance"),
             "target": target,
             "on_boss": on_boss(effect.get("Condition"), target_condition),
+            "repeats": (effect.get("Count") or 1) * (effect.get("StackCount") or 1),
+            **condition_facts(effect.get("Condition") or ""),
         }
         if effect["KindId"] == "ApplyDebuff" and target not in SELF_TARGETS:
             debuffs |= names
@@ -639,8 +647,21 @@ def skill_kit(skill, status_names):
     }
 
 
+def condition_facts(condition):
+    """What an effect's condition says about it beyond `on_boss`: the relic skill level it's
+    for, and the status it echoes (placed again when one is placed)."""
+    facts = {}
+    if level := RELIC_LEVEL.search(condition):
+        facts["relic_level"] = int(level.group(1))
+    if echo := ECHOED.search(condition):
+        facts["echo"] = echo.group(1)
+    return facts
+
+
 GRADE_NAMES = {f"Stars{n}": n for n in range(1, 7)}
 TAGS = re.compile(r"<[^>]+>")
+RELIC_LEVEL = re.compile(r"relicSkillLevel==(\d+)")
+ECHOED = re.compile(r"StatusEffectWithTypeIdIsApplied\((\w+)\)")
 COMPLETED = re.compile(r"challengeCompletedById\((\d+)\)")
 
 

@@ -265,7 +265,9 @@ def chimera(request: Request):
     account = current.current_account()
     sets, relics = current.current_effect_sources()
     offers = Offers(
-        wantable(account, NEVER_LANDS), gear_options(account, sets, relics, NEVER_LANDS)
+        wantable(account, NEVER_LANDS),
+        gear_options(account, sets, relics, NEVER_LANDS),
+        relics,
     )
     query = {name: request.query_params.getlist(name) for name in request.query_params}
     enemies = current.current_enemies()
@@ -289,7 +291,9 @@ def teams(request: Request):
     enemies = current.current_enemies()
     sets, relics = current.current_effect_sources()
     anywhere = frozenset()  # what's fought here isn't immune to any debuff in particular
-    offers = Offers(wantable(account, anywhere), gear_options(account, sets, relics, anywhere))
+    offers = Offers(
+        wantable(account, anywhere), gear_options(account, sets, relics, anywhere), relics
+    )
     query = {name: request.query_params.getlist(name) for name in request.query_params}
     known = crypts(enemies)
 

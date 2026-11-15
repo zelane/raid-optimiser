@@ -36,6 +36,7 @@ from webui.service.team import (
     need_view,
     percent,
     slot_view,
+    slot_worn,
     team_view,
 )
 from webui.service.views import asset_url
@@ -121,8 +122,9 @@ def chimera_page(
     champion) every way it can; else the slots are shown as they are. `rotation`: the column
     the current raid puts the mythical materials in (`rotation_column`), if known."""
     ask = request.team
-    brief = Brief(request.column, ask.wanted, ask.loadout, ask.counts)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in ask.picks)
+    worn = slot_worn(account, ask, offers, slots)
+    brief = Brief(request.column, ask.wanted, ask.loadout, ask.counts, worn)
 
     match request.fill:
         case None:

@@ -6,7 +6,7 @@
    the wanted tag, count, gear or assumption keyed `without` left out. #}
 {% macro page_url(slots, extra="", without="") -%}
   {%- set base = page.base -%}
-  /teams?base={{ base.kind }}{% if base.kind %}&crypt={% for c in base.crypts if c.selected %}{{ c.region }}{% endfor %}&difficulty={{ base.difficulty }}&stage={{ base.number }}{% endif %}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}{% endfor %}{{ extra }}
+  /teams?base={{ base.kind }}{% if base.kind %}&crypt={% for c in base.crypts if c.selected %}{{ c.region }}{% endfor %}&difficulty={{ base.difficulty }}&stage={{ base.number }}{% endif %}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}&relic={{ slot.relic | urlencode }}{% endfor %}{{ extra }}
 {%- endmacro %}
 
 {# The page as it is, with the wanted tag, count, gear or assumption keyed `key` left out:

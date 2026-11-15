@@ -1,7 +1,8 @@
 // The champion finder (_finder.html): a button marked `data-finder` opens it; it lists what
 // the filters match (htmx, `/finder`). A pick follows its link (the champion's optimiser),
 // unless the opener says `data-finder="slot"`: then the pick's choice goes into the field
-// `data-finder-target` names (a hidden one, say), and its form is submitted.
+// `data-finder-target` names (a hidden one, say), the field `data-finder-reset` names (if any)
+// is emptied, and its form is submitted.
 // Enter in the search takes the first; Escape, × or the backdrop close it. The filters
 // (rarity, faction, stars; not the name) are remembered in this browser, `KEPT` in
 // localStorage, and set again each time it opens.
@@ -71,6 +72,8 @@
     if (opener?.dataset.finder === "slot") {
       const field = document.getElementById(opener.dataset.finderTarget);
       field.value = pick.dataset.choice;
+      const reset = opener.dataset.finderReset && document.getElementById(opener.dataset.finderReset);
+      if (reset) reset.value = "";
       field.form.submit();
       return;
     }

@@ -7,24 +7,25 @@ relic any champion may wear (a `Gear.key`; `gear_set` present: the list is as se
 defaults); `assume` (repeated) something assumed: "<tag key>" for the team, "<champion
 id>@<tag key>" for one champion; `assume_what` and `assume_who`: the assume form's new entry;
 `count` (repeated) so many different debuffs or buffs every team must bring ("debuff:3"),
-`count_side` and `count_n`: the count form's new entry.
+`count_side` and `count_n`: the count form's new entry; `relic` (repeated, one per slot) the
+relic a slot's champion wears: empty for what they wear now, "none", or a relic's id.
 A search (`run`) lists `listed` teams, the page showing option number `option`.
 
 - `GRADES`, `FIRST_SHOWN`, `MAX_LISTED`, `TRUE`: a search's shape
-- `Offers`, `TeamAsk`, `Fill`: what it can pick from, and what it asks
+- `Offers`, `TeamAsk`, `Fill`, `RelicChoice`: what it can pick from, and what it asks
 - `parse_team`, `parse_fill`: the boundaries
 - `Unmatched`, `SlotPick`, `parse_slots` (`parse_slot`): the team's slots
 - `COUNT_SIDES`, `MOST_COUNTED`: what a count can ask for
-- `parse_wanted`, `parse_counts`, `parse_gear`, `parse_assumed`, `assume_entry`, `count_entry`:
-  its steps
+- `parse_wanted`, `parse_counts`, `parse_relics`, `parse_gear`, `parse_assumed`,
+  `assume_entry`, `count_entry`: its steps
 """
 
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion
-from optimiser.teams.gear import DEFAULT_GEAR, Assumed, Gear, Loadout, assumed_gear
+from optimiser.account import Account, Champion, Relic
+from optimiser.teams.gear import DEFAULT_GEAR, Assumed, Gear, Loadout, RelicSource, assumed_gear
 from optimiser.teams.needs import Distinct
 from optimiser.teams.tags import Side, Tag
 from webui.forms.common import FormErrors
@@ -50,10 +51,12 @@ type SlotPick = Champion | Unmatched | None
 
 @dataclass(frozen=True)
 class Offers:
-    """What a team finder can pick from: tags to want or assume, and gear to allow."""
+    """What a team finder can pick from: tags to want or assume, gear to allow, and the relic
+    types (a slot's relic is one of the account's)."""
 
     tags: list[Tag]
     gear: list[Gear]
+    relics: tuple[RelicSource, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,10 @@ class Fill:
     option: int
 
 
+# A slot's relics: None, what its champion wears now; else these (none: no relic).
+type RelicChoice = tuple[Relic, ...] | None
+
+
 @dataclass(frozen=True)
 class TeamAsk:
     """The slots as typed, what every team must bring (tags, and so many different debuffs or
@@ -74,6 +81,7 @@ class TeamAsk:
     wanted: tuple[Tag, ...]
     loadout: Loadout
     counts: tuple[Distinct, ...] = ()
+    relics: tuple[RelicChoice, ...] = ()  # one per slot
 
 
 def parse_team(
@@ -98,7 +106,8 @@ def parse_team(
         return FormErrors([m for p in parsed if isinstance(p, FormErrors) for m in p.messages])
 
     team_assumed, single = assumed
-    return TeamAsk(picks, wanted, Loadout(gear + team_assumed, single), counts)
+    relics = parse_relics(query.get("relic", []), account, size)
+    return TeamAsk(picks, wanted, Loadout(gear + team_assumed, single), counts, relics)
 
 
 def assume_entry(query: Mapping[str, list[str]], account: Account) -> list[str]:
@@ -110,6 +119,23 @@ def assume_entry(query: Mapping[str, list[str]], account: Account) -> list[str]:
 
     who = parse_slot((query.get("assume_who") or [""])[-1].strip(), account)
     return [f"{who.id}@{what}" if isinstance(who, Champion) else what]
+
+
+def parse_relics(texts: list[str], account: Account, size: int) -> tuple[RelicChoice, ...]:
+    """Each slot's relic: "" what's worn, "none", or a relic's id (one the account doesn't
+    have: what's worn)."""
+    padded = (texts + [""] * size)[:size]
+    choices: list[RelicChoice] = []
+
+    for text in padded:
+        if text == "none":
+            choices.append(())
+        elif text.isdigit() and int(text) in account.relic_items:
+            choices.append((account.relic_items[int(text)],))
+        else:
+            choices.append(None)
+
+    return tuple(choices)
 
 
 def count_entry(query: Mapping[str, list[str]]) -> list[str]:

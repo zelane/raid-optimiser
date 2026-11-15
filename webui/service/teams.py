@@ -30,6 +30,7 @@ from webui.service.team import (
     need_view,
     percent,
     slot_view,
+    slot_worn,
     team_view,
 )
 from webui.service.views import asset_url
@@ -112,6 +113,7 @@ def teams_page(
     goals = finder_goals(ask.wanted, ask.counts, picked, ask.loadout.team_gear)
     asked = bool(goals.requirements)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in ask.picks)
+    worn = slot_worn(account, ask, offers, slots)
 
     match request.fill:
         case Fill(listed=listed, option=option) if asked:
@@ -120,11 +122,11 @@ def teams_page(
             if base:
                 pool = [c for c in pool if admits(base.crypt, c)]
 
-            found = find_teams(account, ask.loadout, slots, goals, pool, listed)
+            found = find_teams(account, ask.loadout, slots, goals, pool, listed, worn)
             lineup, options = found.lineup, found.options
         case _:
             listed, option, found = 0, 1, None
-            lineup, options = check_slots(account, ask.loadout, slots, goals), ()
+            lineup, options = check_slots(account, ask.loadout, slots, goals, worn), ()
 
     shown = option if 1 <= option <= len(options) else (1 if options else None)
     team = options[shown - 1] if shown else lineup

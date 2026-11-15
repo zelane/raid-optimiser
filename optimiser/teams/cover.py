@@ -23,6 +23,9 @@ from optimiser.teams.needs import (
     Objective,
     Requirement,
     counts_toward,
+    instances,
+    kinds_toward,
+    stacked,
     stacking_tags,
 )
 from optimiser.teams.tags import Side, Tag, plain_label, tag_label
@@ -137,7 +140,7 @@ def bare_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
             label = " or ".join(tag_label(tag, target.name) for tag in asks)
             return NeedCover(label, bool(by), by, (), asks)
 
-        case Distinct(side=side, count=count, instances=instances):
+        case Distinct(side=side, count=count, instances=by_instance):
             counted = [k for k in kits if any(counts_toward(t, need, target) for t in k.tags)]
             brought = tuple(
                 sorted(
@@ -147,15 +150,27 @@ def bare_cover(requirement: Requirement, kits: list[Kit]) -> NeedCover:
             )
             where = f"on {target.name}" if side == Side.DEBUFF else "on the team"
 
-            if instances:
-                poisoners = tuple(k.champion for k in kits if k.tags & stacking_tags(need))
+            if by_instance and need.accumulates:
                 label = f"{count} {side}s {where} (Poisons stack: any Poison will do, if fast)"
+                poisoners = tuple(k.champion for k in kits if k.tags & stacking_tags(need))
 
                 if poisoners:
                     return NeedCover(label, True, poisoners, brought=tuple(stacking_tags(need)))
 
                 by = tuple(k.champion for k in counted)
                 return NeedCover(label, len(brought) >= count, by, brought=brought)
+
+            if by_instance:
+                label = f"{count} {side}s {where} (Poisons count as many as one skill places)"
+                stacks = stacking_tags(need)
+                by = tuple(k.champion for k in kits if k in counted or k.tags & stacks)
+                placed = instances(need, kits, target)
+                notes = (f"{placed:.3g} placed",)
+
+                if need.gear:
+                    notes += (f"{need.gear[0]}: one Poison (any champion)",)
+
+                return NeedCover(label, placed >= count, by, notes, brought=brought)
 
             label = f"{count} different {side}s {where}"
             by = tuple(k.champion for k in counted)
@@ -170,8 +185,8 @@ def best_rating(kit: Kit, requirement: Requirement) -> Rating:
             return best_rating(kit, replace(requirement, need=inner))
         case AnyOf(tags=tags):
             useful = [kit.ratings[t] for t in tags if t in kit.ratings]
-        case Distinct(instances=instances):
-            stacking = stacking_tags(need) if instances else frozenset()
+        case Distinct(instances=counted):
+            stacking = stacking_tags(need) if counted else frozenset()
             useful = [
                 rating
                 for tag, rating in kit.ratings.items()
@@ -193,8 +208,8 @@ def team_score(kits: list[Kit], goals: Goals) -> float:
 
 def need_score(requirement: Requirement, kits: list[Kit]) -> float:
     """0 to 1: for one of several tags, the team's best; for a count, the mean of its best
-    `count` different ones (a Poison stacks: its own score meets an instance count); gear, its
-    own rating."""
+    `count` different ones (for instances, each champion's Poisons each at its rating, and the
+    gear's Poison at its); gear, its own rating."""
     need, target = requirement.need, requirement.target
     match need:
         case Given(score=score):
@@ -203,16 +218,28 @@ def need_score(requirement: Requirement, kits: list[Kit]) -> float:
         case AnyOf(tags=tags):
             return max((team_rating(kits, tag) for tag in tags), default=0.0)
 
-        case Distinct(count=count, instances=instances):
+        case Distinct(count=count, accumulates=True):
             counting = {t for kit in kits for t in kit.tags if counts_toward(t, need, target)}
             best = sorted((team_rating(kits, tag) for tag in counting), reverse=True)[:count]
-            spread = sum(best) / count
-
-            if not instances:
-                return spread
-
             stacks = max((team_rating(kits, tag) for tag in stacking_tags(need)), default=0.0)
-            return max(spread, stacks)
+            return max(sum(best) / count, stacks)
+
+        case Distinct(count=count):
+            tags = frozenset().union(*(kit.tags for kit in kits)) if kits else frozenset()
+            scores = [team_rating(kits, tag) for tag in kinds_toward(need, tags, target)]
+
+            for kit in kits:
+                poison = max(
+                    (kit.ratings[t].score for t in stacking_tags(need) & kit.tags), default=0.0
+                )
+                placed = stacked(need, kit.tags, kit.counts)
+                whole = int(placed)
+                scores += [poison] * whole + ([poison * (placed - whole)] if placed > whole else [])
+
+            if need.gear:
+                scores.append(need.gear[1])
+
+            return sum(sorted(scores, reverse=True)[:count]) / count
 
 
 def team_rating(kits: list[Kit], tag: Tag) -> float:

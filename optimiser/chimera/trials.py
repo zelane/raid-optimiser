@@ -3,7 +3,9 @@ trials.py - the Chimera's trials for a column (Ultra Nightmare's), and what each
 (`trial_needs`, from the trial's rules, held against the game's own list of its statuses by
 `check_needs`), as `optimiser.teams` needs. The debuff-count trials count debuffs, not kinds:
 Poisons stack, so a team placing them can reach the count if it's fast enough (Snake moves
-the Poisons on it to the team each of its turns).
+the Poisons on it to the team each of its turns). They pile up over the fight
+(`Distinct.accumulates`: the team gets several turns to each of the Chimera's), so any Poison
+source meets them, given speed.
 
 - `PARTS`, `ANIMAL_FORMS`, `LEVELS`, `PLAN_DIFFICULTY`, `TEAM_SIZE`: what's planned
 - `column_trials`, `trial_needs`, `check_needs`, `rule_count`: the trials and what they need
@@ -61,7 +63,8 @@ def trial_needs(trial: Trial) -> tuple[Need, ...]:
             return (AnyOf(buff("BlockDebuff", "Negator", "SimpleStoneSkin")),)
         case ("Lion", "Wing", "Easy"):
             count = rule_count(trial, "DEBUFF_COUNT>=")
-            return (AnyOf(buff("IncreaseDefence")), Distinct(Side.DEBUFF, count, instances=True))
+            piled = Distinct(Side.DEBUFF, count, instances=True, accumulates=True)
+            return (AnyOf(buff("IncreaseDefence")), piled)
         case ("Lion", "Wing", "Normal"):
             return (AnyOf(buff("Shield")),)
         case ("Lion", "Wing", "Hard"):
@@ -80,7 +83,7 @@ def trial_needs(trial: Trial) -> tuple[Need, ...]:
             count = int(trial.target)
             return (
                 AnyOf(debuff("DecreaseResistance")),
-                Distinct(Side.DEBUFF, count, instances=True),
+                Distinct(Side.DEBUFF, count, instances=True, accumulates=True),
             )
         case ("Lion", "Paw", "Hard"):
             passive = {Tag(Side.MECHANIC, Mechanic.PASSIVE_REFLECT)}
@@ -92,7 +95,8 @@ def trial_needs(trial: Trial) -> tuple[Need, ...]:
         case ("Snake", "Wing", "Hard"):
             # It mustn't be under Block Active Skills while the debuffs count.
             count = rule_count(trial, "DEBUFF_COUNT>=")
-            return (Distinct(Side.DEBUFF, count, True, frozenset({"BlockActiveSkills"})),)
+            excluded = frozenset({"BlockActiveSkills"})
+            return (Distinct(Side.DEBUFF, count, True, excluded, accumulates=True),)
         case ("Snake", "Tail", "Easy"):
             return (AnyOf(debuff("ContinuousDamage")), AnyOf(debuff("IncreasePoisoning")))
         case ("Snake", "Tail", "Hard"):

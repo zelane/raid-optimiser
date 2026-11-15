@@ -5,7 +5,7 @@
 {# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
    the wanted tag, gear or assumption keyed `without` left out. #}
 {% macro page_url(slots, extra="", without="") -%}
-  /chimera?column={{ page.column }}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}{% endfor %}{{ extra }}
+  /chimera?column={{ page.column }}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}&relic={{ slot.relic | urlencode }}{% endfor %}{{ extra }}
 {%- endmacro %}
 
 {# The page as it is, with the wanted tag, gear or assumption keyed `key` left out: what a

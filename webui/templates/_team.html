@@ -44,7 +44,9 @@
 {%- endmacro %}
 
 {# The team's slots (`team.slots`): each field hidden, the finder (+, Change) fills it and
-   submits. `empty_url`: the page with every slot open. #}
+   submits; a champion the user put there picks a relic (`relic`, one field per slot, so they
+   line up: what's worn unless picked; a new champion starts from what's worn). `empty_url`:
+   the page with every slot open. #}
 {% macro team_slots(team, empty_url) %}
     <section class="panel">
       <header class="panel-head">
@@ -67,15 +69,23 @@
                 <a href="/champions/{{ slot.champion.id }}" class="card-tile" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
                 <span class="chimera-slot-name">{{ slot.champion.name }}</span>
               </div>
+            {% endif %}
+            {% if slot.relics %}
+              <select name="relic" id="relic-{{ loop.index }}" class="slot-relic" aria-label="Relic for slot {{ loop.index }}" onchange="this.form.submit()">
+                {% for option in slot.relics %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+              </select>
             {% else %}
-              <button type="button" class="slot-plus" data-finder="slot" data-finder-target="slot-{{ loop.index }}" aria-label="Find a champion for slot {{ loop.index }}" title="Find a champion">+</button>
+              <input type="hidden" name="relic" id="relic-{{ loop.index }}" value="{{ slot.relic }}">
+            {% endif %}
+            {% if not slot.champion %}
+              <button type="button" class="slot-plus" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}" aria-label="Find a champion for slot {{ loop.index }}" title="Find a champion">+</button>
               {% if slot.problem %}<small class="slot-problem">“{{ slot.choice }}”: {{ slot.problem }}</small>{% endif %}
             {% endif %}
             {% if slot.choice %}
               <div class="slot-actions">
-                {% if slot.champion %}<button type="button" class="secondary outline" data-finder="slot" data-finder-target="slot-{{ loop.index }}">Change</button>{% endif %}
+                {% if slot.champion %}<button type="button" class="secondary outline" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}">Change</button>{% endif %}
                 <button type="button" class="secondary outline" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
-                        onclick="document.getElementById('slot-{{ loop.index }}').value = ''; this.form.submit()">×</button>
+                        onclick="document.getElementById('slot-{{ loop.index }}').value = ''; document.getElementById('relic-{{ loop.index }}').value = ''; this.form.submit()">×</button>
               </div>
             {% endif %}
           </div>

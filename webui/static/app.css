@@ -775,6 +775,7 @@ h2 + .lede, .page-section > h2 + .lede { margin-top: -0.25rem; }
 .chimera-slot-name { font-size: 0.85rem; font-weight: 600; line-height: 1.2; }
 .slot-problem { color: var(--stat-down); font-size: 0.75rem; }
 .slot-actions { display: flex; justify-content: center; gap: 0.35rem; margin-top: auto; }
+.slot-relic { width: 100%; margin: 0; padding-block: 0.2rem; font-size: 0.78rem; }
 .slot-actions button { padding: 0.2rem 0.65rem; font-size: 0.8rem; }
 
 /* What else to bring, and gear: the chosen ones by the title, a picker under them. */

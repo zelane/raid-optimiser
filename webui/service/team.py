@@ -3,10 +3,12 @@ team.py - a team finder's views, shared by the pages that find teams: the team's
 user's champions and the search's), what every team must bring (wanted tags, grouped by side),
 the gear, relics and assumptions it may count on, and each need as the team meets it.
 
-- `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `WantView`, `WantGroup`,
-  `CountView`, `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
+- `ChoiceView`, `RelicOption`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `WantView`,
+  `WantGroup`, `CountView`, `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
 - `Note`, `no_note`: what a page says about a tag on offer
 - `team_view`: the team's panels
+- `slot_worn`, `worn_now`, `relic_value`, `relic_options`, `best_copies`, `relic_label`: each
+  slot's relics, and what it can pick from
 - `slot_view`, `need_view`, `WANT_GROUPS`, `want_groups`, `want_view`, `count_view`, `gear_groups`,
   `gear_view`, `assumed_views`, `assumed_view`, `percent`: its pieces
 - `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
@@ -14,14 +16,15 @@ the gear, relics and assumptions it may count on, and each need as the team meet
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
-from optimiser.account import Account
+from optimiser.account import Account, Champion, Relic
 from optimiser.teams.cover import Member, NeedCover
-from optimiser.teams.gear import Assumed, Gear, Loadout
+from optimiser.teams.find import Worn
+from optimiser.teams.gear import Assumed, Gear, Loadout, worn_relic
 from optimiser.teams.needs import Distinct
 from optimiser.teams.tags import Side, Tag, plain_label
-from webui.forms.team import Offers, SlotPick, TeamAsk, Unmatched
+from webui.forms.team import Offers, RelicChoice, SlotPick, TeamAsk, Unmatched
 from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
 
 type Note = Callable[[Tag], str | None]
@@ -35,16 +38,29 @@ class ChoiceView:
 
 
 @dataclass(frozen=True)
+class RelicOption:
+    """A relic a slot's champion can wear: the `relic` field's value ("" what they wear now,
+    "none", a relic's id), in words, and whether it's the one picked."""
+
+    value: str
+    label: str
+    selected: bool
+
+
+@dataclass(frozen=True)
 class SlotView:
     """A team slot: its champion (None when open), as the picker shows it, and whether the
     search suggested it (else the user chose it) and the team needs it. `problem`: why the
-    text typed in it isn't a champion (the slot stays open, the text kept)."""
+    text typed in it isn't a champion (the slot stays open, the text kept). `relic`: its
+    `relic` field's value, `relics` what it can pick (a champion's slot only)."""
 
     champion: ChampionRow | None
     choice: str  # the picker's text; "" when open
     suggested: bool
     needed: bool
     problem: str | None = None
+    relic: str = ""
+    relics: list[RelicOption] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -172,8 +188,21 @@ def team_view(
     wanted debuffs' group naming `enemy`, `note` saying where a tag only lands."""
     allowed = {g.key for g in ask.loadout.gear}
     champions = sorted(account.champions.values(), key=lambda c: (c.name, -c.grade, -c.level))
+    choices = ask.relics + (None,) * (len(members) - len(ask.relics))
+    slots = []
+
+    for member, pick, choice in zip(members, ask.picks, choices, strict=True):
+        view = slot_view(member, pick)
+
+        if member is not None and member.chosen:
+            value = relic_value(choice)
+            options = relic_options(account, offers, member.champion, choice)
+            view = replace(view, relic=value, relics=options)
+
+        slots.append(view)
+
     return TeamView(
-        slots=[slot_view(member, pick) for member, pick in zip(members, ask.picks, strict=True)],
+        slots=slots,
         choices=[ChoiceView(choice_label(c)) for c in champions],
         wants=want_groups(offers.tags, ask.wanted, enemy, note),
         wanted=[want_view(tag, True, note) for tag in ask.wanted],
@@ -197,6 +226,87 @@ def slot_view(member: Member | None, pick: SlotPick) -> SlotView:
         suggested=not member.chosen,
         needed=member.needed,
     )
+
+
+def slot_worn(
+    account: Account, ask: TeamAsk, offers: Offers, slots: tuple[Champion | None, ...]
+) -> Worn:
+    """Each slot's relics as its champion wears them (`worn_relic`): the ones picked, else
+    what they wear now."""
+    sources = {source.id: source for source in offers.relics}
+    choices = ask.relics + (None,) * (len(slots) - len(ask.relics))
+    worn = []
+
+    for champion, choice in zip(slots, choices, strict=True):
+        relics = worn_now(account, champion) if choice is None else choice
+        worn.append(
+            tuple(
+                worn_relic(account, relic, sources[relic.type_id], champion)
+                for relic in relics
+                if champion and relic.type_id in sources
+            )
+        )
+
+    return tuple(worn)
+
+
+def worn_now(account: Account, champion: Champion | None) -> tuple[Relic, ...]:
+    if champion is None:
+        return ()
+
+    ids = account.worn_relics.get(champion.id, ())
+    return tuple(account.relic_items[i] for i in ids if i in account.relic_items)
+
+
+def relic_value(choice: RelicChoice) -> str:
+    match choice:
+        case None:
+            return ""
+        case ():
+            return "none"
+        case (relic, *_):
+            return str(relic.id)
+
+
+def relic_options(
+    account: Account, offers: Offers, champion: Champion, choice: RelicChoice
+) -> list[RelicOption]:
+    """What the slot's champion wears now, no relic, then the best copy of each relic the
+    account has (and the one picked, if it isn't one), by name."""
+    names = {source.id: source.name for source in offers.relics}
+    picked = relic_value(choice)
+    now = [relic_label(r, names) for r in worn_now(account, champion)]
+    options = [
+        RelicOption("", f"Worn: {', '.join(now) or 'none'}", picked == ""),
+        RelicOption("none", "No relic", picked == "none"),
+    ]
+    copies = best_copies(account)
+
+    if choice:
+        copies = {**copies, choice[0].type_id: choice[0]}
+
+    for relic in sorted(copies.values(), key=lambda r: names.get(r.type_id, "")):
+        if relic.type_id in names:
+            value = str(relic.id)
+            options.append(RelicOption(value, relic_label(relic, names), picked == value))
+
+    return options
+
+
+def best_copies(account: Account) -> dict[int, Relic]:
+    """The highest-level copy of each relic type the account has."""
+    best: dict[int, Relic] = {}
+
+    for relic in account.relic_items.values():
+        held = best.get(relic.type_id)
+        if held is None or relic.level > held.level:
+            best[relic.type_id] = relic
+
+    return best
+
+
+def relic_label(relic: Relic, names: dict[int, str]) -> str:
+    return f"{names.get(relic.type_id, f'relic {relic.type_id}')} L{relic.level}"
 
 
 def count_view(count: Distinct) -> CountView:

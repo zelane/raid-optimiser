@@ -4,7 +4,8 @@ extras (`every_team`, up to a cap or a time budget), or failing that the few mee
 (a HiGHS MILP, `partial_teams`).
 
 - `Budget`, `SEARCH_BUDGET`, `PARTIAL_OPTIONS`: how far it looks
-- `every_team` (`Check`, `check_of`, `holds`, `bringing`): every team meeting them all
+- `every_team` (`Check`, `check_of`, `holds`, `poisons_of`, `bringing`): every team meeting
+  them all
 - `partial_teams` (`TeamModel`, `team_model`, `add_need`): the best partial teams
 """
 
@@ -43,12 +44,15 @@ PARTIAL_OPTIONS = 3  # teams offered when none meets every objective
 
 @dataclass(frozen=True)
 class Check:
-    """A need ready to test quickly: met when a team has `count` of the `counting` tags, or
-    any of the `stacking` ones (for a count of debuff instances: Poisons)."""
+    """A need ready to test quickly: met when a team has `count` of the `counting` tags; for
+    a count of debuff instances (`stacking`: Poisons), the different ones that don't stack,
+    plus the team's Poisons (`poisons_of` each champion), plus the gear's (`gear`)."""
 
     counting: frozenset[Tag]
     count: int
     stacking: frozenset[Tag]
+    gear: int = 0
+    accumulates: bool = False  # any of the `stacking` ones meets it
 
 
 def every_team(
@@ -68,6 +72,9 @@ def every_team(
         if not isinstance(requirement.need, Given)
     ]
     base_tags = frozenset().union(*(kit.tags for kit in pinned))
+    stacking = frozenset().union(*(check.stacking for check in checks))
+    poisons = [poisons_of(kit, stacking) for kit in others]
+    base_poisons = sum(poisons_of(kit, stacking) for kit in pinned)
     found: list[list[Kit]] = []
     visited: set[frozenset[int]] = set()
     deadline = time.monotonic() + budget.seconds
@@ -75,9 +82,10 @@ def every_team(
 
     def clears(members: frozenset[int]) -> bool:
         tags = base_tags.union(*(others[i].tags for i in members))
-        return all(holds(check, tags) for check in checks)
+        placed = base_poisons + sum(poisons[i] for i in members)
+        return all(holds(check, tags, placed) for check in checks)
 
-    def grow(members: frozenset[int], tags: frozenset[Tag]) -> None:
+    def grow(members: frozenset[int], tags: frozenset[Tag], placed: int) -> None:
         nonlocal stopped
 
         if stopped or members in visited:
@@ -88,7 +96,7 @@ def every_team(
             return
 
         visited.add(members)
-        unmet = [check for check in checks if not holds(check, tags)]
+        unmet = [check for check in checks if not holds(check, tags, placed)]
         if not unmet:
             if all(not clears(members - {i}) for i in members):
                 found.append(sorted((others[i] for i in members), key=lambda k: k.champion.name))
@@ -100,9 +108,9 @@ def every_team(
 
         choices = [bringing(check, tags, others, members) for check in unmet]
         for i in min(choices, key=len):
-            grow(members | {i}, tags | others[i].tags)
+            grow(members | {i}, tags | others[i].tags, placed + poisons[i])
 
-    grow(frozenset(), base_tags)
+    grow(frozenset(), base_tags, base_poisons)
     return found, not stopped
 
 
@@ -113,16 +121,30 @@ def check_of(requirement: Requirement, kits: list[Kit]) -> Check:
         case AnyOf(tags=tags):
             return Check(tags, 1, frozenset())
 
-        case Distinct(count=count, instances=instances):
+        case Distinct(count=count, instances=by_instance):
             counting = {t for kit in kits for t in kit.tags if counts_toward(t, need, target)}
-            stacking = stacking_tags(need) if instances else frozenset()
-            return Check(frozenset(counting), count, stacking)
+            stacking = stacking_tags(need) if by_instance else frozenset()
+            gear = 1 if need.gear else 0
+            return Check(frozenset(counting), count, stacking, gear, need.accumulates)
 
     raise ValueError(f"no check for {need}")
 
 
-def holds(check: Check, tags: frozenset[Tag]) -> bool:
-    return bool(tags & check.stacking) or len(tags & check.counting) >= check.count
+def holds(check: Check, tags: frozenset[Tag], poisons: int) -> bool:
+    """`poisons`: the team's Poisons (`poisons_of` its champions)."""
+    if not check.stacking:
+        return len(tags & check.counting) >= check.count
+
+    if check.accumulates:
+        return bool(tags & check.stacking) or len(tags & check.counting) >= check.count
+
+    kinds = len((tags & check.counting) - check.stacking)
+    return kinds + poisons + check.gear >= check.count
+
+
+def poisons_of(kit: Kit, stacking: frozenset[Tag]) -> int:
+    """The most stacking debuffs one of the champion's skills places."""
+    return sum(kit.counts.get(tag, 1) for tag in stacking & kit.tags)
 
 
 def bringing(check: Check, tags: frozenset[Tag], others: list[Kit], members) -> list[int]:
@@ -218,8 +240,17 @@ def add_need(model: TeamModel, requirement: Requirement, on) -> None:
             highs.addConstr(highs.qsum(bringing) >= on)
 
         case Distinct(side=side, count=count, instances=instances):
+            # Poisons piling up over the fight count as a kind (one meets it: below); else
+            # they count as many as each champion places.
+            counted = instances and not need.accumulates
+            stacks = stacking_tags(need) if counted else frozenset()
             pool = sorted(
-                {t.name for kit in kits for t in kit.tags if counts_toward(t, need, target)}
+                {
+                    t.name
+                    for kit in kits
+                    for t in kit.tags
+                    if counts_toward(t, need, target) and t not in stacks
+                }
             )
             present = []
 
@@ -230,12 +261,17 @@ def add_need(model: TeamModel, requirement: Requirement, on) -> None:
                 highs.addConstr(placed <= highs.qsum(bringing))
                 present.append(placed)
 
-            # A Poison on the team meets a count of debuff instances on its own.
-            if instances:
+            if instances and need.accumulates:
                 poisoning = highs.addBinary()
-                stacks = stacking_tags(need)
-                bringing = [x for kit, x in zip(kits, picked, strict=True) if kit.tags & stacks]
+                poisoners = stacking_tags(need)
+                bringing = [x for kit, x in zip(kits, picked, strict=True) if kit.tags & poisoners]
                 highs.addConstr(poisoning <= highs.qsum(bringing))
                 present.append(count * poisoning)
 
-            highs.addConstr(highs.qsum(present) >= count * on)
+            present += [
+                poisons_of(kit, stacks) * x
+                for kit, x in zip(kits, picked, strict=True)
+                if kit.tags & stacks
+            ]
+            from_gear = 1 if need.gear else 0
+            highs.addConstr(highs.qsum(present) >= count * on - from_gear)
