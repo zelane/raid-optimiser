@@ -3,15 +3,22 @@ settings.py - the forms that change what's stored. The champion list's lock pick
 `level`; the assumptions page posts `kind` (a `kind_key`) and `grade` (a `grade_key`, empty for
 none) for a glyph, `flag` (a `Flag`) with `on` (present when ticked) for the rest, and `rule`
 (a reserve `rule_key`) with `on` (present: add it, else remove it). The accessories pages post
-`key` ("<type>:<stat>", by the store's names) with `weight` for a champion type's weight,
-`target_free` for the spaces to leave, `on` (present when ticked) to protect a piece, and
-`artifact_id` (repeated) for the pieces to sell.
+a champion type whole: `type` (its key), `label`, `kind` (a `Kind`), `faction` (the game's
+name, empty for any), `weight:<stat>` per stat and `main:<slot>:<stat>` (present when ticked)
+per main stat that suits it, by the game's names; a set's value (`set`, its id, and
+`factor`) or whether it targets a type (`set`, `type`, the type's key, and `on`, present
+when ticked); `off_target`, the share an off-target type counts for; then `target_free` for
+the spaces to leave, `on` (present when ticked) to protect a piece, and `artifact_id`
+(repeated) for the pieces to sell.
 
 - `parse_lock`: the lock picker's level
 - `GlyphPlan`, `parse_glyph`: a glyph kind and the grade to assume for it
 - `FlagSetting`, `parse_flag`: an assumption, on or off
 - `ReserveSetting`, `parse_reserve_rule`: a reserve rule, added or removed
-- `MAX_WEIGHT`, `WeightSetting`, `parse_weight`: a champion type's weight for a stat
+- `MAX_WEIGHT`, `TypeEdit`, `parse_champion_type`: a champion type as edited
+- `MAX_SET_FACTOR`, `SetValue`, `parse_set_value`: a set's value
+- `SetTarget`, `parse_set_target`: whether a set targets a type
+- `parse_off_target`: what off-target types count for
 - `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
 - `parse_protect`: a piece protected from the clean-up, or not
 - `parse_sell`: the pieces to select for selling
@@ -21,7 +28,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from optimiser.accessories.cleanup import ACCESSORY_SPACE
-from optimiser.accessories.roles import TypeKey
+from optimiser.accessories.roles import ACCESSORY_MAINS, TYPE_STATS, Kind, Mains
 from optimiser.account import LOCK_LEVELS, Account, GlyphGrade, GlyphKind, Stat, Tables
 from optimiser.assume import Flag
 from optimiser.glyphs import parse_grade, parse_kind
@@ -30,6 +37,7 @@ from optimiser.reserve import Rule, Tagged, Team, parse_rule
 from webui.forms.common import FormErrors, parse_number
 
 MAX_WEIGHT = 10
+MAX_SET_FACTOR = 3
 MAX_TARGET_FREE = ACCESSORY_SPACE
 
 
@@ -48,12 +56,15 @@ class FlagSetting:
 
 
 @dataclass(frozen=True)
-class WeightSetting:
-    """A standard champion type's weight for a stat."""
+class TypeEdit:
+    """A champion type as its row posts it (what it was made from isn't edited)."""
 
-    key: TypeKey
-    stat: Stat
-    weight: float
+    key: str
+    label: str
+    kind: Kind
+    faction: str | None  # None: any
+    weights: tuple[tuple[Stat, float], ...]
+    mains: Mains
 
 
 def parse_lock(form: Mapping[str, str]) -> int | FormErrors:
@@ -116,21 +127,97 @@ def parse_reserve_rule(form: Mapping[str, str], account: Account) -> ReserveSett
             return ReserveSetting(rule, on)
 
 
-def parse_weight(form: Mapping[str, str]) -> WeightSetting | FormErrors:
-    match form.get("key", "").split(":"):
-        case [type_name, stat] if type_name in TypeKey and stat in Stat:
-            key, weighed = TypeKey(type_name), Stat(stat)
-
-        case _:
-            return FormErrors(["no such weight"])
-
+def parse_champion_type(form: Mapping[str, str], factions: set[str]) -> TypeEdit | FormErrors:
+    """`factions`: those a type may be for (the game's names)."""
     errors: list[str] = []
-    weight = parse_number(form, "weight", "weight", errors)
+    key, label = form.get("type", ""), form.get("label", "").strip()
+    kind, faction = form.get("kind", ""), form.get("faction", "") or None
 
-    if not errors and not 0 <= weight <= MAX_WEIGHT:
-        errors.append(f"weights are 0 to {MAX_WEIGHT}")
+    if not key.isdigit():
+        errors.append("no such champion type")
 
-    return FormErrors(errors) if errors else WeightSetting(key, weighed, weight)
+    if not label:
+        errors.append("a type needs a name")
+
+    if kind not in Kind:
+        errors.append(f"no such kind: {kind}")
+
+    if faction is not None and faction not in factions:
+        errors.append(f"no such faction: {faction}")
+
+    weights = []
+
+    for stat in TYPE_STATS:
+        weight = parse_number(form, f"weight:{stat.value}", stat.name, errors)
+
+        if not 0 <= weight <= MAX_WEIGHT:
+            errors.append(f"weights are 0 to {MAX_WEIGHT}")
+        elif weight:
+            weights.append((stat, weight))
+
+    mains = tuple(
+        (slot, tuple(stat for stat in stats if f"main:{slot.value}:{stat.value}" in form))
+        for slot, stats in ACCESSORY_MAINS
+    )
+
+    if errors:
+        return FormErrors(list(dict.fromkeys(errors)))
+
+    return TypeEdit(key, label, Kind(kind), faction, tuple(weights), mains)
+
+
+@dataclass(frozen=True)
+class SetValue:
+    set_id: int
+    factor: float
+
+
+@dataclass(frozen=True)
+class SetTarget:
+    set_id: int
+    type_key: str
+    on: bool  # targets it; else doesn't
+
+
+def parse_set_value(form: Mapping[str, str]) -> SetValue | FormErrors:
+    errors: list[str] = []
+    text = form.get("set", "")
+
+    if not text.isdigit():
+        errors.append("no such set")
+
+    factor = parse_number(form, "factor", "value", errors, default=1)
+
+    if not 0 <= factor <= MAX_SET_FACTOR:
+        errors.append(f"a set's value is 0 to {MAX_SET_FACTOR}")
+
+    if errors:
+        return FormErrors(errors)
+
+    return SetValue(int(text), factor)
+
+
+def parse_set_target(form: Mapping[str, str], type_keys: set[str]) -> SetTarget | FormErrors:
+    """`type_keys`: every type's."""
+    text, key = form.get("set", ""), form.get("type", "")
+
+    if not text.isdigit():
+        return FormErrors(["no such set"])
+
+    if key not in type_keys:
+        return FormErrors(["that type is gone; reload the page"])
+
+    return SetTarget(int(text), key, "on" in form)
+
+
+def parse_off_target(form: Mapping[str, str]) -> float | FormErrors:
+    errors: list[str] = []
+    share = parse_number(form, "off_target", "off-target share", errors, default=-1)
+
+    if errors or not 0 <= share <= 1:
+        return FormErrors(errors or ["the off-target share is 0 to 1"])
+
+    return share
 
 
 def parse_target_free(form: Mapping[str, str]) -> int | FormErrors:

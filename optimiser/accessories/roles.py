@@ -1,20 +1,28 @@
 """
 roles.py - who would wear an accessory: champion types, what each values and which main stats
-suit them, and which types each set is worn by. The accessory clean-up and the roll and rework
+suit them, and which types each set targets. The accessory clean-up and the roll and rework
 lists value a piece by the best type it suits.
 
-There are standard types for every faction (their weights editable, kept in the store) and
-types of a faction's own, made from what its champions scale off (`scaling`).
+The types are the user's, kept in the store (`settings`): any faction's or one faction's
+only, since accessories are faction-locked. They're seeded with the standard types below and
+the types of a faction's own that its champions' scaling gives (`scaling.seed_types`).
+
+So are the set fits (`SetTable`): each set's value (a multiplier on its pieces') and the
+types it doesn't target, which still count, at `SetTable.off_target` of their score. They're
+seeded from the set roles and meta tiers below (`seed_set_fits`); sets the table doesn't know
+are worth 1 and target every type, and so do new types every set.
 
 - `Kind`, `ChampionType`: a type
-- `TypeKey`, `TYPE_STATS`, `SUPPORT_BALANCE`, `StandardType`, `STANDARD_TYPES`: the standard
-  types
-- `SetRole`, `SET_ROLES`, `DEFAULT_ROLE`, `LOW_VALUE_SETS`, `NO_SET`, `ROLE_KINDS`: who wears
-  each set
-- `set_role`, `crit_amulet_on_support_set`: a set's role, and its one exception
-- `Tier`, `SET_TIERS`, `NO_SET_FACTOR`, `set_factor`: what the meta makes of each set
-- `standard_types`: the standard types, with the stored weights over the defaults
-- `types_for`: the types an accessory could be for
+- `TYPE_STATS`, `ACCESSORY_MAINS`, `SUPPORT_BALANCE`: what a type can weigh and suit
+- `TypeKey`, `StandardType`, `SUPPORT_WEIGHTS`, `STANDARD_TYPES`: the standard types, as
+  the seed has them
+- `SetRole`, `SET_ROLES`, `DEFAULT_ROLE`, `ROLE_KINDS`, `Tier`, `SET_TIERS`, `NO_SET_FACTOR`:
+  who wears each set and what the meta makes of it, as the seed has them
+- `SetFit`, `SetTable`, `DEFAULT_FIT`, `OFF_TARGET`, `seed_set_fits`: the sets as the user
+  rates them
+- `LOW_VALUE_SETS`, `NO_SET`: sets apart
+- `crit_amulet_exception`: the one exception to a set's targets
+- `type_fits`: what each type counts for on an accessory
 - `group_quota`: how many of a group to keep
 """
 
@@ -37,17 +45,23 @@ type Mains = tuple[tuple[Slot, tuple[Stat, ...]], ...]  # the main stats that su
 @dataclass(frozen=True)
 class ChampionType:
     """What a kind of champion values in an accessory, per stat, in average 6★ rolls (flat
-    and % together), and the main stats that suit them. `faction` is set on a faction's own
-    types (`champions` names who it's made from). Hashable, so scores can be cached."""
+    and % together), and the main stats that suit them. `faction` (the game's name) is set on
+    a faction's own types; `champions` names who a seeded one was made from. Hashable, so
+    scores can be cached."""
 
     key: str
     label: str
     kind: Kind
     weights: tuple[tuple[Stat, float], ...]
     mains: Mains
-    balance: float = 0  # weight on the lesser of HP and DEF, for supports
     faction: str | None = None
     champions: tuple[str, ...] = ()
+
+    @property
+    def balance(self) -> float:
+        """Weight on the lesser of HP and DEF: supports that weigh both want them together."""
+        both = self.weight(Stat.HP) and self.weight(Stat.DEF)
+        return SUPPORT_BALANCE if self.kind is Kind.SUPPORT and both else 0
 
     def weight(self, stat: Stat) -> float:
         return dict(self.weights).get(stat, 0)
@@ -63,16 +77,22 @@ class TypeKey(StrEnum):
     HP_DAMAGE = "hp_damage"
     DEF_DAMAGE = "def_damage"
     DEBUFFER = "debuffer"
-    SUPPORT = "support"
+    SUPPORT_ACC = "support_acc"
+    SUPPORT_RES = "support_res"
 
 
 TYPE_STATS = (Stat.SPD, Stat.ATK, Stat.HP, Stat.DEF, Stat.CD, Stat.ACC, Stat.RES)
+ACCESSORY_MAINS: Mains = (  # the main stats each accessory slot rolls
+    (Slot.RING, (Stat.ATK, Stat.HP, Stat.DEF)),
+    (Slot.AMULET, (Stat.CD, Stat.ATK, Stat.HP, Stat.DEF)),
+    (Slot.BANNER, (Stat.ACC, Stat.RES, Stat.ATK, Stat.HP, Stat.DEF)),
+)
 SUPPORT_BALANCE = 2  # supports want HP and DEF together: this much again of the lesser one
 
 
 @dataclass(frozen=True)
 class StandardType:
-    """A standard type as it ships: its default weights (the store's go over them)."""
+    """A standard type as the seed has it."""
 
     label: str
     kind: Kind
@@ -80,11 +100,17 @@ class StandardType:
     mains: Mains
 
 
+# What a support wants, ACC and RES alike (a faction's own supports start from it); the
+# standard supports are split by which of the two they want.
+SUPPORT_WEIGHTS = {Stat.SPD: 5, Stat.ACC: 4, Stat.RES: 4, Stat.HP: 2, Stat.DEF: 2}
+
+# Damage dealers want ACC 3: nearly all (119 of 144 non-support 6★ forms, 2026-11) place debuffs or
+# take turn meter, and those that don't lose nothing by it (a piece scores as its best type).
 STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.ATK_DAMAGE: StandardType(
         "ATK damage",
         Kind.DAMAGE,
-        {Stat.ATK: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.HP: 0.5, Stat.DEF: 0.5},
+        {Stat.ATK: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3, Stat.HP: 0.5, Stat.DEF: 0.5},
         (
             (Slot.RING, (Stat.ATK,)),
             (Slot.AMULET, (Stat.CD,)),
@@ -94,7 +120,7 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.HP_DAMAGE: StandardType(
         "HP damage",
         Kind.DAMAGE,
-        {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.DEF: 0.5},
+        {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3, Stat.DEF: 0.5},
         (
             (Slot.RING, (Stat.HP,)),
             (Slot.AMULET, (Stat.CD,)),
@@ -104,7 +130,7 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.DEF_DAMAGE: StandardType(
         "DEF damage",
         Kind.DAMAGE,
-        {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 1, Stat.HP: 0.5},
+        {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3, Stat.HP: 0.5},
         (
             (Slot.RING, (Stat.DEF,)),
             (Slot.AMULET, (Stat.CD,)),
@@ -123,15 +149,24 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
             (Slot.BANNER, (Stat.ACC, Stat.ATK)),
         ),
     ),
-    # ACC and RES alike: a banner's main stat for supports is one or the other.
-    TypeKey.SUPPORT: StandardType(
-        "Support",
+    TypeKey.SUPPORT_ACC: StandardType(
+        "Support ACC",
         Kind.SUPPORT,
-        {Stat.SPD: 5, Stat.ACC: 4, Stat.RES: 4, Stat.HP: 2, Stat.DEF: 2},
+        {**SUPPORT_WEIGHTS, Stat.RES: 0},
         (
             (Slot.RING, (Stat.HP, Stat.DEF)),
             (Slot.AMULET, (Stat.HP, Stat.DEF)),
-            (Slot.BANNER, (Stat.ACC, Stat.RES, Stat.HP, Stat.DEF)),
+            (Slot.BANNER, (Stat.ACC, Stat.HP, Stat.DEF)),
+        ),
+    ),
+    TypeKey.SUPPORT_RES: StandardType(
+        "Support RES",
+        Kind.SUPPORT,
+        {**SUPPORT_WEIGHTS, Stat.ACC: 0},
+        (
+            (Slot.RING, (Stat.HP, Stat.DEF)),
+            (Slot.AMULET, (Stat.HP, Stat.DEF)),
+            (Slot.BANNER, (Stat.RES, Stat.HP, Stat.DEF)),
         ),
     ),
 }
@@ -195,62 +230,95 @@ ROLE_KINDS = {
     SetRole.SUPPORT: (Kind.SUPPORT,),
     SetRole.ANY: (Kind.DAMAGE, Kind.SUPPORT),
 }
+OFF_TARGET = 0.5  # until the user sets it
 KEEP = 2  # of each group, unless `group_quota` says less
 
 
-def set_role(set_id: int) -> SetRole:
-    """Sets released since the table was written default to Hybrid."""
-    return SET_ROLES.get(set_id, DEFAULT_ROLE)
+@dataclass(frozen=True)
+class SetFit:
+    """A set as the user rates it: what its pieces are worth against an average set's, and
+    the keys of the types it doesn't target."""
+
+    factor: float
+    off: frozenset[str] = frozenset()
 
 
-def crit_amulet_on_support_set(set_id: int, slot: Slot, main: Stat) -> bool:
-    """Support sets still keep a C.DMG amulet: some bosses' mechanics turn on crits."""
-    return set_role(set_id) is SetRole.SUPPORT and slot is Slot.AMULET and main is Stat.CD
+DEFAULT_FIT = SetFit(1.0)  # sets the table doesn't know
 
 
-def set_factor(set_id: int) -> float:
-    """What a set's pieces are worth against an average set's: its meta tier, or the
-    set-less discount."""
-    if set_id == NO_SET:
-        return NO_SET_FACTOR
+@dataclass(frozen=True)
+class SetTable:
+    """Every set's fit, and the share of its score a type counts for on a set that doesn't
+    target it. Hashable, so scores can be cached."""
 
-    return tier.factor if (tier := SET_TIERS.get(set_id)) else 1.0
+    fits: tuple[tuple[int, SetFit], ...]  # by set id
+    off_target: float
 
+    def fit(self, set_id: int) -> SetFit:
+        return dict(self.fits).get(set_id, DEFAULT_FIT)
 
-def standard_types(stored: dict[TypeKey, dict[Stat, float]]) -> tuple[ChampionType, ...]:
-    """The default weights, with the stored ones over them."""
-    return tuple(
-        ChampionType(
-            key=key.value,
-            label=standard.label,
-            kind=standard.kind,
-            weights=tuple({**standard.weights, **stored.get(key, {})}.items()),
-            mains=standard.mains,
-            balance=SUPPORT_BALANCE if key is TypeKey.SUPPORT else 0,
-        )
-        for key, standard in STANDARD_TYPES.items()
-    )
+    def factor(self, set_id: int) -> float:
+        return self.fit(set_id).factor
+
+    def targets(self, set_id: int, champion_type: ChampionType) -> bool:
+        return champion_type.key not in self.fit(set_id).off
+
+    def kinds(self, set_id: int, types: tuple[ChampionType, ...]) -> set[Kind]:
+        """The kinds of the types the set targets."""
+        return {t.kind for t in types if self.targets(set_id, t)}
 
 
-def types_for(
-    set_id: int, slot: Slot, main: Stat, faction: str | None, types: tuple[ChampionType, ...]
-) -> tuple[str, ...]:
-    """Keys of the types the set is worn by, of everyone or the piece's faction, whose main
-    stats include this one."""
-    kinds = ROLE_KINDS[set_role(set_id)]
-
-    if crit_amulet_on_support_set(set_id, slot, main):
-        kinds = (Kind.DAMAGE,)
-
-    return tuple(
-        t.key
-        for t in types
-        if t.kind in kinds and t.faction in (None, faction) and t.suits(slot, main)
-    )
+def seed_set_fits(types: tuple[ChampionType, ...]) -> dict[int, SetFit]:
+    """From the set roles and meta tiers: a set doesn't target the types of a kind its role
+    isn't worn by."""
+    set_ids = sorted({*SET_ROLES, *SET_TIERS})
+    return {set_id: seed_fit(set_id, types) for set_id in set_ids}
 
 
-def group_quota(set_id: int, slot: Slot, main: Stat) -> int:
-    if set_id in LOW_VALUE_SETS or crit_amulet_on_support_set(set_id, slot, main):
+def seed_fit(set_id: int, types: tuple[ChampionType, ...]) -> SetFit:
+    kinds = ROLE_KINDS[SET_ROLES.get(set_id, DEFAULT_ROLE)]
+    tier = SET_TIERS.get(set_id)
+    factor = NO_SET_FACTOR if set_id == NO_SET else tier.factor if tier else 1.0
+    return SetFit(factor, frozenset(t.key for t in types if t.kind not in kinds))
+
+
+def crit_amulet_exception(
+    sets: SetTable, types: tuple[ChampionType, ...], set_id: int, slot: Slot, main: Stat
+) -> bool:
+    """A set that targets no damage type still keeps a C.DMG amulet, counted in full for
+    damage types: some bosses' mechanics turn on crits."""
+    return slot is Slot.AMULET and main is Stat.CD and Kind.DAMAGE not in sets.kinds(set_id, types)
+
+
+def type_fits(
+    sets: SetTable,
+    types: tuple[ChampionType, ...],
+    set_id: int,
+    slot: Slot,
+    main: Stat,
+    faction: str | None,
+) -> tuple[float, ...]:
+    """Per type (in `types` order), the share of its score it counts for on an accessory: 0
+    unless it's of everyone or the piece's faction and the main stat suits it; then 1 if the
+    set targets it, else the table's `off_target`."""
+    crit = crit_amulet_exception(sets, types, set_id, slot, main)
+
+    def fit(champion_type: ChampionType) -> float:
+        if champion_type.faction not in (None, faction) or not champion_type.suits(slot, main):
+            return 0.0
+
+        if sets.targets(set_id, champion_type) or (crit and champion_type.kind is Kind.DAMAGE):
+            return 1.0
+
+        return sets.off_target
+
+    return tuple(fit(t) for t in types)
+
+
+def group_quota(
+    sets: SetTable, types: tuple[ChampionType, ...], set_id: int, slot: Slot, main: Stat
+) -> int:
+    if set_id in LOW_VALUE_SETS or crit_amulet_exception(sets, types, set_id, slot, main):
         return 1
 
     return KEEP

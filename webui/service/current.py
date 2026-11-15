@@ -1,20 +1,16 @@
 """
 current.py - the state the pages read: the account (reparsed only when `just read` writes a
-new snapshot), the game's enemies, the champion locks, the reserve rules, and the roster's
-faction types.
+new snapshot), the game's enemies, the champion locks and the reserve rules.
 
 - `current_account`, `snapshot_mtime`, `load_for`: the account, reloaded when a new snapshot lands
 - `current_enemies`, `enemies_for`: the game's enemies, reloaded after a game update
 - `current_effect_sources`, `effect_sources_for`: the sets' and relics' skills, likewise
 - `current_locks`: champion locks, kept in the store
 - `current_reserve_rules`: what reserves gear, kept in the store
-- `roster_types`: the roster's faction types (cached)
 """
 
 from functools import lru_cache
 
-from optimiser.accessories.roles import ChampionType
-from optimiser.accessories.scaling import faction_types
 from optimiser.account import Account, Locks, load_account
 from optimiser.enemies import Enemies, load_enemies
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT, STORE
@@ -64,9 +60,3 @@ def current_locks() -> Locks:
 
 def current_reserve_rules() -> tuple[Rule, ...]:
     return read_reserve_rules(STORE)
-
-
-@lru_cache(maxsize=1)
-def roster_types(snapshot_mtime: int) -> tuple[ChampionType, ...]:
-    """The faction types of the account's roster; the mtime is only the cache key."""
-    return faction_types(load_for(snapshot_mtime))

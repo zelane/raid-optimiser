@@ -30,8 +30,8 @@ class Flag(StrEnum):
 
 FLAG_LABELS = {
     Flag.CHAMPION_LEVEL: "Champion at the top level of their rank",
-    Flag.GEAR_LEVEL: "Gear at +16 (main stat only; substat rolls can't be foreseen)",
-    Flag.ASCENSION: "Ascended gear fully ascended (gear never ascended has no bonus yet)",
+    Flag.GEAR_LEVEL: "Gear at +16",
+    Flag.ASCENSION: "Ascended gear fully ascended",
 }
 
 

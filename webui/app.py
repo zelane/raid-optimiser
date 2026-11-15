@@ -5,7 +5,8 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `app`, `templates`: the FastAPI app and its Jinja templates (uncached: edits show at once)
 - `index`, `champion_list`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
-  `accessory_weight`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
+  `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
+  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
   `chimera`, `teams`, `targets`, `finder`, `info`, `sync`: the routes
 - `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
@@ -40,15 +41,18 @@ from webui.forms.settings import (
     FlagSetting,
     GlyphPlan,
     ReserveSetting,
-    WeightSetting,
+    TypeEdit,
+    parse_champion_type,
     parse_flag,
     parse_glyph,
     parse_lock,
+    parse_off_target,
     parse_protect,
     parse_reserve_rule,
     parse_sell,
+    parse_set_target,
+    parse_set_value,
     parse_target_free,
-    parse_weight,
 )
 from webui.forms.targets import TargetQuery, parse_target_query
 from webui.forms.team import Offers
@@ -110,6 +114,20 @@ def index(request: Request):
         current.current_account(), current.current_locks(), ""
     )
     return templates.TemplateResponse(request, "index.html", {"champions": champions})
+
+
+@app.get("/palette", response_class=HTMLResponse)
+def palette(request: Request):
+    """The theme's colours and the shared components, for checking the palette in place."""
+    listed = champion_pages.search_champions(current.current_account(), current.current_locks(), "")
+    by_rarity = {}
+
+    for row in listed:
+        by_rarity.setdefault(row.champion.rarity, row.champion)
+
+    return templates.TemplateResponse(
+        request, "palette.html", {"champions": list(by_rarity.values())}
+    )
 
 
 @app.get("/champions", response_class=HTMLResponse)
@@ -197,17 +215,79 @@ def accessories(request: Request, tab: str = accessory_pages.ACCESSORY_TABS[0]):
     return templates.TemplateResponse(request, "accessories.html", {"page": page})
 
 
-@app.post("/accessories/weights", response_class=HTMLResponse)
-async def accessory_weight(request: Request):
-    form = await read_form(request)
+WEIGHTS_TAB = "/accessories?tab=weights"
+SAVED = '<small class="up">Saved: the lists re-plan with it.</small>'
 
-    match parse_weight(form):
+
+@app.post("/accessories/types", response_class=HTMLResponse)
+async def accessory_type(request: Request):
+    """A type's row, saved whole on each change."""
+    account, form = current.current_account(), await read_form(request)
+
+    match parse_champion_type(form, accessory_pages.type_factions(account)):
         case FormErrors() as errors:
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
-        case WeightSetting(key=key, stat=stat, weight=weight):
-            accessory_pages.change_type_weight(key, stat, weight)
-            return HTMLResponse('<small class="up">Saved: the lists re-plan with it.</small>')
+        case TypeEdit() as edit if accessory_pages.save_type(account, edit):
+            return HTMLResponse(SAVED)
+
+        case TypeEdit():
+            errors = FormErrors(["that type is gone; reload the page"])
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+
+@app.post("/accessories/types/add")
+def add_accessory_type():
+    accessory_pages.add_type()
+    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+
+
+@app.post("/accessories/types/{key}/copy")
+def copy_accessory_type(key: str):
+    accessory_pages.copy_type(current.current_account(), key)
+    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+
+
+@app.post("/accessories/types/{key}/delete")
+def delete_accessory_type(key: str):
+    accessory_pages.delete_type(key)
+    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+
+
+@app.post("/accessories/sets/value", response_class=HTMLResponse)
+async def accessory_set_value(request: Request):
+    match parse_set_value(await read_form(request)):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case value:
+            accessory_pages.save_set_value(current.current_account(), value.set_id, value.factor)
+            return HTMLResponse(SAVED)
+
+
+@app.post("/accessories/sets/target", response_class=HTMLResponse)
+async def accessory_set_target(request: Request):
+    account, form = current.current_account(), await read_form(request)
+    type_keys = {t.key for t in accessory_pages.current_types(account)}
+
+    match parse_set_target(form, type_keys):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case target:
+            accessory_pages.save_set_target(account, target.set_id, target.type_key, target.on)
+            return HTMLResponse(SAVED)
+
+
+@app.post("/accessories/off-target", response_class=HTMLResponse)
+async def accessory_off_target(request: Request):
+    match parse_off_target(await read_form(request)):
+        case FormErrors() as errors:
+            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+
+        case share:
+            accessory_pages.save_off_target(share)
+            return HTMLResponse(SAVED)
 
 
 @app.post("/accessories/target", response_class=HTMLResponse)

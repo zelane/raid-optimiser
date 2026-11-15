@@ -2,7 +2,9 @@
 scaling.py - what the roster's 6★ champions scale off, and the champion types of a faction's
 own that come of it. Accessories are faction-locked, so a faction whose damage dealers scale
 off two stats (Rotos: 2.1·ATK + 0.19·HP) or whose supports heal and shield off ATK wants
-pieces the standard types (`roles`) undervalue.
+pieces the standard types (`roles`) undervalue. The types are the user's once seeded
+(`seed_types`: the standard ones and these), so this only seeds them, and `scaling_report`
+(`just exceptions`) reads the roster with it.
 
 A formula's pull on a stat is how much one roll of it adds (a % roll of the champion's base
 for ATK/HP/DEF, a flat roll for ACC/RES/SPD), at typical geared stats; a champion's pull
@@ -19,6 +21,7 @@ find what needs one.
 - `TYPICAL`, `GEARED`, `MIXED`, `MINOR`: what's typical, and what counts as a second stat
 - `Wearer`, `Pull`: a champion in one form, and what it pulls on
 - `Skip`, `Weigh`, `Override`, `OVERRIDES`: exceptions, by champion name and form
+- `seed_types`: the standard types and the roster's
 - `faction_types`: the roster's types
 - `wearers`, `wearer_type`, `wearer_pull`, `formula_pull`, `evaluate`, `own_type`,
   `damage_type`, `support_type`, `build_type`, `type_label`, `round_weight`: its steps
@@ -31,7 +34,7 @@ from dataclasses import dataclass, replace
 from optimiser.accessories.potential import ROLL_6
 from optimiser.accessories.roles import (
     STANDARD_TYPES,
-    SUPPORT_BALANCE,
+    SUPPORT_WEIGHTS,
     TYPE_STATS,
     ChampionType,
     Kind,
@@ -117,12 +120,75 @@ GHAROL = Weigh(
     " formula of his reads",
 )
 
+KUROSA = Weigh(
+    label="ATK+ACC support",
+    kind=Kind.SUPPORT,
+    weights={Stat.SPD: 5, Stat.ATK: 4, Stat.ACC: 4},
+    mains=(
+        (Slot.RING, (Stat.ATK,)),
+        (Slot.AMULET, (Stat.ATK,)),
+        (Slot.BANNER, (Stat.ACC, Stat.ATK)),
+    ),
+    reason="heals and shields off ATK and needs ACC for her debuffs; HP, DEF and RES do"
+    " nothing for her (the user's call)",
+)
+
+JOAN_MAINS: Mains = (
+    (Slot.RING, (Stat.ATK,)),
+    (Slot.AMULET, (Stat.CD, Stat.ATK)),
+    (Slot.BANNER, (Stat.RES, Stat.ATK)),
+)
+JOAN_REASON = (
+    "always wants RES (her hits add a little RES, and a high-RES support or damage dealer is"
+    " strong in arena: stacking it costs her nothing; the user's call)"
+)
+JOAN_SUPPORT = Weigh(
+    label="ATK+RES support",
+    kind=Kind.SUPPORT,
+    weights={Stat.SPD: 5, Stat.ATK: 4, Stat.RES: 4, Stat.CD: 3},
+    mains=JOAN_MAINS,
+    reason=JOAN_REASON,
+)
+JOAN_DAMAGE = Weigh(
+    label="ATK+RES damage",
+    kind=Kind.DAMAGE,
+    weights={Stat.ATK: 5, Stat.CD: 5, Stat.SPD: 4, Stat.RES: 4, Stat.ACC: 2},
+    mains=JOAN_MAINS,
+    reason=JOAN_REASON,
+)
+
 OVERRIDES: dict[tuple[str, int], Override] = {
     ("Gharol Bloodmaul", 1): GHAROL,
     ("Gharol Bloodmaul", 2): GHAROL,
+    ("Joan the Luminant", 1): JOAN_SUPPORT,
+    ("Joan the Luminant", 2): JOAN_DAMAGE,
+    ("Kurosa the Covetous", 1): KUROSA,
     ("Nais the Shadowthief", 1): Skip("geared for form 2 (HP); form 1's HP+ATK mix doesn't count"),
     ("Toshiro the Bloody", 2): Skip("geared for form 1 (ATK+HP); form 2 is standard HP anyway"),
 }
+
+
+def seed_types(
+    account: Account, edited: dict[TypeKey, dict[Stat, float]]
+) -> tuple[ChampionType, ...]:
+    """The standard types (with the weights the user had `edited`) for every faction, then
+    the roster's faction types (keys are the store's to give: these are the types' shapes)."""
+    standard = tuple(
+        ChampionType(
+            key=key.value,
+            label=it.label,
+            kind=it.kind,
+            weights=tuple(
+                (stat, weight)
+                for stat in TYPE_STATS
+                if (weight := {**it.weights, **edited.get(key, {})}.get(stat))
+            ),
+            mains=it.mains,
+        )
+        for key, it in STANDARD_TYPES.items()
+    )
+    roster = sorted(faction_types(account), key=lambda t: (t.faction or "", t.label))
+    return (*standard, *roster)
 
 
 def faction_types(account: Account) -> tuple[ChampionType, ...]:
@@ -309,7 +375,7 @@ def support_type(wearer: Wearer, pull: dict[Stat, float]) -> ChampionType | None
     if leading in (Stat.HP, Stat.DEF):
         return None
 
-    weights = dict(STANDARD_TYPES[TypeKey.SUPPORT].weights)
+    weights = dict(SUPPORT_WEIGHTS)
 
     for stat, share in pull.items():
         if share >= MINOR:
@@ -335,7 +401,6 @@ def build_type(
         kind=kind,
         weights=ordered,
         mains=tuple((slot, tuple(dict.fromkeys(stats))) for slot, stats in mains),
-        balance=SUPPORT_BALANCE if kind is Kind.SUPPORT else 0,
         faction=wearer.champion.faction,
         champions=(wearer.name(),),
     )

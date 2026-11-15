@@ -12,14 +12,18 @@ have no row.
 Settings are named flags ("max_gear_level"), on when they have a row; `optimiser.assume`
 names them.
 
-Type weights are what `optimiser.accessories.roles` values a stat at for a champion type,
-keyed by the type's and the stat's names (opaque here); weights left at their default have no
-row. Reserve rules say what gear is kept for something else (`optimiser.reserve` names them;
-opaque here), in the order they were added. Protected pieces are accessories the clean-up must
-never drop. Numbers are named settings with a value ("target_free"); unset ones have no row.
+Champion types are what `optimiser.accessories.roles` values accessories by, each a JSON
+record (opaque here) under an id. They're seeded once (`seeded` names what has been), so a
+user who deletes them all doesn't get them back; the seed takes over the per-stat weights the
+old `type_weights` table kept, which then goes. Set fits are how the user rates each
+accessory set (a JSON record per set id, opaque here: its value and the types it doesn't
+target), seeded once the same way. Reserve rules say what gear is kept for
+something else (`optimiser.reserve` names them; opaque here), in the order they were added.
+Protected pieces are accessories the clean-up must never drop. Numbers are named settings
+with a value ("target_free"); unset ones have no row.
 
-`optimiser.settings` reads the flags, glyphs, weights and reserve rules back as the model's
-types.
+`optimiser.settings` reads the flags, glyphs, champion types, set fits and reserve rules back as the
+model's types.
 
 A run is a solve as a front end asked and showed it: the form it was asked with and what it
 found, both JSON the front end writes and reads (opaque here), with a summary for listings.
@@ -29,7 +33,9 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `read_locks`, `write_lock`: locks
 - `read_glyphs`, `write_glyph`: glyphs
 - `read_flags`, `write_flag`: settings
-- `WeightKey`, `read_weights`, `write_weight`: champion type weights
+- `CHAMPION_TYPES`, `read_types`, `seed_types`, `add_type`, `write_type`, `delete_type`:
+  champion types; `WeightKey`, `read_old_weights`: what the seed takes over
+- `SET_FITS`, `read_set_fits`, `seed_set_fits`, `write_set_fit`: set fits
 - `read_reserve_rules`, `write_reserve_rule`: reserve rules
 - `read_protected`, `write_protected`: protected accessories
 - `read_number`, `write_number`: numeric settings
@@ -93,11 +99,14 @@ SCHEMA = (
     )""",
     "CREATE TABLE IF NOT EXISTS flags (name TEXT PRIMARY KEY)",
     "DROP TABLE IF EXISTS accessory_weights",  # per main stat: replaced by type weights
-    """CREATE TABLE IF NOT EXISTS type_weights (
-        type TEXT NOT NULL,
-        stat TEXT NOT NULL,
-        weight REAL NOT NULL,
-        PRIMARY KEY (type, stat)
+    """CREATE TABLE IF NOT EXISTS champion_types (
+        id INTEGER PRIMARY KEY,
+        record TEXT NOT NULL  -- JSON
+    )""",
+    "CREATE TABLE IF NOT EXISTS seeded (name TEXT PRIMARY KEY)",
+    """CREATE TABLE IF NOT EXISTS set_fits (
+        set_id INTEGER PRIMARY KEY,
+        record TEXT NOT NULL  -- JSON
     )""",
     "CREATE TABLE IF NOT EXISTS reserve_rules (key TEXT PRIMARY KEY)",
     "CREATE TABLE IF NOT EXISTS protected_artifacts (artifact_id INTEGER PRIMARY KEY)",
@@ -164,23 +173,112 @@ def write_flag(path: Path, name: str, on: bool) -> None:
     write_member(path, "flags", "name", name, on)
 
 
-def read_weights(path: Path) -> dict[WeightKey, float]:
+CHAMPION_TYPES = "champion_types"  # as `seeded` names it
+
+
+def read_types(path: Path) -> dict[int, dict] | None:
+    """Id -> record, oldest first; None until seeded."""
+    if not path.exists():
+        return None
+
+    with connect(path) as db:
+        if not db.execute("SELECT 1 FROM seeded WHERE name = ?", (CHAMPION_TYPES,)).fetchone():
+            return None
+
+        rows = db.execute("SELECT id, record FROM champion_types ORDER BY id").fetchall()
+
+    return {type_id: json.loads(record) for type_id, record in rows}
+
+
+def seed_types(path: Path, records: list[dict]) -> None:
+    """Once: later calls change nothing. Drops the old weights table it replaces."""
+    with connect(path) as db:
+        if db.execute("SELECT 1 FROM seeded WHERE name = ?", (CHAMPION_TYPES,)).fetchone():
+            return
+
+        db.executemany(
+            "INSERT INTO champion_types (record) VALUES (?)",
+            [(json.dumps(record),) for record in records],
+        )
+        db.execute("INSERT INTO seeded (name) VALUES (?)", (CHAMPION_TYPES,))
+        db.execute("DROP TABLE IF EXISTS type_weights")
+
+
+def add_type(path: Path, record: dict) -> int:
+    with connect(path) as db:
+        cursor = db.execute("INSERT INTO champion_types (record) VALUES (?)", (json.dumps(record),))
+        return cursor.lastrowid or 0
+
+
+def write_type(path: Path, type_id: int, record: dict) -> None:
+    with connect(path) as db:
+        db.execute(
+            "UPDATE champion_types SET record = ? WHERE id = ?", (json.dumps(record), type_id)
+        )
+
+
+def delete_type(path: Path, type_id: int) -> None:
+    with connect(path) as db:
+        db.execute("DELETE FROM champion_types WHERE id = ?", (type_id,))
+
+
+SET_FITS = "set_fits"  # as `seeded` names it
+
+
+def read_set_fits(path: Path) -> dict[int, dict] | None:
+    """Set id -> record; None until seeded."""
+    if not path.exists():
+        return None
+
+    with connect(path) as db:
+        if not db.execute("SELECT 1 FROM seeded WHERE name = ?", (SET_FITS,)).fetchone():
+            return None
+
+        rows = db.execute("SELECT set_id, record FROM set_fits ORDER BY set_id").fetchall()
+
+    return {set_id: json.loads(record) for set_id, record in rows}
+
+
+def seed_set_fits(path: Path, records: dict[int, dict]) -> None:
+    """Once: later calls change nothing."""
+    with connect(path) as db:
+        if db.execute("SELECT 1 FROM seeded WHERE name = ?", (SET_FITS,)).fetchone():
+            return
+
+        db.executemany(
+            "INSERT INTO set_fits (set_id, record) VALUES (?, ?)",
+            [(set_id, json.dumps(record)) for set_id, record in records.items()],
+        )
+        db.execute("INSERT INTO seeded (name) VALUES (?)", (SET_FITS,))
+
+
+def write_set_fit(path: Path, set_id: int, record: dict) -> None:
+    """Adds the set's row if it has none (a set the seed didn't know)."""
+    with connect(path) as db:
+        db.execute(
+            "INSERT INTO set_fits (set_id, record) VALUES (?, ?)"
+            " ON CONFLICT (set_id) DO UPDATE SET record = excluded.record",
+            (set_id, json.dumps(record)),
+        )
+
+
+def read_old_weights(path: Path) -> dict[WeightKey, float]:
+    """What the old `type_weights` table holds (the standard types' edited weights); {} once
+    it's gone."""
     if not path.exists():
         return {}
 
     with connect(path) as db:
+        exists = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'type_weights'"
+        ).fetchone()
+
+        if not exists:
+            return {}
+
         rows = db.execute("SELECT type, stat, weight FROM type_weights").fetchall()
 
     return {(type_name, stat): weight for type_name, stat, weight in rows}
-
-
-def write_weight(path: Path, key: WeightKey, weight: float) -> None:
-    with connect(path) as db:
-        db.execute(
-            "INSERT INTO type_weights (type, stat, weight) VALUES (?, ?, ?)"
-            " ON CONFLICT (type, stat) DO UPDATE SET weight = excluded.weight",
-            (*key, weight),
-        )
 
 
 def read_reserve_rules(path: Path) -> list[str]:

@@ -49,7 +49,7 @@
   --panel-bg: var(--pico-card-background-color);
   --panel-border: var(--pico-muted-border-color);
   --inset-bg: var(--pico-background-color);
-  --panel-radius: 0.5rem;
+  --panel-radius: 0.2rem;
   --tertiary: var(--m-tertiary, var(--accent));
   /* The text colour as the page sets it: Pico redefines --pico-color inside links and
      buttons, but this is resolved here, once. */
@@ -163,7 +163,7 @@ fieldset.panel > legend + * { clear: both; }
   text-decoration: none; cursor: pointer; transition: border-color 0.15s, background-color 0.15s;
 }
 .chip:hover { border-color: color-mix(in srgb, var(--pico-secondary) 60%, transparent); }
-.chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--inset-bg)); }
+.chip.on, .chip:has(:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--inset-bg)); }
 .chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .chip:has(:focus-visible) { outline: 1px solid var(--accent); outline-offset: 2px; }
 
@@ -691,9 +691,43 @@ table.glyphs select.is-planned { border-color: var(--accent); }
 /* --- Accessories ------------------------------------------------------------------ */
 
 table.weights { width: auto; }
-table.weights th, table.weights td { padding: 0.25rem 0.35rem; text-align: center; }
+table.weights th, table.weights td { padding: 0.25rem 0.3rem; text-align: center; }
 table.weights tbody th { text-align: left; }
-table.weights input { width: 3.75rem; padding: 0.15rem 0.3rem; height: auto; text-align: right; }
+table.weights tbody + tbody > tr:first-child > * { border-top: 1px solid var(--panel-border); }
+table.weights tbody > tr > * { border-bottom: 0; }
+table.weights input[type="number"] { width: 3.25rem; padding: 0.15rem 0.3rem; height: auto; text-align: right; }
+table.weights input[type="text"] { width: 12rem; padding: 0.15rem 0.4rem; height: auto; }
+table.weights select { width: auto; padding: 0.15rem 1.8rem 0.15rem 0.4rem; height: auto; }
+table.weights .type-detail > * { padding-block: 0 0.45rem; text-align: left; vertical-align: top; }
+table.weights .type-from { max-width: 12rem; color: var(--pico-muted-color); font-size: 0.78rem; }
+.type-mains { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1.25rem; }
+.type-slot { display: flex; align-items: center; gap: 0.25rem; }
+.type-slot .caps { margin-inline-end: 0.15rem; }
+.chip.mini { padding: 0.05rem 0.45rem; font-size: 0.72rem; }
+.type-actions { display: flex; flex-direction: column; gap: 0.3rem; }
+.type-actions button { width: 100%; padding: 0.15rem 0.5rem; font-size: 0.75rem; }
+.type-add { display: flex; align-items: center; gap: 1rem; }
+.off-target { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-bottom: 0.75rem; }
+.off-target input { display: inline-block; width: 4.5rem; margin: 0 0.4rem; padding: 0.15rem 0.3rem; height: auto; }
+.off-target p { margin: 0; }
+table.set-grid { width: auto; }
+table.set-grid th, table.set-grid td { padding: 0.2rem 0.2rem; text-align: center; }
+table.set-grid tr > :first-child {
+  position: sticky; left: 0; z-index: 1; padding-inline: 0.5rem; background: var(--inset-bg); text-align: left;
+  white-space: nowrap;
+}
+table.set-grid .set-name { vertical-align: bottom; }
+table.set-grid .set-name span { display: inline-block; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; }
+table.set-grid .set-values input[type="number"] {
+  width: 2.4rem; margin: 0; padding: 0.1rem; height: auto; font-size: 0.8rem; text-align: center;
+  appearance: textfield; -moz-appearance: textfield;
+}
+table.set-grid .set-values input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+table.set-grid .set-group th { padding-top: 0.75rem; color: var(--accent); font-size: 0.75rem; letter-spacing: 0.06em; }
+table.set-grid tbody th { font-weight: 400; }
+table.set-grid tbody th small { color: var(--pico-muted-color); }
+table.set-grid input[type="checkbox"] { margin: 0; }
+table.set-grid tbody tr:not(.set-group):hover > * { background: color-mix(in srgb, var(--accent) 7%, var(--inset-bg)); }
 .table-well + h2, .table-well + .hint + h2 { margin-top: 2rem; }
 .cleanup-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: 0.75rem; margin: 1rem 0; }
 .cleanup-summary article { display: flex; flex-direction: column; padding: 0.75rem 1rem; }

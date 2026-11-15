@@ -1,51 +1,61 @@
 """
 accessories.py - the accessories pages: swaps, the roll and rework lists, the clean-up, and
-the champion type weights. Scoring every accessory's potential is the slow part, so the
-potentials are cached per snapshot and type weights (not locks), and kept on disk per piece
-(`scores`).
+the champion types and set fits. Scoring every accessory's potential is the slow part, so
+the potentials are cached per snapshot, types and set fits (not locks), and kept on disk per
+piece (`scores`).
 
-- `WeightCell`, `WeightRow`, `FactionTypeRow`, `SetTierRow`, `WeightTable`, `AccessoryRow`,
+- `WeightCell`, `MainOption`, `MainsCell`, `TypeRow`, `Choice`, `SetColumn`, `TargetRow`,
+  `TargetGroup`, `SetGrid`, `WeightTable`,
+  `AccessoryRow`,
   `DropRow`, `CandidateRow`, `SwapRow`, `SwapGroup`, `SetSummary`, `CleanupView`,
   `EnhanceView`, `AccessoriesPage`, `RowContext`: the views
-- `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`: their shape
+- `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`, `TARGET_LABELS`: their shape
 - `accessories_page`, `cleanup_page`, `set_target_free`, `protect_accessory`,
-  `change_type_weight`, `pieces_to_sell`: what the pages ask for
-- `current_assessment` (`potentials_for`, cached), `current_plan`, `current_target_free`: the
-  state they're made from
-- `cleanup_view`, `enhance_view`, `weight_table` (`tier_reason`), `set_summaries`,
+  `save_type`, `add_type`, `copy_type`, `delete_type`, `save_set_value`, `save_set_target`,
+  `save_off_target`,
+  `pieces_to_sell`: what the pages ask for
+- `current_types`, `current_sets`, `current_assessment` (`potentials_for`, cached),
+  `current_plan`, `current_target_free`: the state they're made from
+- `cleanup_view`, `enhance_view`, `weight_table` (`set_grid`, `listed_sets`), `set_summaries`,
+  `targets_label`,
   `swap_groups`, `swap_row`, `drop_row`, `row_context`, `accessory_row`, `type_labels`,
-  `ordinal`: what they share
+  `find_type`, `type_factions`, `ordinal`: what they share
 """
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from optimiser.accessories.assess import Assessed, Assessment, assess_accessories, potentials_of
 from optimiser.accessories.cleanup import DEFAULT_TARGET_FREE, Placed, Plan, Swap, plan_cleanup
 from optimiser.accessories.enhance import Candidate, finish_list, rework_list, roll_list
-from optimiser.accessories.potential import Piece, Potential, make_scorer
+from optimiser.accessories.potential import ACCESSORIES, Piece, Potential, Scorer, make_scorer
 from optimiser.accessories.roles import (
-    NO_SET,
-    SET_ROLES,
-    SET_TIERS,
+    ACCESSORY_MAINS,
     TYPE_STATS,
     ChampionType,
-    TypeKey,
-    set_factor,
-    set_role,
+    Kind,
+    SetTable,
 )
-from optimiser.account import Account, Champion, Stat
+from optimiser.account import Account, Champion, faction_name
 from optimiser.labels import STAT_LABELS, format_line, line_label
 from optimiser.paths import POTENTIALS, STORE
 from optimiser.reserve import Reservations, reservations
-from optimiser.settings import read_standard_types, set_type_weight
+from optimiser.settings import (
+    add_champion_type,
+    delete_champion_type,
+    read_champion_types,
+    read_set_table,
+    save_champion_type,
+    save_set_fit,
+    set_off_target,
+)
 from optimiser.store import read_number, read_protected, write_number, write_protected
+from webui.forms.settings import TypeEdit
 from webui.service.current import (
     current_locks,
     current_reserve_rules,
     load_for,
-    roster_types,
     snapshot_mtime,
 )
 from webui.service.results import PieceView, piece_view
@@ -62,42 +72,84 @@ from webui.service.views import (
 
 @dataclass(frozen=True)
 class WeightCell:
-    field: str  # the form field: "<type>:<stat>", by the store's names
+    field: str  # the form field, "weight:<stat>"
+    label: str
     value: float
 
 
 @dataclass(frozen=True)
-class WeightRow:
-    champion_type: str
-    cells: list[WeightCell]
-
-
-@dataclass(frozen=True)
-class FactionTypeRow:
-    faction: str
+class MainOption:
+    field: str  # the form field, "main:<slot>:<stat>"
     label: str
-    champions: list[str]
-    weights: list[str]  # per `WeightTable.stats` column, "" for 0
-    mains: str  # "Ring ATK/HP · Amulet C.DMG · Banner ATK/HP/ACC"
+    on: bool
 
 
 @dataclass(frozen=True)
-class SetTierRow:
+class MainsCell:
+    slot: str
+    options: list[MainOption]
+
+
+@dataclass(frozen=True)
+class TypeRow:
+    """A champion type, editable as a whole (`forms.settings.parse_champion_type`)."""
+
+    key: str
+    label: str
+    kind: str
+    faction: str  # the game's name, "" for any
+    champions: list[str]  # who a seeded faction type was made from
+    cells: list[WeightCell]  # per `WeightTable.stats` column
+    mains: list[MainsCell]
+
+
+@dataclass(frozen=True)
+class Choice:
+    value: str
+    label: str
+
+
+@dataclass(frozen=True)
+class SetColumn:
+    set_id: int
     set_name: str
-    role: str
-    factor: str  # "×1.3"
-    reason: str
+    factor: float
+
+
+@dataclass(frozen=True)
+class TargetRow:
+    """A type across the sets: whether each (in `SetGrid.columns` order) targets it."""
+
+    key: str
+    label: str
+    faction: str | None  # display name
+    on: list[bool]
+
+
+@dataclass(frozen=True)
+class TargetGroup:
+    kind: str
+    rows: list[TargetRow]
+
+
+@dataclass(frozen=True)
+class SetGrid:
+    """The sets (most valued first) across, the types down, grouped by kind."""
+
+    columns: list[SetColumn]
+    groups: list[TargetGroup]
+    off_target: float
 
 
 @dataclass(frozen=True)
 class WeightTable:
-    """The standard types, editable, the faction types made from the roster, and the sets'
-    roles and meta tiers."""
+    """The champion types and the set fits, editable."""
 
     stats: list[str]  # the columns' labels
-    rows: list[WeightRow]
-    faction_rows: list[FactionTypeRow]
-    sets: list[SetTierRow]
+    rows: list[TypeRow]
+    kinds: list[Choice]
+    factions: list[Choice]  # those a type may be for, by display name
+    sets: SetGrid
 
 
 @dataclass(frozen=True)
@@ -224,6 +276,11 @@ class RowContext:
 ACCESSORY_TABS = ("swaps", "roll", "rework", "cleanup", "weights")  # the workflow's order
 ENHANCE_SHOWN = 150
 TARGET_FREE = "target_free"  # the store's name for it
+TARGET_LABELS = {  # what a set targets, by its types' kinds
+    frozenset({Kind.DAMAGE, Kind.SUPPORT}): "Hybrid",
+    frozenset({Kind.DAMAGE}): "Damage",
+    frozenset({Kind.SUPPORT}): "Support",
+}
 
 
 def accessories_page(account: Account, tab: str) -> AccessoriesPage:
@@ -252,8 +309,73 @@ def protect_accessory(account: Account, artifact_id: int, protected: bool) -> Cl
     return cleanup_page(account)
 
 
-def change_type_weight(key: TypeKey, stat: Stat, weight: float) -> None:
-    set_type_weight(STORE, key, stat, weight)
+def save_type(account: Account, edit: TypeEdit) -> bool:
+    """False if the type is gone (deleted on another page)."""
+    if (known := find_type(account, edit.key)) is None:
+        return False
+
+    save_champion_type(
+        STORE,
+        replace(
+            known,
+            label=edit.label,
+            kind=edit.kind,
+            faction=edit.faction,
+            weights=edit.weights,
+            mains=edit.mains,
+        ),
+    )
+    return True
+
+
+def add_type() -> None:
+    """A blank one, for any faction: the user fills it in."""
+    blank = ChampionType("", "New type", Kind.DAMAGE, (), ())
+    add_champion_type(STORE, blank)
+
+
+def copy_type(account: Account, key: str) -> None:
+    """The copy targets the sets its original does."""
+    if (known := find_type(account, key)) is None:
+        return
+
+    sets = current_sets(account)
+    copy = str(
+        add_champion_type(STORE, replace(known, label=f"{known.label} (copy)", champions=()))
+    )
+
+    for set_id, fit in sets.fits:
+        if key in fit.off:
+            save_set_fit(STORE, set_id, replace(fit, off=fit.off | {copy}))
+
+
+def save_set_value(account: Account, set_id: int, factor: float) -> None:
+    fit = current_sets(account).fit(set_id)
+    save_set_fit(STORE, set_id, replace(fit, factor=factor))
+
+
+def save_set_target(account: Account, set_id: int, type_key: str, on: bool) -> None:
+    fit = current_sets(account).fit(set_id)
+    off = fit.off - {type_key} if on else fit.off | {type_key}
+    save_set_fit(STORE, set_id, replace(fit, off=off))
+
+
+def save_off_target(share: float) -> None:
+    set_off_target(STORE, share)
+
+
+def delete_type(key: str) -> None:
+    if key.isdigit():
+        delete_champion_type(STORE, key)
+
+
+def find_type(account: Account, key: str) -> ChampionType | None:
+    return next((t for t in current_types(account) if t.key == key), None)
+
+
+def type_factions(account: Account) -> set[str]:
+    """The factions a type may be for: the account's champions'."""
+    return {champion.faction for champion in account.champions.values()}
 
 
 def pieces_to_sell(account: Account) -> set[int]:
@@ -265,23 +387,36 @@ def pieces_to_sell(account: Account) -> set[int]:
 def current_assessment(account: Account) -> Assessment:
     """Of the current snapshot: `account` is `current_account()`. Locks change often and
     cheaply, so only the potentials are cached."""
-    potentials = potentials_for(snapshot_mtime(), read_standard_types(STORE))
-    return assess_accessories(account, potentials, current_locks())
+    types = current_types(account)
+    scorer, potentials = potentials_for(snapshot_mtime(), types, current_sets(account))
+    return assess_accessories(account, potentials, current_locks(), scorer)
+
+
+def current_types(account: Account) -> tuple[ChampionType, ...]:
+    """Seeded from `account`'s roster the first time."""
+    return read_champion_types(STORE, account)
+
+
+def current_sets(account: Account) -> SetTable:
+    """Seeded from the set roles and tiers, against the types, the first time."""
+    return read_set_table(STORE, current_types(account))
 
 
 @lru_cache(maxsize=4)
-def potentials_for(snapshot_mtime: int, types: tuple[ChampionType, ...]) -> dict[Piece, Potential]:
+def potentials_for(
+    snapshot_mtime: int, types: tuple[ChampionType, ...], sets: SetTable
+) -> tuple[Scorer, dict[Piece, Potential]]:
     """Cached; scores are also kept on disk (`scores`), so only pieces new to the scorer are
     scored. The snapshot's mtime is only the cache key."""
     account = load_for(snapshot_mtime)
-    scorer = make_scorer((*types, *roster_types(snapshot_mtime)), account.tables.gear)
+    scorer = make_scorer(types, sets, account.tables.gear, account.tables.glyphs)
     known = known_potentials(POTENTIALS, scorer)
     potentials = potentials_of(account, scorer, known)
 
     if potentials.keys() != known.keys():
         keep_potentials(POTENTIALS, scorer, potentials)
 
-    return potentials
+    return scorer, potentials
 
 
 def current_plan(account: Account, assessment: Assessment) -> Plan:
@@ -341,59 +476,91 @@ def enhance_view(account: Account, assessment: Assessment, plan: Plan) -> Enhanc
 
 
 def weight_table(account: Account) -> WeightTable:
-    standard = {TypeKey(t.key): t for t in read_standard_types(STORE)}
+    types, sets = current_types(account), current_sets(account)
 
-    def faction_row(own: ChampionType) -> FactionTypeRow:
-        return FactionTypeRow(
-            faction=own.faction or "",
-            label=own.label,
-            champions=list(own.champions),
-            weights=[f"{own.weight(stat):g}" if own.weight(stat) else "" for stat in TYPE_STATS],
-            mains=" · ".join(
-                f"{slot_label(slot)} {'/'.join(STAT_LABELS[m] for m in mains)}"
-                for slot, mains in own.mains
-            ),
+    def type_row(champion_type: ChampionType) -> TypeRow:
+        suits = dict(champion_type.mains)
+        return TypeRow(
+            key=champion_type.key,
+            label=champion_type.label,
+            kind=champion_type.kind.value,
+            faction=champion_type.faction or "",
+            champions=list(champion_type.champions),
+            cells=[
+                WeightCell(f"weight:{stat.value}", STAT_LABELS[stat], champion_type.weight(stat))
+                for stat in TYPE_STATS
+            ],
+            mains=[
+                MainsCell(
+                    slot_label(slot),
+                    [
+                        MainOption(
+                            f"main:{slot.value}:{stat.value}",
+                            STAT_LABELS[stat],
+                            stat in suits.get(slot, ()),
+                        )
+                        for stat in stats
+                    ],
+                )
+                for slot, stats in ACCESSORY_MAINS
+            ],
         )
 
     return WeightTable(
         stats=[STAT_LABELS[stat] for stat in TYPE_STATS],
         rows=[
-            WeightRow(
-                standard[key].label,
-                [
-                    WeightCell(f"{key.value}:{stat.value}", standard[key].weight(stat))
-                    for stat in TYPE_STATS
-                ],
-            )
-            for key in TypeKey
+            type_row(champion_type)
+            # any faction's first, then by faction; oldest first within
+            for champion_type in sorted(types, key=lambda t: t.faction or "")
         ],
-        sets=[
-            SetTierRow(
-                set_name(account, set_id),
-                role.value,
-                f"×{set_factor(set_id):g}",
-                tier_reason(set_id),
-            )
-            for set_id, role in sorted(SET_ROLES.items(), key=lambda item: -set_factor(item[0]))
-        ],
-        faction_rows=[
-            faction_row(own)
-            for own in sorted(
-                roster_types(snapshot_mtime()), key=lambda t: (t.faction or "", t.label)
-            )
-        ],
+        kinds=[Choice(kind.value, kind.value.capitalize()) for kind in Kind],
+        factions=sorted(
+            (Choice(faction, faction_name(faction)) for faction in type_factions(account)),
+            key=lambda choice: choice.label,
+        ),
+        sets=set_grid(account, types, sets),
     )
 
 
-def tier_reason(set_id: int) -> str:
-    if tier := SET_TIERS.get(set_id):
-        return tier.reason
+def set_grid(account: Account, types: tuple[ChampionType, ...], sets: SetTable) -> SetGrid:
+    """Types in the type table's order: any faction's first."""
+    columns = sorted(
+        (
+            SetColumn(set_id, set_name(account, set_id), sets.factor(set_id))
+            for set_id in listed_sets(account, sets)
+        ),
+        key=lambda column: (-column.factor, column.set_name),
+    )
+    ordered = sorted(types, key=lambda t: t.faction or "")
 
-    return "set-less: kept only when very good" if set_id == NO_SET else ""
+    def row(champion_type: ChampionType) -> TargetRow:
+        return TargetRow(
+            champion_type.key,
+            champion_type.label,
+            faction_name(champion_type.faction) if champion_type.faction else None,
+            [sets.targets(column.set_id, champion_type) for column in columns],
+        )
+
+    groups = [
+        TargetGroup(kind.value.capitalize(), [row(t) for t in ordered if t.kind is kind])
+        for kind in Kind
+    ]
+    return SetGrid(columns, groups, sets.off_target)
+
+
+def listed_sets(account: Account, sets: SetTable) -> set[int]:
+    """The table's sets and any the account's accessories are of."""
+    pieces = (*account.artifacts, *account.mailbox)
+    return {set_id for set_id, _ in sets.fits} | {a.set_id for a in pieces if a.slot in ACCESSORIES}
+
+
+def targets_label(kinds: set[Kind]) -> str:
+    return TARGET_LABELS.get(frozenset(kinds), "None")
 
 
 def set_summaries(account: Account, plan: Plan) -> list[SetSummary]:
     """Most dropped first."""
+    types, sets = current_types(account), current_sets(account)
     loose: Counter[int] = Counter(
         p.group.set_id for p in (*plan.kept, *plan.to_sell, *plan.leave_unclaimed)
     )
@@ -403,7 +570,7 @@ def set_summaries(account: Account, plan: Plan) -> list[SetSummary]:
     summaries = [
         SetSummary(
             set_name(account, set_id),
-            set_role(set_id).value,
+            targets_label(sets.kinds(set_id, types)),
             count,
             sold[set_id],
             unclaimed[set_id],
@@ -460,7 +627,7 @@ def drop_row(context: RowContext, placed: Placed) -> DropRow:
 
 
 def row_context(account: Account) -> RowContext:
-    return RowContext(account, read_protected(STORE), type_labels())
+    return RowContext(account, read_protected(STORE), type_labels(account))
 
 
 def accessory_row(context: RowContext, piece: Assessed) -> AccessoryRow:
@@ -493,11 +660,12 @@ def accessory_row(context: RowContext, piece: Assessed) -> AccessoryRow:
     )
 
 
-def type_labels() -> dict[str, str]:
+def type_labels(account: Account) -> dict[str, str]:
     """Type key -> its label; a faction's own types name the faction."""
-    labels = {t.key: t.label for t in read_standard_types(STORE)}
-    labels |= {t.key: f"{t.label} ({t.faction})" for t in roster_types(snapshot_mtime())}
-    return labels
+    return {
+        t.key: f"{t.label} ({faction_name(t.faction)})" if t.faction else t.label
+        for t in current_types(account)
+    }
 
 
 def ordinal(place: int) -> str:

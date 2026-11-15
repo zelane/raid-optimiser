@@ -57,7 +57,7 @@ def write_kept(path: Path, kept: Kept) -> None:
 
 
 def scorer_key(scorer: Scorer) -> str:
-    digest = hashlib.sha256(repr((scorer.types, scorer.gear)).encode())
+    digest = hashlib.sha256(repr((scorer.types, scorer.gear, scorer.glyphs)).encode())
 
     for source in SCORING_CODE:
         digest.update(source.read_bytes())

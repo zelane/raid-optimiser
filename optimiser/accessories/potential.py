@@ -1,12 +1,15 @@
 """
 potential.py - what an accessory could become: every way its remaining upgrades can land
 and, if it hasn't been reworked, every way a rework can re-pick it, each scored against the
-champion types it could be for (`roles`). A piece's potential is a quantile of
-those scores, so concentrated rolls (a triple roll anywhere) count for their upside.
+champion types it could be for (`roles`), each type's counting for the share its set's
+fit gives it (`roles.type_fits`: off-target types count less). A piece's potential is a
+quantile of those scores, so concentrated rolls (a triple roll anywhere) count for their upside.
 
 Scores are in average 6★ rolls: each stat's value (flat and % together, flat as a share of a
 typical base stat), times the type's weight for it, plus the main stat as `MAIN_ROLLS` rolls
-scaled by its rank's top value. Future rolls are average rolls.
+scaled by its rank's top value. Future rolls are average rolls. Each substat also counts the
+best glyph a piece of its rank can take for it, whatever glyph it has now: any piece with the
+stat can be glyphed, one without it can't, so having a stat is worth more than its rolls.
 
 Upgrades (at +4, +8, +12, +16) add a substat until there are four, any the slot can roll
 that the piece lacks alike, then a roll to one of the four alike. A rework keeps each line's
@@ -15,15 +18,16 @@ is, alike among what the slot can roll.
 
 - `ROLL_6`, `RANK_ROLL`, `REFERENCE_BASE`, `MAIN_ROLLS`, `UPGRADE_LEVELS`, `ROLL_TO`,
   `MAX_SUBSTATS`, `QUANTILE`, `ACCESSORIES`, `MAIN_STATS`, `SUBSTATS`: the game, and units
-- `Scorer`, `make_scorer`: the types, as scoring needs them
+- `Scorer`, `make_scorer`: the types, the set fits and the glyphs' best rolls, as scoring
+  needs them
 - `Scores`, `Potential`: a piece's scores
 - `PieceLine`, `Piece`: what a piece's potential depends on (a key to keep it by)
-- `assess`: a piece's potential
+- `assess` (`piece_fits`): a piece's potential
 - `Line`, `Outcomes`, `ReworkBase`, `Scored`: what the outcomes are worked out from, and are
 - `natural`, `reworked` (`count_chances`, `rework_outcomes`): its outcomes, and their scores
-  (`score_outcomes`, `raw_scores`, `type_mask`, `quantiles`, `weighted_quantiles`)
+  (`score_outcomes`, `raw_scores`, `quantiles`, `weighted_quantiles`)
 - `spread_table`, `spreads`, `multinomial`, `roll_size`, `one_roll`, `main_line`,
-  `roll_units`, `line_units`, `main_units`, `upgrades_left`: what they share
+  `roll_units`, `line_units`, `main_units`, `glyph_units`, `upgrades_left`: what they share
 """
 
 from dataclasses import dataclass
@@ -33,8 +37,8 @@ from math import comb, factorial
 
 import numpy as np
 
-from optimiser.accessories.roles import ChampionType, Kind, types_for
-from optimiser.account import Artifact, GearLine, GearTables, Slot, Stat
+from optimiser.accessories.roles import ChampionType, Kind, SetTable, type_fits
+from optimiser.account import Artifact, GearLine, GearTables, GlyphGrade, GlyphKind, Slot, Stat
 
 ACCESSORIES = (Slot.RING, Slot.AMULET, Slot.BANNER)
 MAIN_STATS = {
@@ -86,18 +90,33 @@ HP_INDEX, DEF_INDEX = STATS.index(Stat.HP), STATS.index(Stat.DEF)
 
 @dataclass(frozen=True, eq=False)  # hashed by identity: reworks are cached per scorer
 class Scorer:
-    """The champion types as a (type, stat) weight matrix, and the tables that size main
-    stats; `make_scorer` builds one."""
+    """The champion types as a (type, stat) weight matrix, the set fits, the tables that size
+    main stats, and `glyphs`: each glyph kind's best roll a piece of each rank can take (none
+    for C.DMG); `make_scorer` builds one."""
 
     types: tuple[ChampionType, ...]
+    sets: SetTable
     gear: GearTables
+    glyphs: dict[GlyphKind, dict[int, float]]
     matrix: np.ndarray
     balance: np.ndarray
 
 
-def make_scorer(types: tuple[ChampionType, ...], gear: GearTables) -> Scorer:
+def make_scorer(
+    types: tuple[ChampionType, ...],
+    sets: SetTable,
+    gear: GearTables,
+    glyphs: dict[GlyphKind, dict[GlyphGrade, float]],
+) -> Scorer:
     matrix = np.array([[t.weight(stat) for stat in STATS] for t in types])
-    return Scorer(types, gear, matrix, np.array([t.balance for t in types]))
+    caps = {  # as `glyphs.rank_caps`: a piece takes glyphs of its rank or lower
+        kind: {
+            rank: max((top for grade, top in grades.items() if grade.rank <= rank), default=0)
+            for rank in range(1, 7)
+        }
+        for kind, grades in glyphs.items()
+    }
+    return Scorer(types, sets, gear, caps, matrix, np.array([t.balance for t in types]))
 
 
 @dataclass(frozen=True)
@@ -127,7 +146,8 @@ class Potential:
 
 @dataclass(frozen=True)
 class PieceLine:
-    """A substat as scoring reads it: `value` with its glyph, and the rolls it's had."""
+    """A substat as scoring reads it: `value` without its glyph (a glyph can go on any piece
+    with the stat, so it tells pieces apart by nothing), and the rolls it's had."""
 
     stat: Stat | None
     absolute: bool
@@ -138,7 +158,7 @@ class PieceLine:
 @dataclass(frozen=True)
 class Piece:
     """All a piece's potential depends on (with the scorer), so a key to keep it by: a piece
-    scored once needs no rescoring until it's levelled, reworked or glyphed."""
+    scored once needs no rescoring until it's levelled or reworked."""
 
     slot: Slot
     set_id: int
@@ -160,10 +180,15 @@ class Piece:
             artifact.faction,
             artifact.reworked,
             tuple(
-                PieceLine(line.stat, line.absolute, line.value + line.glyph, line.rolls)
+                PieceLine(line.stat, line.absolute, line.value, line.rolls)
                 for line in artifact.substats
             ),
         )
+
+
+def piece_fits(scorer: Scorer, piece: Piece, main: Stat) -> tuple[float, ...]:
+    """What each of the scorer's types counts for on the piece with `main`."""
+    return type_fits(scorer.sets, scorer.types, piece.set_id, piece.slot, main, piece.faction)
 
 
 def assess(piece: Piece, scorer: Scorer) -> Potential:
@@ -172,14 +197,19 @@ def assess(piece: Piece, scorer: Scorer) -> Potential:
         for line in piece.substats
     )
     main = piece.main
-    allowed = types_for(piece.set_id, piece.slot, main, piece.faction, scorer.types)
+    fits = piece_fits(scorer, piece, main)
     roll = roll_size(piece.rank)
     main_rolls = main_units(scorer.gear, piece.slot, main, piece.rank)
 
+    glyphs = {
+        (stat, absolute): glyph_units(scorer, stat, absolute, piece.rank)
+        for stat, absolute in SUBSTATS[piece.slot]
+    }
+
     def natural_to(level: int) -> Scores:
         upgrades = upgrades_left(piece.level, level)
-        outcomes = natural(piece.slot, main, lines, upgrades, roll)
-        return score_outcomes(outcomes, main, main_rolls, allowed, scorer)
+        outcomes = natural(piece.slot, main, lines, upgrades, roll, glyphs)
+        return score_outcomes(outcomes, main, main_rolls, fits, scorer)
 
     rework = None
 
@@ -188,11 +218,8 @@ def assess(piece: Piece, scorer: Scorer) -> Potential:
         rolled_to = max(piece.level, ROLL_TO)
         chances = count_chances(counts, upgrades_left(piece.level, rolled_to))
         upgrades = upgrades_left(rolled_to, UPGRADE_LEVELS[-1])
-        allowed_by_main = tuple(
-            types_for(piece.set_id, piece.slot, m, piece.faction, scorer.types)
-            for m in MAIN_STATS[piece.slot]
-        )
-        base = ReworkBase(piece.slot, piece.rank, allowed_by_main)
+        fits_by_main = tuple(piece_fits(scorer, piece, m) for m in MAIN_STATS[piece.slot])
+        base = ReworkBase(piece.slot, piece.rank, fits_by_main)
         rework = reworked(base, chances, upgrades, scorer)
 
     return Potential(
@@ -222,10 +249,16 @@ class Outcomes:
 
 
 def natural(
-    slot: Slot, main: Stat, lines: tuple[Line, ...], upgrades: int, roll: float
+    slot: Slot,
+    main: Stat,
+    lines: tuple[Line, ...],
+    upgrades: int,
+    roll: float,
+    glyphs: dict[tuple[Stat, bool], float],
 ) -> Outcomes:
     """Each way the upgrades can land. New substats come first, any combination alike; the
-    rest spread over the four lines multinomially."""
+    rest spread over the four lines multinomially. Every line counts its best glyph
+    (`glyphs`, in average rolls, by line)."""
     held = {(line.stat, line.absolute) for line in lines}
     candidates = [c for c in SUBSTATS[slot] if c not in held and c != main_line(main)]
     new_count = min(upgrades, MAX_SUBSTATS - len(lines), len(candidates))
@@ -244,7 +277,8 @@ def natural(
                 continue
 
             one = one_roll(line.stat, line.absolute, roll)
-            totals[:, STATS.index(line.stat)] += line.units + rolls_added[:, column] * one
+            glyph = glyphs.get((line.stat, line.absolute), 0.0)
+            totals[:, STATS.index(line.stat)] += line.units + glyph + rolls_added[:, column] * one
 
         chances.append(added_weight * spread_chances)
         totals_by_outcome.append(totals)
@@ -280,12 +314,13 @@ def count_chances(counts: tuple[int, ...], upgrades: int) -> CountChances:
 @dataclass(frozen=True)
 class ReworkBase:
     """What a rework keeps of a piece, and so all its outcomes depend on (hashable: reworks
-    are cached). `allowed`: the types each of the slot's main stats (in `MAIN_STATS` order)
-    leaves the piece for, by its set and faction; many sets and factions share them."""
+    are cached). `fits`: what each type counts for (in the scorer's order) with each of the
+    slot's main stats (in `MAIN_STATS` order), by the piece's set and faction; many sets and
+    factions share them."""
 
     slot: Slot
     rank: int
-    allowed: tuple[tuple[str, ...], ...]
+    fits: tuple[tuple[float, ...], ...]
 
 
 @dataclass(frozen=True)
@@ -301,16 +336,16 @@ class Scored:
 @lru_cache(maxsize=4096)
 def reworked(base: ReworkBase, chances: CountChances, upgrades: int, scorer: Scorer) -> Scores:
     """A rework's scores, over the roll counts the piece may have when it's reworked (a
-    piece below +12 is rolled to +12 first); types a main stat doesn't allow score nothing."""
+    piece below +12 is rolled to +12 first), each type's by its fit with the main stat."""
     outcomes = [
         rework_outcomes(base.slot, base.rank, counts, upgrades, scorer) for counts, _ in chances
     ]
     weights = np.concatenate(
         [o.chances * chance for o, (_, chance) in zip(outcomes, chances, strict=True)]
     )
-    masks = np.array([type_mask(allowed, scorer) for allowed in base.allowed])
+    fits = np.array(base.fits)
     mains = np.concatenate([o.mains for o in outcomes])
-    scores = np.where(masks[mains], np.concatenate([o.scores for o in outcomes]), 0.0)
+    scores = np.concatenate([o.scores for o in outcomes]) * fits[mains]
     return quantiles(weights, scores, scorer)
 
 
@@ -321,13 +356,15 @@ def rework_outcomes(
     """Reworking lines holding `counts` rolls: a main stat alike among the slot's, then the
     lines' stats alike among what that main leaves (as permutations, since lines hold
     different roll counts). Upgrades still to come add their expected rolls. Scored for
-    every type: the piece's set and faction narrow them later (`reworked`)."""
+    every type: the piece's set and faction weigh them later (`reworked`). Each line counts
+    its best glyph, as `natural`'s do."""
     roll = roll_size(rank)
     per_main: list[Scored] = []
 
     for main_index, main in enumerate(MAIN_STATS[slot]):
         candidates = [c for c in SUBSTATS[slot] if c != main_line(main)]
         rolls_of = np.array([one_roll(s, a, roll) for s, a in candidates])
+        glyph_of = np.array([glyph_units(scorer, s, a, rank) for s, a in candidates])
         stat_index = np.array([STATS.index(s) for s, _ in candidates])
         picks = np.array(list(permutations(range(len(candidates)), len(counts))))
         rolls = np.array(counts) + upgrades / max(len(counts), 1)
@@ -338,7 +375,7 @@ def rework_outcomes(
             np.add.at(
                 totals,
                 (np.arange(len(picks)), stat_index[picks[:, column]]),
-                rolls_of[picks[:, column]] * count,
+                rolls_of[picks[:, column]] * count + glyph_of[picks[:, column]],
             )
 
         probability = 1 / len(MAIN_STATS[slot]) / len(picks)
@@ -362,25 +399,20 @@ def score_outcomes(
     outcomes: Outcomes,
     main: Stat,
     main_rolls: float,
-    allowed: tuple[str, ...],
+    fits: tuple[float, ...],
     scorer: Scorer,
 ) -> Scores:
     scores = raw_scores(outcomes.totals, main, main_rolls, scorer)
-    return quantiles(outcomes.chances, np.where(type_mask(allowed, scorer), scores, 0.0), scorer)
+    return quantiles(outcomes.chances, scores * np.array(fits), scorer)
 
 
 def raw_scores(totals: np.ndarray, main: Stat, main_rolls: float, scorer: Scorer) -> np.ndarray:
-    """(outcome, type) scores, whether or not the piece suits the type."""
+    """(outcome, type) scores, before the piece's fits weigh them."""
     totals = totals.copy()
     totals[:, STATS.index(main)] += main_rolls
     scores = totals @ scorer.matrix.T
     scores += np.minimum(totals[:, HP_INDEX], totals[:, DEF_INDEX])[:, None] * scorer.balance
     return scores
-
-
-def type_mask(allowed: tuple[str, ...], scorer: Scorer) -> np.ndarray:
-    """Which of the scorer's types are `allowed`."""
-    return np.array([t.key in allowed for t in scorer.types])
 
 
 def quantiles(weights: np.ndarray, scores: np.ndarray, scorer: Scorer) -> Scores:
@@ -459,6 +491,13 @@ def roll_units(stat: Stat, absolute: bool, value: float) -> float:
 
 def line_units(stat: Stat | None, absolute: bool, value: float) -> float:
     return roll_units(stat, absolute, value) if stat is not None else 0.0
+
+
+def glyph_units(scorer: Scorer, stat: Stat, absolute: bool, rank: int) -> float:
+    """The best glyph a piece of `rank` can take on a line, in average rolls (0: no glyph
+    for it)."""
+    top = scorer.glyphs.get(GlyphKind(stat, absolute), {}).get(rank, 0)
+    return roll_units(stat, absolute, top)
 
 
 def main_units(gear: GearTables, slot: Slot, main: Stat, rank: int) -> float:

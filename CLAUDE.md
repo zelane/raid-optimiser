@@ -216,27 +216,40 @@ the game itself.
   then Weights; `optimiser/accessories/`, which doesn't use the solver). Only unequipped gear takes
   inventory space (2200 for accessories); overflow waits in the mailbox (the inbox's
   pieces, `Account.mailbox`).
-  - `roles.py`: champion types (ATK/HP/DEF damage, bomber/poisoner, support: per-stat weights,
-    stored in `type_weights`, and the main stats that suit them) and set roles (Damage, Hybrid,
-    Support, Any; the user's table, by set id). Support sets still keep one C.DMG amulet.
-  - `scaling.py`: faction types from the 6★ roster: each champion's pull per stat from its
+  - `roles.py`: champion types (per-stat weights, the main stats that suit them, damage or
+    support, for any faction or one) and set fits (`SetTable`: per set, its value and the
+    types it doesn't target, which count at `off_target` of their score, 0.5 by default; the
+    store's `set_fits`, seeded once from the old set roles and meta tiers; unknown sets and new
+    types fit everywhere at value 1; a copied type keeps its original's). A set targeting no
+    damage type still keeps one C.DMG amulet, counted in full. Clean-up rules that read a set's
+    kind read what it targets (`SetTable.kinds`). The types are the user's,
+    edited on the Weights tab (add, copy, delete), kept in the store's `champion_types` (JSON
+    per row, keyed by row id; `settings.read_champion_types`). They're seeded once, on first
+    read, with `STANDARD_TYPES` (ATK/HP/DEF damage, bomber/poisoner, support) and the roster's
+    faction types (`scaling.seed_types`); a seed already done never reruns.
+  - `scaling.py`: the seed's faction types, from the 6★ roster: each champion's pull per stat from its
     formulas (damage hits and bombs; for Support-role champions heals, shields, revives:
     `skills.json` `scaling`), each effect counting its shape. Mixed scalers (Rotos, Fellhound)
     and supports healing off ATK (Kurosa) get a type for their faction only. Each mythical
     form counts as a champion of its own (`Tables.hero_forms`). Exceptions go in
-    `scaling.OVERRIDES` (`Skip` / `Weigh`, by champion name and form); the
+    `scaling.OVERRIDES` (`Skip` / `Weigh`, by champion name and form; they shape the seed
+    and the report only, not the stored types); the
     `champion-exceptions` skill finds candidates with `just exceptions`
     (`optimiser/accessories/scaling_report.py`).
   - `potential.py`: every way a piece can turn out (upgrades at +4/8/12/16 add a substat until
     four, then roll one; a rework keeps each line's roll count, set and faction and re-picks
     main stat and substats; once only: `RerollsCount`), scored in average 6★ rolls, quantile 75.
+    Each substat counts the best glyph its rank can take, never the glyph it has: having the
+    stat is what makes a piece glyphable. Each type's score is weighed by its set fit.
   - `assess.py`: each piece's value: max(+16, rework) potential × shortage factor (good
-    pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's meta tier
-    (`roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint 1.15; set-less 0.6).
+    pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's value (the set fits;
+    seeded from `roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint
+    1.15; set-less 0.6).
   - `cleanup.py`: inventory + mailbox planned together; the lowest values go until
     `target_free` spaces are left (sold, or left unclaimed). Special variants
     (`VariantId` "Corrupted": unusual stats, a border) are left alone everywhere. Never dropped: protected pieces, reserved pieces (swaps may still move them),
-    banners with SPD rolled 3+, good potential (slot's top quarter), each faction's Faction
+    banners with SPD rolled 3+, each set's best RES banners with SPD (2 for a set targeting
+    support types, else 1: RES breakpoints), good potential (slot's top quarter), each faction's Faction
     Wars reserve, 6★ damage-set amulets not yet reworked (may rework to C.DMG). Group quotas
     (2, 1 for low-value sets) make the surplus go first. Swaps (own tab, by champion): a loose
     piece clearly better than one an unlocked champion wears in the same group is planned as

@@ -64,9 +64,13 @@ In `optimiser/accessories/scaling.py`, `OVERRIDES` maps `(champion name, form nu
 Always write the reason: why the formulas are wrong for this champion, so the entry can be
 checked again after a rework. Form numbers are 1-based, as the report shows them.
 
+`OVERRIDES` only shapes the seed (and the report): the types scoring uses are the user's,
+stored once seeded. So also make the matching change to the stored types: on Accessories →
+Weights (edit, add or delete the faction's type), or tell the user what to change there.
+
 ## 5. Check
 
 - Re-run the report: the form shows `overridden` and the intended type.
 - `uv run --group dev ruff check optimiser && uv run --project ~/repo/python-style python-style optimiser`.
-- The web UI reloads by itself; Accessories → Weights lists the faction types, and the
+- The web UI reloads by itself; Accessories → Weights lists the stored types, and the
   Clean up tab's counts show what the change moved. Tell the user what moved.

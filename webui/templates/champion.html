@@ -21,13 +21,8 @@
               {% if champion.crest_url %}<img class="crest crest-under" src="{{ champion.crest_url }}" alt="">{% endif %}
             </div>
             <div class="identity-text">
-              <h1>{{ champion.name }}</h1>
-              <p class="facts">
-                <span class="rarity-name">{{ champion.rarity }}</span>
-                <span class="sep" aria-hidden="true">◆</span>
-                <span>{{ champion.affinity }}</span>
-              </p>
-              <p class="facts">{{ faction(champion) }}</p>
+              <h1> {{ champion.name }}</h1>
+              <span>{{ faction(champion) }}</span>
               <button type="button" class="secondary outline switch-champion" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
               {% if page.forms | length > 1 %}
                 {# The request's `form` field; app.js shows the picked form's stats and skills. #}

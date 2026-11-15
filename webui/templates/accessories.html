@@ -108,69 +108,114 @@
     <div class="table-well">{{ candidates(page.enhance.rework, "reworked", page.enhance.shown) }}</div>
 
   {% else %}
+    {% set weights = page.weights %}
+    {% set grid = weights.sets %}
     <p class="lede">
-      What each champion type values, per stat, in average 6★ rolls (flat and % together).
-      A piece scores as the best type its set is worn by and its main stat suits; supports
-      also count the lesser of HP and DEF twice more, for balance. 0 ignores a stat.
+      What each champion type values, per stat, in average 6★ rolls (flat and % together),
+      and the main stats that suit it. A piece scores as the best type it suits, of any
+      faction or its own: accessories are faction-locked, so a faction whose champions scale
+      off more than one stat wants a type of its own. Supports that weigh both HP and DEF count
+      the lesser of the two twice more. Changes save as you make them.
     </p>
     <div class="table-well">
     <table class="weights">
-      <thead><tr><th></th>{% for label in page.weights.stats %}<th>{{ label }}</th>{% endfor %}</tr></thead>
-      <tbody>
-        {% for row in page.weights.rows %}
+      <thead><tr>
+        <th>Type</th><th>For</th><th>Kind</th>
+        {% for label in weights.stats %}<th>{{ label }}</th>{% endfor %}
+        <th></th>
+      </tr></thead>
+      {% for row in weights.rows %}
+        <tbody hx-post="/accessories/types" hx-trigger="change" hx-include="this"
+               hx-vals='{"type": "{{ row.key }}"}' hx-target="#weight-result">
           <tr>
-            <th scope="row">{{ row.champion_type }}</th>
+            <th scope="row"><input type="text" name="label" value="{{ row.label }}" required autocomplete="off" aria-label="Type name"></th>
+            <td><select name="faction" autocomplete="off" aria-label="{{ row.label }}: faction">
+              <option value=""{% if not row.faction %} selected{% endif %}>Any faction</option>
+              {% for choice in weights.factions %}<option value="{{ choice.value }}"{% if choice.value == row.faction %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+            </select></td>
+            <td><select name="kind" autocomplete="off" aria-label="{{ row.label }}: kind">
+              {% for choice in weights.kinds %}<option value="{{ choice.value }}"{% if choice.value == row.kind %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+            </select></td>
             {% for cell in row.cells %}
-              <td><input type="number" name="weight" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
-                         aria-label="{{ row.champion_type }}: {{ page.weights.stats[loop.index0] }}"
-                         hx-post="/accessories/weights" hx-vals='{"key": "{{ cell.field }}"}'
-                         hx-trigger="change" hx-target="#weight-result"></td>
+              <td><input type="number" name="{{ cell.field }}" autocomplete="off" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
+                         aria-label="{{ row.label }}: {{ cell.label }}"></td>
             {% endfor %}
+            <td rowspan="2"><div class="type-actions">
+              <form method="post" action="/accessories/types/{{ row.key }}/copy"><button type="submit" class="secondary outline" title="Add a copy of {{ row.label }}">Copy</button></form>
+              <form method="post" action="/accessories/types/{{ row.key }}/delete"
+                    onsubmit="return confirm('Delete {{ row.label }}?')"><button type="submit" class="secondary outline danger" title="Delete {{ row.label }}">Delete</button></form>
+            </div></td>
           </tr>
-        {% endfor %}
-      </tbody>
+          <tr class="type-detail">
+            <td class="type-from">{% if row.champions %}from {{ row.champions | join(", ") }}{% endif %}</td>
+            <td colspan="{{ 2 + weights.stats | length }}"><div class="type-mains">
+              {% for slot in row.mains %}
+                <div class="type-slot"><span class="caps">{{ slot.slot }}</span>
+                  {% for option in slot.options %}
+                    <label class="chip mini"><input type="checkbox" name="{{ option.field }}" autocomplete="off"{% if option.on %} checked{% endif %}
+                           aria-label="{{ row.label }}: {{ slot.slot }} {{ option.label }}">{{ option.label }}</label>
+                  {% endfor %}
+                </div>
+              {% endfor %}
+            </div></td>
+          </tr>
+        </tbody>
+      {% endfor %}
     </table>
     </div>
-    <p id="weight-result"></p>
+    <div class="type-add">
+      <form method="post" action="/accessories/types/add"><button type="submit">Add a type</button></form>
+      <p id="weight-result"></p>
+    </div>
 
     <h2>Sets</h2>
     <p class="lede">
-      A set's role decides which types its pieces count for; its tier multiplies their value
-      (and so how easily they count as good potential). Low-value sets keep one piece per group.
+      A set's value multiplies what its pieces are worth: 1 is an average set. Tick the types
+      each set is for. A type a set isn't for still counts, at a share of its score. A set for
+      no damage type still keeps a C.DMG amulet. New types and new sets start ticked everywhere.
     </p>
+    <div class="off-target">
+      <label>Types a set isn't for count at
+        <input type="number" name="off_target" value="{{ '%g' % grid.off_target }}" min="0" max="1" step="0.05" autocomplete="off"
+               hx-post="/accessories/off-target" hx-target="#set-result">
+        of their score</label>
+      <p id="set-result"></p>
+    </div>
     <div class="table-well">
-    <table class="set-tiers">
-      <thead><tr><th>Set</th><th>Role</th><th class="num">Tier</th><th></th></tr></thead>
-      <tbody>
-        {% for row in page.weights.sets %}<tr><td>{{ row.set_name }}</td><td>{{ row.role }}</td><td class="num">{{ row.factor }}</td><td><small>{{ row.reason }}</small></td></tr>{% endfor %}
-      </tbody>
+    <table class="set-grid">
+      <thead>
+        <tr>
+          <th scope="col">Type</th>
+          {% for column in grid.columns %}<th scope="col" class="set-name"><span>{{ column.set_name }}</span></th>{% endfor %}
+        </tr>
+        <tr class="set-values">
+          <th scope="row">Value</th>
+          {% for column in grid.columns %}
+            <td><input type="number" name="factor" value="{{ '%g' % column.factor }}" min="0" max="3" step="0.05" autocomplete="off"
+                       hx-post="/accessories/sets/value" hx-vals='{"set": "{{ column.set_id }}"}' hx-target="#set-result"
+                       aria-label="{{ column.set_name }}: value"></td>
+          {% endfor %}
+        </tr>
+      </thead>
+      {% for group in grid.groups %}
+        <tbody>
+          <tr class="set-group"><th scope="rowgroup" colspan="{{ 1 + grid.columns | length }}">{{ group.kind }}</th></tr>
+          {% for row in group.rows %}
+            <tr>
+              <th scope="row">{{ row.label }}{% if row.faction %} <small>{{ row.faction }}</small>{% endif %}</th>
+              {% for on in row.on %}
+                {% set column = grid.columns[loop.index0] %}
+                <td><input type="checkbox" name="on" autocomplete="off"{% if on %} checked{% endif %}
+                           hx-post="/accessories/sets/target" hx-vals='{"set": "{{ column.set_id }}", "type": "{{ row.key }}"}' hx-target="#set-result"
+                           aria-label="{{ column.set_name }} is for {{ row.label }}" title="{{ column.set_name }}: {{ row.label }}"></td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endfor %}
     </table>
     </div>
 
-    <h2>Faction types, from your 6★ roster</h2>
-    <p class="lede">
-      Accessories are faction-locked, so a faction gets a type of its own while it has a 6★
-      champion who scales off more than one stat (damage hits and bombs for damage dealers,
-      heals, shields and revives for supports), or a support who heals off something other
-      than HP or DEF. They count only for that faction's pieces, beside the types above. Each
-      effect counts its shape, not its size.
-    </p>
-    <div class="table-well">
-    <table class="faction-types">
-      <thead><tr><th>Faction</th><th>Type</th><th>From</th><th>Weights</th><th>Main stats</th></tr></thead>
-      <tbody>
-        {% for row in page.weights.faction_rows %}
-          <tr>
-            <td>{{ row.faction }}</td><td><strong>{{ row.label }}</strong></td><td><small>{{ row.champions | join(", ") }}</small></td>
-            <td><span class="weight-chips">
-              {%- for weight in row.weights %}{% if weight %}<span class="weight-chip"><span class="caps">{{ page.weights.stats[loop.index0] }}</span>{{ weight }}</span>{% endif %}{% endfor -%}
-            </span></td>
-            <td><small>{{ row.mains }}</small></td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
   {% endif %}
 {% endblock %}
 {% block scripts %}<script src="{{ static_url('cleanup.js') }}"></script>{% endblock %}

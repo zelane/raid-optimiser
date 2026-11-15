@@ -1,0 +1,235 @@
+{#- A test page: the theme's colours and the shared components (app.css) side by side, with
+    made-up content, so the palette can be judged in place. Not in the nav: /palette. -#}
+{% extends "base.html" %}
+{% from "_macros.html" import tile, faction, piece %}
+{% from "_team.html" import status_icon, score_pill %}
+{% block title %}Palette{% endblock %}
+{% block content %}
+<style>
+  .pal { display: flex; flex-direction: column; gap: 2rem; }
+  .pal-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+  .pal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.6rem; }
+  .swatch { display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); overflow: hidden; }
+  .swatch-chip { height: 3.25rem; display: grid; place-items: center; font-weight: 700; }
+  .swatch-meta { padding: 0.35rem 0.5rem; font-size: 0.75rem; background: var(--panel-bg); }
+  .swatch-meta code { padding: 0; background: none; font-size: 0.72rem; }
+  .text-on { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); }
+  .layers { display: flex; padding: 1rem; gap: 1rem; background: var(--m-surface); border: 1px solid var(--panel-border); }
+  .layers > div { flex: 1; padding: 1rem; border-radius: var(--panel-radius); border: 1px solid var(--panel-border); }
+  .rarities { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .rarities span { padding: 0.2rem 0.6rem; border: 2px solid var(--rarity); border-radius: 0.25rem; color: var(--rarity); font-weight: 700; }
+</style>
+
+<div class="pal">
+  <div class="page-head">
+    <div>
+      <h1>Palette</h1>
+      <p class="lede">Every colour in the Vault theme and every shared component, filled with made-up content. The theme lives in <code>static/theme.css</code>, the components in <code>static/app.css</code>.</p>
+    </div>
+    <div class="tally"><strong>42<small>/50</small></strong><span class="caps">tally</span><span class="muted">a big figure</span></div>
+  </div>
+
+  {# --- Colours -------------------------------------------------------------- #}
+  <section class="page-section">
+    <h2>Colours</h2>
+    {% set swatches = [
+      ("--m-surface", "--m-on-surface"), ("--m-surface-variant", "--m-on-surface"),
+      ("--m-card", "--m-on-surface"), ("--pico-card-background-color", "--m-on-surface"),
+      ("--m-hover", "--m-on-surface"), ("--m-outline", "--m-on-surface"),
+      ("--m-primary", "--m-on-primary"), ("--m-secondary", "--m-on-secondary"),
+      ("--m-tertiary", "--m-surface"), ("--m-error", "--m-surface"),
+      ("--m-green", "--m-surface"), ("--m-yellow", "--m-surface"),
+      ("--m-on-surface", "--m-surface"), ("--m-on-surface-variant", "--m-surface"),
+      ("--m-heading", "--m-surface"),
+    ] %}
+    <div class="swatches">
+      {% for bg, fg in swatches %}
+        <div class="swatch">
+          <div class="swatch-chip" style="background: var({{ bg }}); color: var({{ fg }})">Aa</div>
+          <div class="swatch-meta"><code>{{ bg }}</code><br><span class="muted" data-var="{{ bg }}"></span></div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="page-section">
+    <h2>Layers</h2>
+    <p class="panel-note">The slab, an inset, the panel as it is now (<code>--pico-card-background-color</code>), and <code>--m-card</code>, which nothing uses yet.</p>
+    <div class="layers">
+      <div style="background: var(--m-surface)"><span class="caps">surface</span><p>The page slab.</p></div>
+      <div style="background: var(--m-surface-variant)"><span class="caps">surface-variant</span><p>Code, dropdowns.</p></div>
+      <div style="background: var(--panel-bg)"><span class="caps">panel (now)</span><p>Panels, slots, tally.</p></div>
+      <div style="background: var(--m-card)"><span class="caps">--m-card</span><p>Unused.</p></div>
+    </div>
+  </section>
+
+  <section class="page-section">
+    <h2>Text on surfaces</h2>
+    <div class="pal-grid">
+      {% for bg in ["--m-surface", "--panel-bg", "--m-card"] %}
+        <div class="text-on" style="background: var({{ bg }})">
+          <span class="caps">{{ bg }}</span>
+          <strong style="font-family: var(--m-display); font-size: 1.3rem; color: var(--m-heading)">A heading in Alegreya</strong>
+          <span>Body text, the bone white of the page.</span>
+          <span class="muted">Muted text: notes and hints.</span>
+          <span><a href="#">A link</a> · <span class="up">+12% up</span> · <span class="down">−8% down</span> · <span style="color: var(--stat-mid)">mid</span> · <span style="color: var(--tertiary)">tertiary</span></span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="page-section">
+    <h2>Rarity</h2>
+    <div class="rarities">
+      {% for r in ["common", "uncommon", "rare", "epic", "legendary", "mythical"] %}<span class="rarity-{{ r }}">{{ r | capitalize }}</span>{% endfor %}
+    </div>
+    {% if champions %}
+      <div class="champion-grid" style="margin-top: 1rem">
+        {% for champion in champions %}
+          <article class="champion-card rarity-{{ champion.rarity | lower }}">
+            <a href="/champions/{{ champion.id }}" class="card-tile" tabindex="-1">{{ tile(champion) }}</a>
+            <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span>{{ champion.name }}</span></a>
+          </article>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </section>
+
+  {# --- Controls ------------------------------------------------------------- #}
+  <section class="page-section">
+    <h2>Buttons and links</h2>
+    <div class="pal-row">
+      <button>Primary</button>
+      <button class="cta">Run · CTA</button>
+      <button class="secondary">Secondary</button>
+      <button class="contrast">Contrast</button>
+      <button class="outline">Outline</button>
+      <button class="outline secondary">Outline secondary</button>
+      <button class="danger">Sell 12 pieces</button>
+      <button disabled>Disabled</button>
+      <a href="#">A link</a>
+    </div>
+    <p class="panel-note" style="margin-top: 0.75rem">Primary next to danger: they should never be mistaken for each other.</p>
+    <div class="pal-row"><button>Equip</button><button class="danger">Sell</button><span class="badge">accent</span><span class="badge bad">bad</span></div>
+  </section>
+
+  <section class="page-section">
+    <h2>Badges, chips, statuses</h2>
+    <div class="pal-row">
+      <span class="badge">default</span><span class="badge good">good</span>
+      <span class="badge bad">bad</span><span class="badge info">info</span>
+      <span class="caps">caps label</span>
+      <mark>marked text</mark> <ins>inserted</ins> <del>deleted</del> <code>code</code>
+    </div>
+    <div class="pal-row" style="margin-top: 0.75rem">
+      <label class="chip"><input type="checkbox">Off chip</label>
+      <label class="chip on"><input type="checkbox" checked>On chip</label>
+      <span class="chip assumed">Assumed</span>
+      {{ score_pill(88) }} {{ score_pill(55) }} {{ score_pill(20) }}
+      {{ status_icon("/static/assets/statuses/BlockBuffs.png", "Block Buffs") }}
+      {{ status_icon("", "No icon") }}
+    </div>
+    <ul class="pal-grid" style="margin-top: 0.75rem; padding: 0; list-style: none">
+      <li class="status met">✓ Decrease DEF on the Chimera</li>
+      <li class="status missing">✗ Block Buffs: nobody brings it</li>
+      <li class="status">A plain status</li>
+    </ul>
+    <div class="pal-grid" style="margin-top: 0.75rem">
+      <div><span class="caps">meter high</span><span class="meter"><span style="width: 85%"></span></span></div>
+      <div><span class="caps">meter mid</span><span class="meter mid"><span style="width: 55%"></span></span></div>
+      <div><span class="caps">meter low</span><span class="meter low"><span style="width: 20%"></span></span></div>
+    </div>
+  </section>
+
+  <section class="page-section">
+    <h2>Forms</h2>
+    <div class="pal-grid">
+      <article class="panel">
+        <header class="panel-head"><h3>Fields</h3><span class="caps">panel-head</span></header>
+        <div style="display: flex; flex-direction: column; gap: 0.6rem">
+          <input type="text" placeholder="Placeholder">
+          <input type="text" value="Focused field" autofocus>
+          <input type="text" value="Invalid" aria-invalid="true">
+          <select><option>A select</option></select>
+          <label><input type="checkbox" checked> A checkbox</label>
+          <label><input type="radio" checked> A radio</label>
+          <input type="range" value="60">
+        </div>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h3>Toggles</h3></header>
+        <div class="segmented">
+          <label><input type="radio" name="seg" checked>Easy</label>
+          <label><input type="radio" name="seg">Normal</label>
+          <label><input type="radio" name="seg">Hard</label>
+        </div>
+        <div class="switch-rows" style="margin-top: 0.75rem">
+          <label><span class="row-name">Reserved gear</span><span class="row-note">3 rules</span><input type="checkbox" role="switch" checked></label>
+          <label><span class="row-name">Locked champions</span><select><option>above 3</option></select></label>
+          <label><span class="row-name">Worn by others</span><input type="checkbox" role="switch"></label>
+        </div>
+      </article>
+      <article class="panel">
+        <header class="panel-head"><h3>Tabs and stats</h3></header>
+        <nav class="page-tabs"><a href="#" aria-current="page">Swaps <span class="badge">4</span></a><a href="#">Roll <span class="badge">12</span></a><a href="#">Clean up</a></nav>
+        <dl class="stat-tiles well" style="margin-top: 0.75rem">
+          <div><dt>HP</dt><dd>48,210</dd></div><div><dt>ATK</dt><dd>1,544</dd></div>
+          <div><dt>DEF</dt><dd>3,902</dd></div><div><dt>SPD</dt><dd class="up">241</dd></div>
+          <div><dt>C.RATE</dt><dd>100%</dd></div><div><dt>ACC</dt><dd class="down">180</dd></div>
+        </dl>
+        <div class="weight-chips" style="margin-top: 0.75rem">
+          <span class="weight-chip"><span class="caps">SPD</span>1.0</span><span class="weight-chip"><span class="caps">ACC</span>0.8</span><span class="weight-chip"><span class="caps">HP%</span>0.5</span>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  {# --- Containers ----------------------------------------------------------- #}
+  <section class="page-section">
+    <h2>Containers</h2>
+    <div class="pal-grid">
+      <article class="panel"><header class="panel-head"><h3>Panel</h3><span class="badge info">info</span></header><p class="panel-note">A panel note explains the panel.</p><div class="well">A well, an inset back down on the slab.</div></article>
+      <div class="slot"><strong>A slot</strong><span class="muted">Something placed</span></div>
+      <div class="slot empty">+ An empty slot</div>
+      <article><header>Pico article</header>Plain <code>&lt;article&gt;</code>.<footer>Footer</footer></article>
+    </div>
+    <div class="table-well" style="margin-top: 1rem">
+      <table class="striped">
+        <thead><tr><th>Piece</th><th>Set</th><th>Value</th><th>Change</th></tr></thead>
+        <tbody>
+          <tr><td>Weapon</td><td>Speed</td><td>12.4</td><td class="up">+2.1</td></tr>
+          <tr><td>Helmet</td><td>Lifesteal</td><td>8.9</td><td class="down">−0.6</td></tr>
+          <tr><td>Shield</td><td>Mercurial</td><td>10.2</td><td>—</td></tr>
+          <tr><td>Gauntlets</td><td>Merciless</td><td>9.7</td><td class="up">+0.3</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <details class="section" open style="margin-top: 1rem"><summary><h2>A collapsible section</h2></summary><p>Its diamond turns when it opens.</p></details>
+  </section>
+
+  <section class="page-section">
+    <h2>Gear</h2>
+    {% set stat = {"label": "SPD", "amount": "16", "optimised": true, "planned_amount": none, "planned_glyph": none, "glyph": "4"} %}
+    {% set sub2 = {"label": "C.RATE", "amount": "9%", "optimised": true, "planned_amount": "15%", "planned_glyph": none, "glyph": none} %}
+    {% set sub3 = {"label": "ATK%", "amount": "5%", "optimised": false, "planned_amount": none, "planned_glyph": none, "glyph": none} %}
+    {% set primary = {"label": "ATK%", "amount": "50%", "optimised": true, "planned_amount": none} %}
+    {% set asc = {"label": "ATK", "amount": "41", "planned_amount": none} %}
+    {% set legend = {"rarity": "Legendary", "set_name": "Speed", "slot": "Gloves", "image_url": "/static/assets/pieces/4_gloves.png", "level": 16, "planned_level": none, "rank": 6, "stars": none, "ascend_level": 2, "primary": primary, "ascension": asc, "substats": [stat, sub2, sub3], "equipped": false, "worn_by": none} %}
+    {% set epic = {"rarity": "Epic", "set_name": "Lifesteal", "slot": "Boots", "image_url": "/static/assets/pieces/2_boots.png", "level": 12, "planned_level": 16, "rank": 6, "stars": none, "ascend_level": 0, "primary": {"label": "SPD", "amount": "40", "optimised": true, "planned_amount": "45"}, "ascension": none, "substats": [stat, sub3], "equipped": false, "worn_by": "Someone"} %}
+    {% set champ = {"name": "Champion", "portrait_url": none} %}
+    <div class="gear-pair" style="container: page / inline-size">
+      <div class="gear-card candidate"><header><span class="caps">Take</span><span class="gear-score"><strong>14.2</strong> score</span></header>{{ piece(legend, champ) }}</div>
+      <span class="gear-pair-arrow">→</span>
+      <div class="gear-card worn"><header><span class="caps">Replaces</span><span class="gear-score"><strong>9.1</strong> score</span></header>{{ piece(epic, champ) }}</div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Each swatch's resolved value, for reading off the page.
+  for (const el of document.querySelectorAll("[data-var]")) {
+    el.textContent = getComputedStyle(document.documentElement).getPropertyValue(el.dataset.var).trim();
+  }
+</script>
+{% endblock %}

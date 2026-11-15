@@ -2,7 +2,7 @@
 assess.py - every accessory the account has (worn, in the inventory, or waiting in the
 mailbox), each with its potential (`potential`) and its value: the potential,
 raised where its set, faction and slot are short of good pieces and lowered where there are
-plenty, and weighed by its set's meta tier (`roles.set_factor`; set-less pieces lowered).
+plenty, and weighed by its set's value (`roles.SetTable`, the user's).
 The clean-up and the roll and rework lists share it.
 
 - `Where`, `Assessed`, `Assessment`: the account's accessories, assessed
@@ -21,7 +21,7 @@ from enum import StrEnum
 import numpy as np
 
 from optimiser.accessories.potential import ACCESSORIES, Piece, Potential, Scorer, assess
-from optimiser.accessories.roles import set_factor
+from optimiser.accessories.roles import ChampionType, SetTable
 from optimiser.account import Account, Artifact, Locks, Slot
 
 GOOD_SHARE = 0.25  # a piece is good when its potential is in its slot's top quarter
@@ -41,12 +41,13 @@ type Shelf = tuple[int, str | None, Slot]  # set, faction, slot
 @dataclass(frozen=True)
 class Assessed:
     """`wearer`: the champion wearing it, if any; `wearer_locked`: they're locked, so it's not
-    to be moved."""
+    to be moved. `set_factor`: its set's value."""
 
     artifact: Artifact
     where: Where
     potential: Potential
     scarcity: float
+    set_factor: float
     wearer_locked: bool
     wearer: int | None = None
 
@@ -56,19 +57,23 @@ class Assessed:
         return self.weighed(self.potential.value())
 
     def weighed(self, score: float) -> float:
-        """A score of the piece, weighed by its shortage and its set's meta tier."""
-        return score * self.scarcity * set_factor(self.artifact.set_id)
+        """A score of the piece, weighed by its shortage and its set's value."""
+        return score * self.scarcity * self.set_factor
 
 
 @dataclass(frozen=True)
 class Assessment:
+    """The pieces, and the types and set fits they were scored by."""
+
     pieces: tuple[Assessed, ...]
     good_bars: dict[Slot, float]  # the potential a piece of the slot needs to be good
+    types: tuple[ChampionType, ...]
+    sets: SetTable
 
     def is_good(self, piece: Assessed) -> bool:
-        """Its potential, weighed by its set's tier (not by shortage), against its slot's
+        """Its potential, weighed by its set's value (not by shortage), against its slot's
         bar."""
-        weighed = piece.potential.value() * set_factor(piece.artifact.set_id)
+        weighed = piece.potential.value() * piece.set_factor
         return weighed >= self.good_bars[piece.artifact.slot]
 
 
@@ -100,9 +105,9 @@ def potentials_of(
 
 
 def assess_accessories(
-    account: Account, by_piece: Mapping[Piece, Potential], locks: Locks
+    account: Account, by_piece: Mapping[Piece, Potential], locks: Locks, scorer: Scorer
 ) -> Assessment:
-    """`by_piece`: `potentials_of` the account."""
+    """`by_piece`: `potentials_of` the account, by `scorer`."""
     placed = placed_accessories(account)
     potentials = {a.id: by_piece[Piece.of(a)] for a, _ in placed}
     owned = [(a, potentials[a.id]) for a, where in placed if where is not Where.MAILBOX]
@@ -116,11 +121,13 @@ def assess_accessories(
             where,
             potentials[artifact.id],
             scarcity.get(shelf_of(artifact), SCARCITY[0]),
+            scorer.sets.factor(artifact.set_id),
             wearer_locked=wearer is not None and locks.get(wearer, 0) > 0,
             wearer=wearer,
         )
 
-    return Assessment(tuple(assessed(a, where) for a, where in placed), bars)
+    pieces = tuple(assessed(a, where) for a, where in placed)
+    return Assessment(pieces, bars, scorer.types, scorer.sets)
 
 
 def good_bars(owned: list[tuple[Artifact, Potential]]) -> dict[Slot, float]:

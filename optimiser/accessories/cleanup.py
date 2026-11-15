@@ -13,20 +13,23 @@ stats.
 
 Never dropped: special variants (Corrupted: unusual stats; left alone entirely, swaps too),
 pieces protected by hand, reserved pieces (`optimiser.reserve`: swaps may still move them),
-banners with SPD rolled three times or more, pieces of good potential, each faction's Faction
-Wars reserve (its best support pieces and best damage pieces of each slot, worn ones
-included), and 6★ damage-set amulets not yet reworked (a rework may make them C.DMG). Groups
-(slot, main stat, set, faction) keep `group_quota` pieces each, worn ones on unlocked
-champions counting; pieces past that go first, as if worth `SURPLUS_FACTOR` of their value.
+banners with SPD rolled three times or more, each set's best RES banners with SPD (spares
+for RES breakpoints, the Chimera's and Hydra's: `RES_SPEED`), pieces of good potential, each
+faction's Faction Wars reserve (its best support pieces and best damage pieces of each slot,
+worn ones included), and 6★ damage-set amulets not yet reworked (a rework may make them
+C.DMG). Groups (slot, main stat, set, faction) keep `group_quota` pieces each, worn ones on
+unlocked champions counting; pieces past that go first, as if worth `SURPLUS_FACTOR` of their
+value.
 
-- `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`, `SPEED_ROLLS`, `FACTION_WARS`, `SURPLUS_FACTOR`,
-  `CRIT_REWORK_RANK`: the rules' numbers
+- `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`, `SPEED_ROLLS`, `RES_SPEED`, `FACTION_WARS`,
+  `SURPLUS_FACTOR`, `CRIT_REWORK_RANK`: the rules' numbers
 - `SWAP_MARGIN`: when a loose piece should replace a worn one
 - `Keep`, `Group`, `Placed`, `Pairing`, `Place`, `Swap`, `Plan`: the plan
 - `plan_cleanup`: the workflow
-- `find_swaps` (`set_upgrades`, `worn_score`), `faction_wars_reserve`,
+- `find_swaps` (`set_upgrades`, `worn_score`), `res_speed_reserve`, `faction_wars_reserve`,
   `places_in_groups`, `keep_reasons` (`could_rework_to_crit`), `place_piece`: its steps
-- `kind_score`, `group_of`, `speed_rolls`: what they share
+- `Reserves`: what the plan's own reserves keep
+- `kind_score`, `group_of`, `speed_value`, `speed_rolls`: what they share
 """
 
 from collections import defaultdict
@@ -34,12 +37,15 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from optimiser.accessories.assess import Assessed, Assessment, Where
-from optimiser.accessories.roles import NO_SET, Kind, SetRole, group_quota, set_factor, set_role
+from optimiser.accessories.roles import NO_SET, Kind, group_quota
 from optimiser.account import Slot, Stat
 
 ACCESSORY_SPACE = 2200
 DEFAULT_TARGET_FREE = 100
 SPEED_ROLLS = 3  # a banner's SPD rolled this often (the first roll included) is always kept
+# RES/SPD banners kept per set: teams for RES breakpoints change often. A set targeting any
+# support type keeps the support count, else the damage one.
+RES_SPEED = {Kind.SUPPORT: 2, Kind.DAMAGE: 1}
 FACTION_WARS = {Kind.SUPPORT: 3, Kind.DAMAGE: 2}  # per faction and slot
 SURPLUS_FACTOR = 0.75
 CRIT_REWORK_RANK = 6
@@ -51,6 +57,7 @@ class Keep(StrEnum):
     RESERVED = "reserved"
     SPECIAL = "special variant"
     SPEED = "SPD rolled 3+"
+    RES_SPEED = "RES/SPD banner of its set"
     POTENTIAL = "good potential"
     FACTION_WARS = "Faction Wars reserve"
     CRIT_REWORK = "could rework to C.DMG"
@@ -156,13 +163,14 @@ def plan_cleanup(
         or p.artifact.id in coming_off
     ]
     faction_wars = faction_wars_reserve(pieces)
-    places = places_in_groups(pieces)
+    res_speed = res_speed_reserve(assessment)
+    places = places_in_groups(assessment)
 
     placed = [
         place_piece(
             piece,
             places[piece.artifact.id],
-            keep_reasons(piece, assessment, protected, reserved, faction_wars),
+            keep_reasons(piece, assessment, protected, reserved, Reserves(faction_wars, res_speed)),
         )
         for piece in loose
     ]
@@ -269,7 +277,7 @@ def set_upgrades(
         if not candidates:
             continue
 
-        better = max(candidates, key=lambda p: (worn_score(p), set_factor(p.artifact.set_id)))
+        better = max(candidates, key=lambda p: (worn_score(p), p.set_factor))
         used |= {better.artifact.id, current.artifact.id}
         pairs.append(Pairing(better, current))
 
@@ -282,12 +290,20 @@ def worn_score(piece: Assessed) -> float:
     return piece.potential.now.best
 
 
+@dataclass(frozen=True)
+class Reserves:
+    """The pieces the plan's own reserves keep, by artifact id."""
+
+    faction_wars: set[int]
+    res_speed: set[int]
+
+
 def keep_reasons(
     piece: Assessed,
     assessment: Assessment,
     protected: set[int],
     reserved: set[int],
-    faction_wars: set[int],
+    reserves: Reserves,
 ) -> tuple[Keep, ...]:
     artifact = piece.artifact
     checks = (
@@ -295,23 +311,54 @@ def keep_reasons(
         (Keep.RESERVED, artifact.id in reserved),
         (Keep.SPECIAL, artifact.special()),
         (Keep.SPEED, artifact.slot is Slot.BANNER and speed_rolls(piece) >= SPEED_ROLLS),
+        (Keep.RES_SPEED, artifact.id in reserves.res_speed),
         (Keep.POTENTIAL, assessment.is_good(piece)),
-        (Keep.FACTION_WARS, artifact.id in faction_wars),
-        (Keep.CRIT_REWORK, could_rework_to_crit(piece)),
+        (Keep.FACTION_WARS, artifact.id in reserves.faction_wars),
+        (Keep.CRIT_REWORK, could_rework_to_crit(piece, assessment)),
     )
     return tuple(reason for reason, applies in checks if applies)
 
 
-def could_rework_to_crit(piece: Assessed) -> bool:
-    """A 6★ amulet of a damage set not yet reworked: a rework may make it a C.DMG one, among
-    the most valuable pieces there are. A 5★ main stat is too weak to be worth the gamble."""
+def could_rework_to_crit(piece: Assessed, assessment: Assessment) -> bool:
+    """A 6★ amulet of a damage set (one targeting damage types only) not yet reworked: a
+    rework may make it a C.DMG one, among the most valuable pieces there are. A 5★ main stat
+    is too weak to be worth the gamble."""
     artifact = piece.artifact
     return (
         artifact.slot is Slot.AMULET
         and artifact.rank == CRIT_REWORK_RANK
         and not artifact.reworked
-        and set_role(artifact.set_id) is SetRole.DAMAGE
+        and assessment.sets.kinds(artifact.set_id, assessment.types) == {Kind.DAMAGE}
     )
+
+
+def res_speed_reserve(assessment: Assessment) -> set[int]:
+    """Each set's best RES banners with SPD (most SPD rolled first, then value), `RES_SPEED`
+    of them by what the set targets: an easy way to a RES breakpoint, for teams that change
+    often. Worn ones count, as for the Faction Wars reserve; set-less banners aren't kept for
+    it."""
+    by_set: dict[int, list[Assessed]] = defaultdict(list)
+
+    for piece in assessment.pieces:
+        artifact = piece.artifact
+
+        if (
+            artifact.slot is Slot.BANNER
+            and artifact.set_id != NO_SET
+            and artifact.primary.stat is Stat.RES
+            and speed_value(piece) > 0
+        ):
+            by_set[artifact.set_id].append(piece)
+
+    reserve: set[int] = set()
+
+    for set_id, banners in by_set.items():
+        best = sorted(banners, key=lambda p: (speed_value(p), p.value), reverse=True)
+        kinds = assessment.sets.kinds(set_id, assessment.types)
+        count = RES_SPEED[Kind.SUPPORT if Kind.SUPPORT in kinds else Kind.DAMAGE]
+        reserve |= {p.artifact.id for p in best[:count]}
+
+    return reserve
 
 
 def faction_wars_reserve(pieces: tuple[Assessed, ...]) -> set[int]:
@@ -339,19 +386,19 @@ def kind_score(piece: Assessed, kind: Kind) -> float:
     return scores.support if kind is Kind.SUPPORT else scores.damage
 
 
-def places_in_groups(pieces: tuple[Assessed, ...]) -> dict[int, Place]:
+def places_in_groups(assessment: Assessment) -> dict[int, Place]:
     """Artifact id -> its place in its group. Pieces worn by locked
     champions are left out: they aren't spare."""
     groups: dict[Group, list[Assessed]] = defaultdict(list)
 
-    for piece in pieces:
+    for piece in assessment.pieces:
         if not piece.wearer_locked:
             groups[group_of(piece)].append(piece)
 
     places = {}
 
     for group, members in groups.items():
-        quota = group_quota(group.set_id, group.slot, group.main)
+        quota = group_quota(assessment.sets, assessment.types, group.set_id, group.slot, group.main)
         ranked = sorted(members, key=lambda p: p.value, reverse=True)
         places |= {p.artifact.id: Place(place, quota) for place, p in enumerate(ranked, start=1)}
 
@@ -361,6 +408,14 @@ def places_in_groups(pieces: tuple[Assessed, ...]) -> dict[int, Place]:
 def group_of(piece: Assessed) -> Group:
     artifact = piece.artifact
     return Group(artifact.slot, artifact.primary.stat or Stat.HP, artifact.set_id, artifact.faction)
+
+
+def speed_value(piece: Assessed) -> float:
+    """Its SPD substat, glyph left out (0: none)."""
+    return max(
+        (line.value for line in piece.artifact.substats if line.stat is Stat.SPD),
+        default=0,
+    )
 
 
 def speed_rolls(piece: Assessed) -> int:
