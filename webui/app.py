@@ -98,6 +98,9 @@ templates.env.globals["static_url"] = lambda path: static_url(path)
 templates.env.globals["synced_ago"] = reader.synced_ago
 templates.env.globals["finder_rarities"] = FINDER_RARITIES
 templates.env.globals["finder_grades"] = FINDER_GRADES
+templates.env.globals["finder_factions"] = lambda: finder_pages.account_factions(
+    current.current_account()
+)
 templates.env.globals["optimiser_url"] = lambda: optimiser_url()
 
 

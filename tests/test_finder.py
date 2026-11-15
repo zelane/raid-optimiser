@@ -9,9 +9,11 @@ from webui.forms.finder import FinderQuery, parse_finder_query
 
 
 def test_query_reads_its_fields() -> None:
-    query = parse_finder_query({"q": "  Taur ", "rarity": "Epic", "grade": "5"})
+    query = parse_finder_query(
+        {"q": "  Taur ", "rarity": "Epic", "faction": "Demonspawn", "grade": "5"}
+    )
 
-    assert query == FinderQuery(text="Taur", rarity="Epic", min_grade=5)
+    assert query == FinderQuery(text="Taur", rarity="Epic", faction="Demonspawn", min_grade=5)
 
 
 def test_unknown_values_fall_back_to_any() -> None:

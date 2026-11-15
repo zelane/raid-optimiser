@@ -392,7 +392,6 @@ dialog.finder > article > header { margin: 0 0 0.9rem; padding: 0; border: 0; }
 .finder-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
 .finder-filters input[type="search"] { flex: 1 1 14rem; width: auto; }
 .finder-filters select { width: auto; }
-.finder-filters .segmented label { padding-block: 0.25rem; font-size: 0.85rem; }
 .finder-results { min-height: 12rem; overflow-y: auto; }
 .finder-count { margin: 0 0 0.6rem; }
 .finder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr)); gap: 0.75rem 0.5rem; }

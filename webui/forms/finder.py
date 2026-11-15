@@ -2,8 +2,9 @@
 finder.py - the champion finder's query into a `FinderQuery`.
 
 Fields: `q`, part of a name; `rarity`, one of the game's rarities (anything else: any);
-`grade`, the fewest stars (1-6; anything else: any). Nothing fails: the finder always lists
-something.
+`faction`, a faction's display name (one the account has none of: any, `find_champions`
+decides); `grade`, the fewest stars (1-6; anything else: any). Nothing fails: the finder
+always lists something.
 
 - `RARITIES`, `GRADES`: what the filters offer
 - `FinderQuery`: the parsed query
@@ -21,6 +22,7 @@ GRADES = (6, 5, 4, 3, 2, 1)
 class FinderQuery:
     text: str = ""
     rarity: str | None = None
+    faction: str | None = None
     min_grade: int = 0
 
 
@@ -30,5 +32,6 @@ def parse_finder_query(query: Mapping[str, str]) -> FinderQuery:
     return FinderQuery(
         text=query.get("q", "").strip(),
         rarity=rarity if rarity in RARITIES else None,
+        faction=query.get("faction", "").strip() or None,
         min_grade=int(grade) if grade.isdigit() and int(grade) in GRADES else 0,
     )

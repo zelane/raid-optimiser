@@ -1,5 +1,5 @@
 {# The champion finder (`finder.js`): a dialog any button marked `data-finder` opens. Its list
-   comes from `/finder` as the filters change. A pick is a link to the champion's optimiser;
+   comes from `/finder` as the filters change (name, rarity, faction, fewest stars). A pick is a link to the champion's optimiser;
    an opener marked `data-finder="slot"` instead puts the champion in the field named by
    `data-finder-target` (as the Chimera slots name them) and submits its form. #}
 <dialog id="finder" class="finder" aria-labelledby="finder-title">
@@ -11,10 +11,14 @@
     <form class="finder-filters" hx-get="/finder" hx-target="#finder-results"
           hx-trigger="input changed delay:200ms, change, finder:open" onsubmit="return false">
       <input type="search" name="q" placeholder="Name (Enter takes the first)" aria-label="Champion name" autocomplete="off">
-      <fieldset class="segmented" role="radiogroup" aria-label="Rarity">
-        <label><input type="radio" name="rarity" value="" checked>Any</label>
-        {% for rarity in finder_rarities[:4] %}<label><input type="radio" name="rarity" value="{{ rarity }}">{{ rarity }}</label>{% endfor %}
-      </fieldset>
+      <select name="rarity" aria-label="Rarity">
+        <option value="">Any rarity</option>
+        {% for rarity in finder_rarities %}<option value="{{ rarity }}">{{ rarity }}</option>{% endfor %}
+      </select>
+      <select name="faction" aria-label="Faction">
+        <option value="">Any faction</option>
+        {% for faction in finder_factions() %}<option value="{{ faction }}">{{ faction }}</option>{% endfor %}
+      </select>
       <select name="grade" aria-label="Fewest stars">
         <option value="">Any stars</option>
         {% for grade in finder_grades %}<option value="{{ grade }}">{{ grade }}★{% if grade < 6 %} and up{% endif %}</option>{% endfor %}
