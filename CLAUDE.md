@@ -179,13 +179,16 @@ the game itself.
   each slot's relics as gear),
   `service/team.py` (`TeamView`,
   `team_view(…, enemy, note)`: the want groups name the enemy, `note` says where a tag only
-  lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `wants_panel`,
-  `gear_panel`, `need_item`, `status_icon`, `score_pill`; a chip's × links to the page's
-  `without(key)` macro, passed in) and `static/picker.js` (a search over what isn't chosen,
-  grouped by kind; a pick adds a field and reloads, showing it as a removable chip). Icons:
+  lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `bring_panels`
+  (`wants_panel`, `gear_panel`), `run_bar`, `option_card` (a `call` block adds the Chimera's
+  glance), `more_link`, `needs_panel` (an accent panel of needs; a `call` block for the
+  Chimera's trial rows), `need_item`, `status_icon`, `score_pill`; a chip's × links to the
+  page's `without(key)` macro, passed in) and `static/picker.js` (a search over what isn't
+  chosen, grouped by kind; a pick adds a field and reloads, showing it as a removable chip).
+  Both pages are those macros on the layout primitives; their CSS is the parts' own look
+  (`team-slot`, `team-option`, `accent-panel` with `--accent`, `trial`). Icons:
   `statuses/` (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g.
-  DecreaseDefence → StatusReduceDefence). Class names and the champion datalist's id still
-  say chimera.
+  DecreaseDefence → StatusReduceDefence).
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
@@ -292,22 +295,40 @@ the game itself.
   Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
   colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
   `--surface-container-lowest`…`-high` for depth, `--on-surface`, `--on-surface-variant` for
-  muted, `--outline`/`--outline-variant`), plus `--heading`, `--stat-up/mid/down`, fonts, an
-  Every Layout modular scale (`--s-2`…`--s3`) and the named sizes. `static/base.css`: the
+  muted, `--outline`/`--outline-variant`), plus `--heading`, `--stat-up/mid/down`, the game's
+  colours (rarity, forms, art), fonts and one scale each for sizes: `--text-2xs`…`-4xl`,
+  `--space-3xs`…`-4xl`, `--radius-s`/`--radius`/`-l`/`-pill`. stylelint (`declaration-property-
+  value-disallowed-list`) keeps rem literals out of spacing, font sizes and radii, raw colours
+  out of everything but custom properties, and bare durations out of transitions: use a token
+  (em stays for sizes relative to their context, px for hairlines). `static/base.css`: the
   elements themselves (reset; prose's flow margins, zero-specificity; tables headed in caps;
-  buttons filled brass, `quiet` for secondary; fields, checkboxes, switches; cards with a rim,
-  no shadow; dialogs; nav) and Every Layout's primitives (`stack`, `cluster`, `with-sidebar`,
-  `switcher`, `grid`) for new layouts; `.joined` joins a field and its button. Spacing is the
+  buttons filled brass, `quiet` for secondary, `small` inside rows and cards, `icon` (a bare
+  × or ✕, red on hover), `dashed` (adds another); fields (`small`; numbers bold and centred;
+  `input.bare`: a number typed into its cell; `label.inline` beside its field), checkboxes,
+  switches; a cell's `small` muted;
+  cards with a rim, no shadow; dialogs; nav) and Every Layout's primitives (`stack` and
+  `cluster` by gap, `with-sidebar`, `switcher`, `grid`), parameters set inline (`style="--space:
+  var(--space-s); --align: center"`; also `--justify`, `--min`, `--repeat`), registered
+  non-inheriting (`@property`) so they stop at the primitive; a list laid out by one is
+  unstyled; `push` sends a child to the far end (`margin-*-start: auto`), `grow` lets a field
+  take its share (`--basis`, inherited), `clamp` cuts text to `--lines`. Lay pages out with
+  these, not a class per container; `.joined` joins a field and its button. Spacing is the
   parent's job (`gap`, the primitives), with logical properties. `static/app.css`: the
   components. The look (◆ section titles) follows the Stitch design system the user supplied,
   but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over the spec's
-  fonts. The shared components: `panel`/`panel-head`, `well`, `table-well`, `caps`, `badge`
-  (`good`/`bad`/`info`), `chip` (`on`), `status` (`met`/`missing`), `segmented` (`small`;
-  checkboxes for several), `filter-bar` (`data-filter`: filters items in the page, app.js),
-  `slot` (`empty`), `stat-tiles` (`edit`), `switch-rows`, `page-head`, `page-tabs` (a badge for
-  a count), `tally`, `cta`, `danger` (selling), `champion-strip`, `gear-pair` (`gear-card`
-  `candidate`/`worn` over the optimiser's `piece` card), `meter`, `weight-chip`. Build pages
-  from those and the tokens; `/palette` shows them all.
+  fonts. Colour by tone: `good`/`up`, `bad`/`down`, `mid`, `info` set `--tone` (registered,
+  non-inheriting); text takes it as its colour, and a `badge`, `status`, `meter` or `note`
+  as theirs, so a variant is one class, not a rule per component. The shared components:
+  `panel`/`panel-head`, `well`, `table-well`, `caps`, `note` (small, muted), `figure` (a big
+  number), `badge` (`quiet`: outlined; scores and difficulty too), `alert`, `chip` (`on`),
+  `status` (`met`/`missing`), `segmented` (`small`; checkboxes for several) and `page-tabs`
+  (the same look for links), `filter-bar` (`data-filter`: filters items in the page, app.js),
+  `slot` (`empty`), `stat-tiles` (`edit`), `switch-rows`, `page-head`, `tally`, `cta`,
+  `danger` (selling), `champion-grid`/`champion-card`/`card-name`, `champion-name` (a name
+  link in the heading face), `tile-name`, `gear-pair` (`gear-card` `candidate`/`worn` over
+  the optimiser's `piece` card), `meter`; in tables, `num` cells. Heads' own margins are
+  zero-specificity (`:where`), so a primitive's gap wins. Build pages from those, the
+  primitives and the tokens; `/palette` shows them all.
 
 ## Commands
 

@@ -1,7 +1,7 @@
 <tr>
   <th scope="row">{{ row.label }}</th>
   <td>
-    <select name="grade" aria-label="{{ row.label }} glyph" class="{{ 'is-planned' if row.chosen }}"
+    <select name="grade" aria-label="{{ row.label }} glyph" class="small {{ 'is-planned' if row.chosen }}"
             hx-post="/glyphs" hx-vals='{"kind": "{{ row.key }}"}' hx-trigger="change"
             hx-target="closest tr" hx-swap="outerHTML">
       {% for choice in row.choices %}

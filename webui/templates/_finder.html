@@ -3,12 +3,12 @@
    an opener marked `data-finder="slot"` instead puts the champion in the field named by
    `data-finder-target` (as the Chimera slots name them) and submits its form. #}
 <dialog id="finder" class="finder" aria-labelledby="finder-title">
-  <article>
-    <header class="panel-head">
+  <article class="stack" style="--space: var(--space-m)">
+    <div class="panel-head">
       <h2 id="finder-title">Find a champion</h2>
-      <button type="button" class="finder-close" data-finder-close aria-label="Close">×</button>
-    </header>
-    <form class="filter-bar finder-filters" hx-get="/finder" hx-target="#finder-results"
+      <button type="button" class="icon" data-finder-close aria-label="Close">×</button>
+    </div>
+    <form class="filter-bar" hx-get="/finder" hx-target="#finder-results"
           hx-trigger="input changed delay:200ms, change, finder:open" onsubmit="return false">
       <input type="search" name="q" placeholder="Name (Enter takes the first)" aria-label="Champion name" autocomplete="off">
       <select name="rarity" aria-label="Rarity">
@@ -24,6 +24,6 @@
         {% for grade in finder_grades %}<option value="{{ grade }}">{{ grade }}★{% if grade < 6 %} and up{% endif %}</option>{% endfor %}
       </select>
     </form>
-    <div id="finder-results" class="finder-results" aria-live="polite"></div>
+    <div id="finder-results" class="finder-results stack" style="--space: var(--space-s)" aria-live="polite"></div>
   </article>
 </dialog>

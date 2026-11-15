@@ -42,9 +42,9 @@
         {%- endfor %}
       </ul>
       <ul class="tools">
-        <li class="sync">
-          <small class="sync-status">{{ synced_ago() }}</small>
-          <button class="quiet" hx-post="/sync" hx-target="previous .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
+        <li class="cluster" style="--space: var(--space-m)">
+          <small class="sync-status caps">{{ synced_ago() }}</small>
+          <button class="quiet small sync" hx-post="/sync" hx-target="previous .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
         </li>
       </ul>
     </nav>

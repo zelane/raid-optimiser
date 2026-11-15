@@ -11,9 +11,9 @@
   {% if build.to_level %}{% set _ = todo.append(build.to_level ~ " to level") %}{% endif %}
   {% if build.to_ascend %}{% set _ = todo.append(build.to_ascend ~ " to ascend") %}{% endif %}
   {% if build.glyphs_to_apply %}{% set _ = todo.append(build.glyphs_to_apply ~ " glyph" ~ ("s" if build.glyphs_to_apply != 1 else "") ~ " to apply") %}{% endif %}
-  <div class="build-head">
+  <div class="build-head cluster" style="--space: var(--space-s) var(--space-l)">
     <h3>Build {{ build.number }}</h3>
-    <p class="build-notes">
+    <p class="build-notes note">
       {{- notes | join(", ") }}{% if notes and todo %}; {% endif %}
       {%- if todo %}<span class="planned">{{ todo | join(", ") }}</span>{% endif -%}
     </p>
@@ -37,8 +37,8 @@
   </div>
 {% endmacro %}
 
-<div class="panel results-panel">
-<p class="run-head">
+<div class="panel results-panel stack" style="--space: var(--space-m)">
+<p class="cluster note" style="--space: var(--space-xs) var(--space-l)">
   <span class="badge info">Found {{ results.builds | length }} build{{ "s" if results.builds | length != 1 }} in {{ "%.1f" | format(results.seconds) }}s</span>
   {% if results.champion_level_note %}<span class="planned">{{ results.champion.name }} {{ results.champion_level_note }}.</span>{% endif %}
   {% if results.lore_of_steel %}<span>Lore of Steel applied.</span>{% endif %}
@@ -47,7 +47,7 @@
 
 {# The ledger: the gear worn now, then a build a row, each change beside its value. Picking a
    build's row shows its pieces under the ledger (app.js); the first is picked to begin with. #}
-<div class="ledger-wrap">
+<div class="table-well">
   <table class="ledger">
     <thead>
       <tr>

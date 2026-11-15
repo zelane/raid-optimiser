@@ -1,4 +1,4 @@
-<div id="reserve" class="reserve">
+<div id="reserve" class="stack">
   {% if reserve.rules %}
   <div class="table-well">
   <table>
@@ -17,10 +17,10 @@
   </table>
   </div>
   {% else %}
-  <p><small class="muted">Nothing is reserved.</small></p>
+  <p class="note">Nothing is reserved.</p>
   {% endif %}
 
-  <div class="reserve-add">
+  <div class="stack" style="--space: var(--space-m); --align: flex-start">
     {% if reserve.tags %}
     <form class="joined" hx-post="/reserve" hx-vals='{"on": "1"}' hx-target="#reserve" hx-swap="outerHTML">
       <select name="rule" aria-label="Champion tag">

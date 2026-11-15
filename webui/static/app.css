@@ -7,12 +7,6 @@
  */
 
 :root {
-  --rarity-common: #9aa0a6;
-  --rarity-uncommon: #3fb950;
-  --rarity-rare: #4c8eda;
-  --rarity-epic: #a371f7;
-  --rarity-legendary: #e3a008;
-  --rarity-mythical: #f85149;
   --rarity: var(--rarity-common);
 }
 
@@ -55,20 +49,6 @@
   white-space: nowrap;
 }
 
-.hint {
-  display: block;
-  margin-top: 0.25rem;
-  color: var(--on-surface-variant);
-}
-
-.up {
-  color: var(--stat-up);
-}
-
-.down {
-  color: var(--stat-down);
-}
-
 .stars {
   color: var(--rarity-legendary);
   letter-spacing: -0.1em;
@@ -94,44 +74,32 @@
 /* --- Ornament ------------------------------------------------------------------ */
 
 /* Section headings: the wordmark's diamond, then a brass rule fading out. */
-.page-section > h2,
-main > h2,
-#cleanup > h2,
-details.section > summary > h2,
-.section-title {
+:is(.page-section > h2, main > h2, #cleanup > h2, details.section > summary > h2, .section-title) {
   display: flex;
-  gap: 0.6rem;
+  gap: var(--space-s);
   align-items: center;
-}
 
-.page-section > h2::before,
-main > h2::before,
-#cleanup > h2::before,
-details.section > summary > h2::before,
-.section-title::before {
-  content: "◆";
-  font-size: 0.55em;
-  color: var(--primary);
-}
+  &::before {
+    content: "◆";
+    font-size: 0.55em;
+    color: var(--primary);
+  }
 
-.page-section > h2::after,
-main > h2::after,
-#cleanup > h2::after,
-details.section > summary > h2::after,
-.section-title::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--primary) 60%, transparent),
-    transparent
-  );
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--primary) 60%, transparent),
+      transparent
+    );
+  }
 }
 
 /* A collapsible section: its heading as above, the diamond turning when it opens. */
 details.section {
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-l);
 
   > summary {
     margin-bottom: 0;
@@ -152,7 +120,7 @@ details.section {
 
   > summary > h2::before {
     display: inline-block;
-    transition: transform 0.2s ease;
+    transition: transform var(--transition);
   }
 
   &[open] > summary > h2::before {
@@ -166,16 +134,18 @@ details.section {
 
 /* --- Components ---------------------------------------------------------------- */
 
-/* The parts every page is built from.
-   - panel: a card on the slab with a hairline rim; `panel-head` its title, a caps note at the
+/* The parts every page is built from, laid out with base.css's primitives.
+   - tone: `good`/`up`, `bad`/`down`, `mid`, `info` set `--tone`; text takes it as its colour,
+     a badge, status or meter as its own.
+   - panel: a card on the slab with a hairline rim; `panel-head` its title, something at the
      other end. A fieldset panel's legend is its title.
-   - well: an inset, back down on the slab (tables, stat strips, field groups).
-   - caps: column headings and small group names. badge: a small tinted tag, `good`/`bad`/
-     `info` for outcomes.
-   - chip: a pill that toggles (`on`); status: a square tag for a requirement, `met` or
-     `missing`.
-   - segmented: radios as one control, the picked one gold; checkboxes for any number picked.
-     `small` for one inside a row or card.
+   - well: an inset, back down on the slab (stat strips, field groups); table-well holds a
+     table, scrolling sideways when it must.
+   - caps: column headings and small group names; note: small muted text; figure: a big
+     number. badge: a small tinted tag in its tone (`quiet`: outlined).
+   - chip: a pill that toggles (`on`); status: a requirement, `met` or `missing`.
+   - segmented: radios as one control, the picked one gold; checkboxes for any number picked;
+     `small` inside a row or card. page-tabs: the same look for links between a page's views.
    - filter-bar: what narrows a list, in one row: a search taking the room, selects and
      segmented choices, a count at the end. `data-filter` (a selector) filters those items
      here in the page (app.js); a bar the server answers (htmx) leaves it off.
@@ -183,39 +153,65 @@ details.section {
    - stat-tiles: stats as caps label over value, as many to a row as fit; `edit` makes each a
      cell with its number field, a zero dimmed (`zero`, kept by app.js).
    - switch-rows: settings as rows, the switch at the end.
-   - cta: the page's main action, in caps. */
+   - page-head: title and lede, tabs or a tally (a big n/max with a caps note) at the other end.
+   - gear-pair: the piece to take (gold rim) beside what it replaces, one under the other when
+     short. meter: how far something can be counted on, as a bar.
+   - cta: the page's main action, in caps; danger: what discards (selling), in red. */
+@property --tone {
+  inherits: false;
+  syntax: "*";
+}
+
+:is(.good, .up) {
+  --tone: var(--stat-up);
+}
+
+:is(.bad, .down) {
+  --tone: var(--stat-down);
+}
+
+.mid {
+  --tone: var(--stat-mid);
+}
+
+.info {
+  --tone: var(--tertiary);
+}
+
+:is(.good, .up, .bad, .down, .mid, .info) {
+  color: var(--tone);
+}
+
 .panel {
   margin: 0;
-  padding: var(--panel-pad) var(--panel-pad);
+  padding: var(--panel-pad);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-panel);
   background: var(--surface-container-low);
-  box-shadow: none;
 }
 
 .panel-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 1rem;
+  gap: var(--space-2xs) var(--space-l);
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: 0.9rem;
 
   > :is(h2, h3) {
     margin: 0;
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
   }
 
   /* A section's title with an action at the other end: the title keeps its rule, up to the action. */
   > .section-title {
     flex: 1 1 auto;
-    font-size: 1.6rem;
+    font-size: var(--text-2xl);
   }
 
   h2 small {
-    margin-left: 0.4rem;
+    margin-left: var(--space-xs);
     font-family: var(--font-text);
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     font-weight: 400;
   }
 }
@@ -224,10 +220,10 @@ fieldset.panel {
   > legend {
     float: left;
     width: 100%;
-    margin-bottom: 0.9rem;
+    margin-bottom: var(--space-l);
     padding: 0;
     font-family: var(--font-display);
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     font-weight: 700;
     color: var(--heading);
   }
@@ -237,67 +233,103 @@ fieldset.panel {
   }
 }
 
-.well {
-  padding: 0.6rem 0.8rem;
+:is(.well, .table-well) {
   border: 1px solid var(--outline-variant);
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
   background: var(--surface-container-lowest);
 }
 
+.well {
+  padding: var(--space-s) var(--space-m);
+}
+
+.table-well {
+  overflow-x: auto;
+
+  table {
+    margin: 0;
+  }
+
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+}
+
 .caps {
-  font-size: 0.7rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+
+  &:is(a) {
+    text-decoration: none;
+  }
+}
+
+.note {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  color: var(--tone, var(--on-surface-variant));
+}
+
+.figure {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 .badge {
   display: inline-block;
-  padding: 0.05rem 0.45rem;
-  border-radius: 0.25rem;
-  font-size: 0.72rem;
+  padding: var(--space-3xs) var(--space-s);
+  border-radius: var(--radius);
+  font-family: var(--font-text);
+  font-size: var(--text-2xs);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--primary);
+  color: var(--tone, var(--primary));
   letter-spacing: 0.02em;
   white-space: nowrap;
-  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  background: color-mix(in srgb, var(--tone, var(--primary)) 16%, transparent);
 
-  &.good {
-    color: var(--stat-up);
-    background: color-mix(in srgb, var(--stat-up) 16%, transparent);
+  &.quiet {
+    color: var(--tone, var(--on-surface-variant));
+    background: none;
+    box-shadow: inset 0 0 0 1px currentcolor;
   }
+}
 
-  &.bad {
-    color: var(--stat-down);
-    background: color-mix(in srgb, var(--stat-down) 20%, transparent);
-  }
-
-  &.info {
-    color: var(--tertiary);
-    background: color-mix(in srgb, var(--tertiary) 15%, transparent);
-  }
+/* A chip's or segment's input covers it, unseen: the label is the control. */
+:is(.chip, .segmented label) > input {
+  cursor: pointer;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
 }
 
 .chip {
   cursor: pointer;
   position: relative;
   display: inline-flex;
-  gap: 0.4rem;
+  gap: var(--space-xs);
   align-items: center;
   margin: 0;
-  padding: 0.3rem 0.7rem;
+  padding: var(--space-2xs) var(--space-m);
   border: 1px solid var(--outline-variant);
-  border-radius: 999px;
-  font-size: 0.82rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
   line-height: 1.2;
   color: var(--on-surface);
   text-decoration: none;
   background: var(--surface-container-lowest);
   transition:
-    border-color 0.15s,
-    background-color 0.15s;
+    border-color var(--transition),
+    background-color var(--transition);
 
   &:hover {
     border-color: color-mix(in srgb, var(--secondary) 60%, transparent);
@@ -309,16 +341,6 @@ fieldset.panel {
     background: color-mix(in srgb, var(--primary) 14%, var(--surface-container-lowest));
   }
 
-  input {
-    cursor: pointer;
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-  }
-
   &:has(:focus-visible) {
     outline: 1px solid var(--primary);
     outline-offset: 2px;
@@ -327,92 +349,85 @@ fieldset.panel {
 
 .status {
   display: flex;
-  gap: 0.45rem;
+  gap: var(--space-s);
   align-items: flex-start;
   margin: 0;
-  padding: 0.35rem 0.55rem;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0.25rem;
-  font-size: 0.8rem;
+  padding: var(--space-xs) var(--space-s);
+  border: 1px solid color-mix(in srgb, var(--tone, var(--outline-variant)) 45%, transparent);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
   line-height: 1.3;
+  background: color-mix(in srgb, var(--tone, transparent) 9%, transparent);
 
   &.met {
-    border-color: color-mix(in srgb, var(--stat-up) 45%, transparent);
-    background: color-mix(in srgb, var(--stat-up) 9%, transparent);
+    --tone: var(--stat-up);
   }
 
   &.missing {
-    border-color: color-mix(in srgb, var(--stat-down) 45%, transparent);
-    background: color-mix(in srgb, var(--stat-down) 9%, transparent);
+    --tone: var(--stat-down);
   }
 }
 
-.segmented {
+/* Segmented choices, and tabs between a page's views: one control, the picked one gold. */
+:is(.segmented, .page-tabs) {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
+  gap: var(--space-2xs);
+  width: fit-content;
   margin: 0;
-  padding: 0.25rem;
+  padding: var(--space-2xs);
   border: 1px solid var(--outline-variant);
-  border-radius: 0.4rem;
+  border-radius: var(--radius-l);
   background: var(--surface-container-lowest);
 
-  label {
+  > :is(label, a) {
     cursor: pointer;
     position: relative;
     display: flex;
-    gap: 0.4rem;
+    gap: var(--space-xs);
     align-items: center;
     margin: 0;
-    padding: 0.35rem 0.85rem;
-    border-radius: 0.25rem;
+    padding: var(--space-xs) var(--space-m);
+    border-radius: var(--radius);
     font-weight: 600;
     color: var(--on-surface-variant);
+    text-decoration: none;
+    white-space: nowrap;
     transition:
-      background-color 0.15s,
-      color 0.15s;
+      background-color var(--transition),
+      color var(--transition);
 
     &:hover {
       color: var(--on-surface);
     }
-  }
 
-  input {
-    cursor: pointer;
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
-  }
+    &:is(:has(:checked), [aria-current="page"]) {
+      color: var(--on-primary);
+      background: var(--primary);
 
-  label:has(:checked) {
-    color: var(--on-primary);
-    background: var(--primary);
+      .badge {
+        color: inherit;
+        background: var(--shade);
+      }
+    }
 
-    .badge {
-      color: inherit;
-      background: rgb(0 0 0 / 20%);
+    &:has(:focus-visible) {
+      outline: 1px solid var(--primary);
+      outline-offset: 2px;
     }
   }
 
-  label:has(:focus-visible) {
-    outline: 1px solid var(--primary);
-    outline-offset: 2px;
-  }
-
   &.small {
-    gap: 0.15rem;
-    padding: 0.15rem;
-    border-radius: 0.3rem;
+    gap: var(--space-3xs);
+    padding: var(--space-3xs);
+    border-radius: var(--radius);
   }
 
-  &.small label {
-    gap: 0.25rem;
-    padding: 0.1rem 0.45rem;
-    border-radius: 0.2rem;
-    font-size: 0.72rem;
+  &.small > label {
+    gap: var(--space-2xs);
+    padding: var(--space-3xs) var(--space-s);
+    border-radius: var(--radius-s);
+    font-size: var(--text-2xs);
     letter-spacing: 0.03em;
   }
 }
@@ -420,10 +435,10 @@ fieldset.panel {
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-s) var(--space-m);
   align-items: center;
   margin: 0;
-  padding: 0.5rem;
+  padding: var(--space-s);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-panel);
   background: var(--surface-container-low);
@@ -454,8 +469,8 @@ fieldset.panel {
 .slot {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.9rem 1rem;
+  gap: var(--space-xs);
+  padding: var(--space-l);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-panel);
   background: var(--surface-container-low);
@@ -473,7 +488,7 @@ fieldset.panel {
 .stat-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
-  gap: 0.5rem 0.75rem;
+  gap: var(--space-s) var(--space-m);
   margin: 0;
 
   > div {
@@ -483,8 +498,7 @@ fieldset.panel {
   }
 
   dt {
-    margin: 0;
-    font-size: 0.68rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     color: var(--on-surface-variant);
     letter-spacing: 0.06em;
@@ -499,77 +513,57 @@ fieldset.panel {
 
   &.edit {
     grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
-    gap: 0.35rem;
+    gap: var(--space-xs);
   }
 
   &.edit > label {
     display: flex;
     flex-direction: column;
-    gap: 0.1rem;
+    gap: var(--space-3xs);
     align-items: center;
     min-width: 0;
     margin: 0;
-    padding: 0.3rem 0.2rem 0.2rem;
+    padding: var(--space-2xs);
     border: 1px solid var(--outline-variant);
-    border-radius: 0.25rem;
+    border-radius: var(--radius);
     background: var(--surface-container-lowest);
     transition:
-      border-color 0.15s,
-      opacity 0.15s;
-  }
+      border-color var(--transition),
+      opacity var(--transition);
 
-  &.edit > label .caps {
-    font-size: 0.64rem;
+    &:hover {
+      border-color: color-mix(in srgb, var(--secondary) 60%, transparent);
+    }
+
+    &:focus-within {
+      border-color: var(--primary);
+      opacity: 1;
+    }
+
+    &.zero {
+      opacity: 0.45;
+    }
   }
 
   &.edit input {
-    width: 100%;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    font-size: 1.15rem;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums lining-nums;
-    text-align: center;
-    appearance: textfield;
-    background: none;
-    box-shadow: none;
-  }
-
-  &.edit input::-webkit-inner-spin-button {
-    margin: 0;
-    appearance: none;
-  }
-
-  &.edit > label:hover {
-    border-color: color-mix(in srgb, var(--secondary) 60%, transparent);
-  }
-
-  &.edit > label:focus-within {
-    border-color: var(--primary);
-    opacity: 1;
-  }
-
-  &.edit > label.zero {
-    opacity: 0.45;
+    font-size: var(--text-l);
   }
 }
 
 .switch-rows {
   display: flex;
   flex-direction: column;
-  padding-block: 0.15rem;
+  padding-block: var(--space-3xs);
 
   label {
     display: flex;
-    gap: 0.6rem;
+    gap: var(--space-s);
     align-items: center;
     width: 100%;
     margin: 0;
-    padding: 0.5rem 0;
+    padding: var(--space-s) 0;
     border-bottom: 1px solid var(--outline-variant);
-    font-size: 0.9rem;
+    font-size: var(--text-s);
 
     &:last-child {
       border-bottom: 0;
@@ -584,18 +578,13 @@ fieldset.panel {
 
   .row-note {
     order: 2;
-    font-size: 0.75rem;
+    font-size: var(--text-2xs);
     color: var(--on-surface-variant);
     white-space: nowrap;
   }
 
   select {
     order: 2;
-    width: auto;
-    height: auto;
-    padding-block: 0.1rem;
-    padding-inline: 0.5rem 1.75rem;
-    font-size: 0.85rem;
   }
 
   input[type="checkbox"] {
@@ -605,82 +594,33 @@ fieldset.panel {
   }
 }
 
-.cta {
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* A page's head: title and lede, its tabs or a tally at the other end. Tabs between a
-   page's views are links set as one control, the open one gold. A tally is a big figure
-   (n/max) with a caps note. A table-well holds a table on the slab, scrolling sideways when
-   it must. A panel-note is a panel's explanation, under its title. */
 .page-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 2rem;
+  gap: var(--space-l) var(--space-3xl);
   align-items: flex-end;
   justify-content: space-between;
-  margin-bottom: 1.5rem;
 
   > div:first-child {
     flex: 1 1 26rem;
   }
 
   h1 {
-    margin: 0 0 0.35rem;
+    margin: 0 0 var(--space-xs);
   }
 
   .lede {
     margin: 0;
-    font-size: 0.9rem;
-  }
-}
-
-.page-tabs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0.4rem;
-  background: var(--surface-container-lowest);
-
-  a {
-    padding: 0.35rem 0.85rem;
-    border-radius: 0.25rem;
-    font-weight: 600;
-    color: var(--on-surface-variant);
-    text-decoration: none;
-    white-space: nowrap;
-
-    &:hover {
-      color: var(--on-surface);
-    }
-
-    &[aria-current="page"] {
-      color: var(--on-primary);
-      background: var(--primary);
-    }
-
-    .badge {
-      margin-left: 0.3rem;
-      font-size: 0.68rem;
-    }
-
-    &[aria-current="page"] .badge {
-      color: inherit;
-      background: rgb(0 0 0 / 20%);
-    }
+    font-size: var(--text-s);
   }
 }
 
 .tally {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 0 0.6rem;
+  gap: 0 var(--space-s);
   align-items: center;
-  padding: 0.5rem 0.9rem;
+  padding: var(--space-s) var(--space-l);
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-panel);
   background: var(--surface-container-low);
@@ -688,7 +628,7 @@ fieldset.panel {
   strong {
     grid-row: span 2;
     font-family: var(--font-display);
-    font-size: 2rem;
+    font-size: var(--text-3xl);
     line-height: 1;
 
     small {
@@ -698,152 +638,42 @@ fieldset.panel {
   }
 }
 
-.table-well {
-  overflow-x: auto;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0.25rem;
-  background: var(--surface-container-lowest);
-
-  table {
-    margin: 0;
-  }
-
-  tbody tr:last-child > * {
-    border-bottom: 0;
-  }
-
-  + h2,
-  + .hint + h2 {
-    margin-top: 2rem;
-  }
-}
-
-.panel-note {
-  margin: 0 0 0.9rem;
-  font-size: 0.82rem;
-  color: var(--on-surface-variant);
-}
-
-/* A champion strip: who (portrait, name, tags), a figure, then the action, in one row that
-   wraps when short. A gear pair: the piece to take (gold rim) beside what it replaces (muted),
-   one under the other when short. A meter: how far something can be counted on, as a bar.
-   A danger button: actions that discard (selling), in red. Weight chips: a stat and its
-   weight, for read-only weight lists. Tabs may carry a count (`page-tabs` with a badge). */
-.champion-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: center;
-
-  .card-tile {
-    text-decoration: none;
-  }
-}
-
-.strip-who {
-  display: flex;
-  flex: 1 1 12rem;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.strip-name {
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--heading);
-  text-decoration: none;
-
-  &:hover {
-    color: var(--primary);
-  }
-}
-
-.strip-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-  font-size: 0.8rem;
-
-  img.faction {
-    height: 1.6rem;
-  }
-}
-
-.strip-figure {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.1;
-
-  strong {
-    font-family: var(--font-display);
-    font-size: 1.6rem;
-  }
-}
-
 .gear-pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.5rem;
-  align-items: stretch;
+  gap: var(--space-s);
+}
+
+.gear-pair-arrow {
+  display: none;
+  align-self: center;
+  font-size: var(--text-2xl);
+  color: var(--primary);
 }
 
 @container page (min-width: 46rem) {
   .gear-pair {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
-}
 
-.gear-pair-arrow {
-  display: none;
-  align-self: center;
-  font-size: 1.5rem;
-  color: var(--primary);
-}
-
-@container page (min-width: 46rem) {
   .gear-pair-arrow {
     display: block;
   }
 }
 
 .gear-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  min-width: 0;
-
-  > header {
-    display: flex;
-    gap: 0.5rem;
-    align-items: baseline;
-    justify-content: space-between;
-    padding-inline: 0.25rem;
-  }
-
-  &.candidate > header .caps {
-    color: var(--primary);
-  }
-
   .piece {
     flex: 1;
   }
 
-  &.candidate .piece {
-    border-color: color-mix(in srgb, var(--primary) 55%, transparent);
-  }
-}
+  &.candidate {
+    .caps {
+      color: var(--primary);
+    }
 
-.gear-score {
-  font-size: 0.8rem;
-  color: var(--on-surface-variant);
-
-  strong {
-    font-size: 1rem;
-    color: var(--on-surface);
+    .piece {
+      border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+    }
   }
 }
 
@@ -851,57 +681,32 @@ fieldset.panel {
   overflow: hidden;
   display: block;
   height: 0.25rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
+  color: var(--tone, var(--stat-up));
   background: color-mix(in srgb, var(--outline-variant) 60%, transparent);
 
   > span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--stat-up);
-  }
-
-  &.mid > span {
-    background: var(--stat-mid);
-  }
-
-  &.low > span {
-    background: var(--stat-down);
+    background: currentcolor;
   }
 }
 
-button.danger,
-[role="button"].danger {
+.cta {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+:is(button, [role="button"]).danger {
   border: 1px solid var(--stat-down);
   color: var(--stat-down);
   background: color-mix(in srgb, var(--stat-down) 8%, transparent);
-}
 
-button.danger:hover,
-[role="button"].danger:hover {
-  background: color-mix(in srgb, var(--stat-down) 14%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--stat-down) 30%, transparent);
-}
-
-.weight-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.weight-chip {
-  display: inline-flex;
-  gap: 0.35rem;
-  align-items: baseline;
-  padding: 0.1rem 0.45rem;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0.25rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: var(--surface-container-low);
-
-  .caps {
-    font-size: 0.65rem;
+  &:hover {
+    background: color-mix(in srgb, var(--stat-down) 14%, transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--stat-down) 30%, transparent);
   }
 }
 
@@ -922,10 +727,10 @@ button.danger:hover,
   }
 
   nav {
-    padding-block: 0.25rem;
+    padding-block: var(--space-2xs);
 
     &:not(.tabs) {
-      column-gap: 1.5rem;
+      column-gap: var(--space-2xl);
     }
 
     ul.menu {
@@ -933,13 +738,13 @@ button.danger:hover,
     }
 
     a {
-      font-size: 0.82rem;
+      font-size: var(--text-xs);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.07em;
 
       &.wordmark {
-        font-size: 1.2rem;
+        font-size: var(--text-xl);
         font-weight: 700;
         letter-spacing: 0.04em;
       }
@@ -955,19 +760,8 @@ button.danger:hover,
     text-underline-offset: 0.55em;
   }
 
-  li.sync {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-
-    button {
-      padding: 0.2rem 0.75rem;
-      font-size: 0.8rem;
-
-      &[disabled]::after {
-        content: "…";
-      }
-    }
+  button.sync[disabled]::after {
+    content: "…";
   }
 
   /* The band sits on the bar's lower edge. */
@@ -980,7 +774,7 @@ button.danger:hover,
     padding-block: 0;
 
     ul {
-      gap: 0.25rem 1.75rem;
+      gap: var(--space-2xs) var(--space-3xl);
       margin: 0;
     }
 
@@ -991,10 +785,10 @@ button.danger:hover,
     a {
       display: inline-block;
       margin: 0;
-      padding: 0.6rem 0 calc(0.6rem - 2px);
+      padding: var(--space-s) 0 calc(var(--space-s) - 2px);
       border-bottom: 2px solid transparent;
       border-radius: 0;
-      font-size: 0.75rem;
+      font-size: var(--text-2xs);
       color: var(--on-surface-variant);
 
       &:hover {
@@ -1011,7 +805,7 @@ button.danger:hover,
 
 .wordmark {
   display: inline-flex;
-  gap: 0.55rem;
+  gap: var(--space-s);
   align-items: center;
   font-family: var(--font-display);
   color: var(--heading);
@@ -1030,16 +824,11 @@ button.danger:hover,
 }
 
 .sync-status {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--on-surface-variant);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   white-space: nowrap;
 
   &::before {
     content: "●";
-    margin-right: 0.35rem;
+    margin-right: var(--space-xs);
     color: var(--tertiary);
   }
 }
@@ -1089,7 +878,7 @@ button.danger:hover,
   aspect-ratio: 140 / 182;
   border: solid var(--rarity);
   border-width: 0.4em 0.4em 0.5em;
-  background: #000;
+  background: var(--art-backdrop);
 }
 
 .tile-art {
@@ -1105,7 +894,7 @@ button.danger:hover,
   height: 100%;
   padding: 0.2em;
   font-size: 0.7em;
-  color: #ddd;
+  color: var(--on-art-muted);
   text-align: center;
 }
 
@@ -1122,11 +911,11 @@ button.danger:hover,
   position: absolute;
   font-weight: 800;
   line-height: 1;
-  color: #fff;
+  color: var(--on-art);
   text-shadow:
-    0 0 2px #000,
-    0 0 2px #000,
-    1px 1px 1px #000;
+    0 0 2px var(--art-backdrop),
+    0 0 2px var(--art-backdrop),
+    1px 1px 1px var(--art-backdrop);
 }
 
 .tile-level {
@@ -1139,7 +928,7 @@ button.danger:hover,
   top: 0.15em;
   right: 0.15em;
   font-size: 1em;
-  color: #ffe27a;
+  color: var(--empower);
 }
 
 .tile-frame.frame-rare {
@@ -1178,40 +967,29 @@ img.faction {
 
 /* --- The champion list ------------------------------------------------------- */
 
-.list-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  align-items: center;
-  margin-bottom: 1rem;
-
-  h1 {
-    margin: 0;
-  }
-
-  .filter-bar {
-    flex: 1 1 18rem;
-  }
-}
-
+/* Champions as cards in a grid (the list, Empower, the palette): tile, faction and name, and
+   whatever the page adds; lit in their rarity when pointed at. */
 .champion-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(7.5rem, 100%), 1fr));
-  gap: 1rem 0.75rem;
+  gap: var(--space-l) var(--space-m);
+}
+
+a:has(> .tile) {
+  text-decoration: none;
 }
 
 .champion-card {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: var(--space-xs);
   align-items: center;
-  margin: 0;
-  padding: 0.6rem 0.5rem 0.5rem;
-  border: 1px solid transparent;
+  padding: var(--space-s);
+  border-color: transparent;
   text-align: center;
   transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
+    border-color var(--transition),
+    box-shadow var(--transition);
 
   &:hover,
   &:focus-within {
@@ -1219,34 +997,23 @@ img.faction {
     box-shadow: 0 0 0.75rem -0.25rem color-mix(in srgb, var(--rarity) 25%, transparent);
   }
 
-  .card-tile {
-    text-decoration: none;
-  }
-
   select.lock {
     width: 100%;
-    font-size: 0.75rem;
+    font-size: var(--text-2xs);
   }
 }
 
 .card-name {
   display: flex;
-  gap: 0.25rem;
+  gap: var(--space-2xs);
   align-items: center;
   justify-content: center;
   max-width: 100%;
   min-height: 2.4em;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
   line-height: 1.2;
   color: var(--on-surface);
   text-decoration: none;
-
-  span {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
 
   img.faction {
     flex: none;
@@ -1255,12 +1022,6 @@ img.faction {
 }
 
 select.lock {
-  width: auto;
-  height: auto;
-  margin: 0;
-  padding: 0.2rem 2rem 0.2rem 0.5rem;
-  font-size: 0.85em;
-
   &:not(.is-locked) {
     color: var(--on-surface-variant);
   }
@@ -1273,77 +1034,31 @@ select.lock {
 
 /* The champion finder: a dialog, wide; the filters in a row (name, rarity, stars), then
    the champions as portraits, the list scrolling inside the dialog. */
-dialog.finder {
-  > article {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: min(64rem, calc(100vw - 2rem));
-    max-height: calc(100vh - 4rem);
-    padding: var(--panel-pad) var(--panel-pad);
-    border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 70%);
-  }
-
-  > article > header {
-    margin: 0 0 0.9rem;
-    padding: 0;
-    border: 0;
-  }
-}
-
-.finder-close {
-  padding: 0.1rem 0.5rem;
-  border: 0;
-  font-size: 1.3rem;
-  line-height: 1;
-  color: var(--on-surface-variant);
-  background: none;
-
-  &:hover {
-    color: var(--on-surface);
-  }
-}
-
-.finder-filters {
-  margin-bottom: 0.75rem;
+dialog.finder > article {
+  max-width: min(64rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow) 70%, transparent);
 }
 
 .finder-results {
   overflow-y: auto;
   min-height: 12rem;
-}
 
-.finder-count {
-  margin: 0 0 0.6rem;
-}
-
-.finder-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-  gap: 0.75rem 0.5rem;
+  &.htmx-request {
+    opacity: 0.7;
+  }
 }
 
 .finder-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  align-items: center;
-  padding: 0.4rem 0.2rem;
+  padding: var(--space-xs) var(--space-2xs);
   border: 1px solid transparent;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  border-radius: var(--radius);
+  font-size: var(--text-2xs);
   line-height: 1.15;
   color: var(--on-surface);
   text-align: center;
   text-decoration: none;
-
-  span {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
 
   &:hover,
   &:focus-visible {
@@ -1353,27 +1068,6 @@ dialog.finder {
 
   .tile {
     --tile-width: 4rem;
-  }
-}
-
-.finder-results.htmx-request {
-  opacity: 0.7;
-}
-
-.switch-champion {
-  margin-top: 0.4rem;
-  padding: 0.2rem 0.65rem;
-  font-size: 0.8rem;
-}
-
-button.slot-plus {
-  cursor: pointer;
-  padding: 0;
-  color: var(--primary);
-
-  &:hover {
-    border-color: var(--primary);
-    color: var(--primary);
   }
 }
 
@@ -1391,22 +1085,13 @@ main.container {
 .champion-page {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1.5rem;
+  gap: var(--space-2xl);
   align-items: start;
-  margin-bottom: 2.5rem;
+  margin-bottom: var(--space-4xl);
 }
 
 .champion-main {
   display: contents;
-}
-
-.champion-column,
-.targets-column,
-.request-column {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  min-width: 0;
 }
 
 @container page (min-width: 46rem) {
@@ -1425,8 +1110,8 @@ main.container {
   }
 }
 
-/* The champion: portrait with name, rarity and affinity beside it, then their stats in the gear
-   worn now, lit faintly in their rarity's colour. */
+/* The champion: portrait (crested) with name, faction and the form switch beside it, then
+   their stats in the gear worn now, lit faintly in their rarity's colour. */
 .champion-profile {
   background:
     radial-gradient(
@@ -1440,57 +1125,25 @@ main.container {
     box-shadow: 0 0 18px color-mix(in srgb, var(--rarity) 35%, transparent);
   }
 
-  .empower-note {
-    display: block;
-    text-align: center;
+  h1 {
+    font-size: var(--text-2xl);
+    line-height: 1.15;
+  }
+
+  .stat-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 .champion-identity {
   display: flex;
-  gap: 1.1rem;
+  gap: var(--space-l);
   align-items: flex-start;
-}
 
-.identity-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  align-items: flex-start;
-  min-width: 0;
-  padding-top: 0.5rem;
-
-  h1 {
-    margin: 0;
-    font-size: 1.6rem;
-    line-height: 1.15;
+  .stack {
+    align-items: flex-start;
+    padding-top: var(--space-s);
   }
-
-  .facts {
-    display: flex;
-    gap: 0.45rem;
-    align-items: center;
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--on-surface-variant);
-
-    img.faction {
-      height: 2rem;
-    }
-  }
-}
-
-.rarity-name {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--rarity);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.facts .sep {
-  font-size: 0.55rem;
-  color: var(--primary);
 }
 
 /* The rarity's crest set over the portrait frame's lower edge (and a Mythical's over its top
@@ -1505,7 +1158,7 @@ main.container {
   display: flex;
   flex: none;
   justify-content: center;
-  margin-top: 0.5rem;
+  margin-top: var(--space-s);
 
   &.crest-mythical {
     --crest-height: 2rem;
@@ -1517,6 +1170,10 @@ main.container {
 
   &.crest-epic {
     --crest-height: 1.1rem;
+  }
+
+  &.has-crest .champion-stars {
+    margin-top: var(--crest-height);
   }
 }
 
@@ -1536,49 +1193,26 @@ main.container {
 }
 
 .crest-under {
-  top: calc(var(--frame-height) - var(--crest-height) * 1);
+  top: calc(var(--frame-height) - var(--crest-height));
   height: var(--crest-height);
 }
 
-.crested.has-crest .champion-stars {
-  margin-top: calc(var(--crest-height) * 1);
-}
-
-/* A mythical's form switch, after the game's: two helms in a dark pill, the picked one gold
-   (and named), the other white and dim. The radios stay focusable for the keyboard. */
-.form-switch {
-  display: inline-flex;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
-  padding: 0.25rem;
-  border: 1px solid var(--outline-variant);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 70%, #000);
+/* A mythical's form switch, after the game's: two helms in a dark pill (a `segmented`), the
+   picked one gold (and named), the other white and dim. */
+.segmented.form-switch {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 70%, var(--shadow));
 
   label {
-    cursor: pointer;
-    position: relative;
-    display: flex;
-    gap: 0.35rem;
-    align-items: center;
-    margin: 0;
-    padding: 0.2rem 0.7rem 0.2rem 0.4rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    color: var(--on-surface-variant);
-    transition:
-      background-color 0.15s,
-      color 0.15s;
+    padding: var(--space-2xs) var(--space-m) var(--space-2xs) var(--space-xs);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 400;
   }
 
-  input {
-    cursor: pointer;
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    opacity: 0;
+  label:has(:checked) {
+    color: var(--on-surface);
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
   }
 
   img {
@@ -1603,64 +1237,29 @@ main.container {
   label:hover .form-off {
     opacity: 0.85;
   }
-
-  label:has(:checked) {
-    color: var(--on-surface);
-    background: color-mix(in srgb, var(--primary) 16%, transparent);
-  }
-
-  label:has(:focus-visible) {
-    outline: 2px solid var(--primary);
-    outline-offset: 1px;
-  }
-}
-
-.current-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  margin-top: 1rem;
 }
 
 /* Stat targets: a ledger on the slab, blanks as dashes; a stat with anything asked of it
    lights up. Damage, its skill and the DEF it's against, close the panel. */
 table.limits {
-  overflow: hidden;
-  width: 100%;
-  margin: 0 0 0.75rem;
-  border-radius: 0.25rem;
-  background: var(--surface-container-lowest);
-
   th,
   td {
-    padding: 0.3rem 0.45rem;
+    padding: var(--space-2xs) var(--space-s);
   }
 
-  tbody {
-    th {
-      font-size: 0.9rem;
-      font-weight: 700;
-      white-space: nowrap;
-
-      small {
-        font-weight: 400;
-        color: var(--on-surface-variant);
-      }
-    }
+  tbody th {
+    font-size: var(--text-s);
+    font-weight: 700;
+    white-space: nowrap;
   }
 
   input {
     height: auto;
-    padding-block: 0.2rem;
+    padding-block: var(--space-2xs);
     border-color: transparent;
-    font-weight: 700;
-    text-align: center;
     background: var(--surface-container-low);
 
-    &:focus {
-      border-color: var(--primary);
-    }
-
     &::placeholder {
-      color: var(--on-surface-variant);
       opacity: 0.6;
     }
   }
@@ -1674,46 +1273,31 @@ table.limits {
       background: color-mix(in srgb, var(--primary) 7%, transparent);
     }
 
-    th {
-      color: var(--primary);
-    }
-
-    input:not(:placeholder-shown) {
+    th,
+    input {
       color: var(--primary);
     }
   }
 }
 
 .damage-pick {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  align-items: center;
-
   > .caps {
     color: var(--primary);
   }
 
   select {
     flex: 1 1 9rem;
+    width: auto;
     min-width: 0;
   }
 
   label {
-    display: flex;
-    gap: 0.35rem;
-    align-items: center;
-    margin: 0;
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     color: var(--on-surface-variant);
-    white-space: nowrap;
   }
 
   input {
     width: 4.75rem;
-    margin: 0;
-    font-weight: 700;
-    text-align: center;
 
     &[name="rank_DAMAGE"] {
       width: 3rem;
@@ -1725,10 +1309,9 @@ table.limits {
    for another. */
 .set-row {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-s);
   align-items: center;
-  margin-bottom: 0.5rem;
-  padding: 0.45rem;
+  margin-bottom: var(--space-s);
 
   select {
     flex: 1 1 auto;
@@ -1738,22 +1321,10 @@ table.limits {
 
   input {
     flex: 0 0 3.5rem;
-    font-weight: 700;
-    text-align: center;
   }
 
-  .remove-set {
-    flex: none;
-    padding: 0.15rem 0.45rem;
-    border: 0;
-    font-size: 1.1rem;
-    line-height: 1;
-    color: var(--on-surface-variant);
-    background: none;
-
-    &:hover {
-      color: var(--stat-down);
-    }
+  .icon {
+    font-size: var(--text-l);
   }
 }
 
@@ -1764,8 +1335,8 @@ table.limits {
   width: 2.25rem;
   height: 2.25rem;
   border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
-  border-radius: 0.25rem;
-  background: rgb(0 0 0 / 35%);
+  border-radius: var(--radius);
+  background: var(--shade);
 
   img {
     width: 85%;
@@ -1774,67 +1345,25 @@ table.limits {
   }
 }
 
-button.add-set {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px dashed var(--outline-variant);
-  font-size: 0.85rem;
-  color: var(--on-surface-variant);
-  background: transparent;
-
-  &:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-}
-
 /* The search: its numbers as three small wells, the gear filters as rows with their switch
    at the end, then the buttons. */
 .settings {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
+  gap: var(--space-s);
 
   label {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
     margin: 0;
-    font-size: 0.72rem;
-    font-weight: 700;
-    color: var(--on-surface-variant);
-    letter-spacing: 0.04em;
   }
-
-  input {
-    height: auto;
-    margin-top: 0.3rem;
-    padding-block: 0.2rem;
-    font-weight: 700;
-    text-align: center;
-  }
-}
-
-.search p.caps {
-  margin: 0 0 0.4rem;
-}
-
-.gear-filters {
-  margin-bottom: 1.25rem;
-  padding-block: 0.15rem;
 }
 
 .actions {
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 0.75rem;
+  gap: var(--space-m);
 }
 
 #solving {
-  display: block;
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
   color: var(--primary);
 }
 
@@ -1844,8 +1373,20 @@ button.add-set {
 .target-picker {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem 1.5rem;
+  gap: var(--space-l) var(--space-2xl);
   align-items: center;
+
+  &.htmx-request {
+    opacity: 0.8;
+  }
+
+  &.off-target .target-card {
+    opacity: 0.6;
+  }
+
+  &:not(.off-target) .target-detached {
+    display: none;
+  }
 }
 
 @container page (min-width: 60rem) {
@@ -1857,7 +1398,7 @@ button.add-set {
 .target-levels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem 0.75rem;
+  gap: var(--space-s) var(--space-m);
 
   label {
     margin: 0;
@@ -1869,55 +1410,43 @@ button.add-set {
 }
 
 .target-card {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem 1.5rem;
-  align-items: center;
-  padding: 0.75rem 1rem;
-}
-
-.target-wave {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-
-  .target-enemy {
-    --tile-width: 3.6rem;
-
-    cursor: pointer;
-    flex: none;
-    width: var(--tile-width);
-    padding: 0;
-    border: 0;
-    font-size: calc(var(--tile-width) / 4.5);
-    opacity: 0.55;
-    background: none;
-    transition:
-      opacity 0.15s,
-      transform 0.15s;
-
-    &.picked {
-      --tile-width: 4.6rem;
-
-      opacity: 1;
-    }
-  }
+  padding: var(--space-m) var(--space-l);
 }
 
 .target-enemy {
-  .tile-frame {
-    display: block;
-  }
+  --tile-width: 3.6rem;
+
+  cursor: pointer;
+  flex: none;
+  width: var(--tile-width);
+  padding: 0;
+  border: 0;
+  font-size: calc(var(--tile-width) / 4.5);
+  opacity: 0.55;
+  background: none;
+  transition:
+    opacity var(--transition),
+    transform var(--transition);
 
   &:hover,
   &:focus-visible {
     opacity: 0.85;
   }
-}
 
-.target-enemy:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  &.picked {
+    --tile-width: 4.6rem;
+
+    opacity: 1;
+  }
+
+  .tile-frame {
+    display: block;
+  }
 }
 
 .target-facts {
@@ -1925,55 +1454,24 @@ button.add-set {
   min-width: 0;
 }
 
-.target-name {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.5rem;
-  align-items: baseline;
-  margin: 0 0 0.5rem;
-
-  strong {
-    font-family: var(--font-display);
-    font-size: 1.15rem;
-  }
-}
-
-.target-detached {
-  display: none;
-}
-
-.target-picker.off-target {
-  .target-card {
-    opacity: 0.6;
-  }
-
-  .target-detached {
-    display: block;
-  }
-}
-
-.target-picker.htmx-request {
-  opacity: 0.8;
+.target-name strong {
+  font-family: var(--font-display);
+  font-size: var(--text-l);
 }
 
 /* History: a card a run, newest first; the one the results show has the brass rail. Under the
    champion, it scrolls on its own past a few runs. */
 ul.history {
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
   max-height: 22rem;
   margin: 0;
-  padding: 0 0.25rem 0 0;
+  padding: 0 var(--space-2xs) 0 0;
 
   li {
     position: relative;
-    margin: 0;
-    padding: 0;
     border: 1px solid var(--outline-variant);
     border-left: 3px solid transparent;
-    border-radius: 0.25rem;
+    border-radius: var(--radius);
     list-style: none;
     background: var(--surface-container-lowest);
 
@@ -1988,39 +1486,28 @@ ul.history {
     }
   }
 
-  button.delete {
+  .icon {
     position: absolute;
-    top: 0.45rem;
-    right: 0.35rem;
-    padding: 0.1rem 0.35rem;
-    border: 0;
-    font-size: 0.75rem;
-    color: var(--on-surface-variant);
-    background: none;
-
-    &:hover {
-      color: var(--stat-down);
-    }
+    top: var(--space-s);
+    right: var(--space-xs);
+    font-size: var(--text-2xs);
   }
 }
 
 .run-link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.55rem 2.25rem 0.6rem 0.75rem;
+  padding: var(--space-s) var(--space-3xl) var(--space-s) var(--space-m);
   color: inherit;
   text-decoration: none;
 }
 
 .run-meta {
   display: flex;
-  gap: 0.5rem;
+  gap: var(--space-s);
   align-items: center;
   justify-content: space-between;
 
   time {
-    font-size: 0.75rem;
+    font-size: var(--text-2xs);
     font-weight: 700;
     color: var(--on-surface-variant);
     letter-spacing: 0.04em;
@@ -2032,60 +1519,38 @@ li.current .run-meta time {
 }
 
 .run-summary {
-  font-size: 0.9rem;
+  font-size: var(--text-s);
   font-weight: 600;
   line-height: 1.35;
-}
-
-.run-gear {
-  font-size: 0.75rem;
-  color: var(--on-surface-variant);
-}
-
-#history .muted {
-  margin: 0;
-  font-size: 0.85rem;
 }
 
 /* --- Build results ------------------------------------------------------------- */
 
 .page-section {
-  margin-top: 2.5rem;
+  margin-top: var(--space-4xl);
+}
 
-  > h2 {
-    margin: 0 0 1rem;
-  }
+/* Heads space themselves from what follows, unless a primitive spaces them (zero
+   specificity: its gap wins). */
+:where(.panel-head, .page-section > h2) {
+  margin-block: 0 var(--space-l);
+}
+
+:where(.page-head) {
+  margin-block-end: var(--space-2xl);
 }
 
 .results-panel {
-  margin-bottom: 1.5rem;
-  padding: 1rem 1.25rem;
-}
-
-.run-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.9rem;
-  align-items: center;
-  margin: 0 0 0.75rem;
-  font-size: 0.85rem;
-  color: var(--on-surface-variant);
+  margin-bottom: var(--space-2xl);
+  padding: var(--space-l) var(--space-xl);
 }
 
 /* The ledger: a build a row, so it grows down, not across. Each change sits in a fixed slot
-   after its value so columns read straight down. The picked build gets a brass rail; its
-   pieces fill the width under the ledger. */
-.ledger-wrap {
-  overflow-x: auto;
-  border-radius: 0.25rem;
-  background: var(--surface-container-lowest);
-}
-
+   after its value, so columns read straight down; the headings and the Now row leave the same
+   room. The picked build gets a brass rail; its pieces fill the width under the ledger. */
 table.ledger {
-  --change-slot: 3.6rem;
-
-  width: 100%;
-  margin: 0;
+  --change-width: 3.25rem;
+  --change-slot: calc(var(--change-width) + var(--space-xs));
 
   th,
   td {
@@ -2102,30 +1567,26 @@ table.ledger {
     text-align: left;
   }
 
-  /* The change's slot (--change-slot, in rem) so the headings and the Now row can leave the same
-   room and line up with the values rather than the changes. */
   td small {
     display: inline-block;
-    width: 3.25rem;
-    margin-left: 0.35rem;
-    font-size: 0.72rem;
+    width: var(--change-width);
+    margin-left: var(--space-xs);
+    font-size: var(--text-2xs);
     text-align: left;
   }
 
   thead th:not(:first-child),
   tr.now td {
-    padding-right: calc(0.6rem + var(--change-slot));
+    padding-right: calc(var(--space-s) + var(--change-slot));
   }
 
-  tr.now {
-    > * {
-      font-weight: 600;
-      color: var(--on-surface-variant);
-    }
+  tr.now > * {
+    font-weight: 600;
+    color: var(--on-surface-variant);
+  }
 
-    th {
-      padding-left: calc(0.6rem + 3px);
-    }
+  tr.now th {
+    padding-left: calc(var(--space-s) + 3px);
   }
 
   tr.build-row {
@@ -2149,46 +1610,39 @@ table.ledger {
     > th {
       border-left-color: var(--primary);
     }
+
+    .build-pick {
+      color: var(--primary);
+    }
   }
 }
 
-.build-pick {
-  padding: 0;
-  border: 0;
-  font-weight: 700;
-  color: inherit;
-  white-space: nowrap;
-  background: none;
-  box-shadow: none;
-}
+button.build-pick {
+  --button-bg: transparent;
+  --button-edge: transparent;
+  --button-fg: inherit;
 
-tr.picked .build-pick {
-  color: var(--primary);
+  padding: 0;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .build-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-l);
 
   h3 {
     margin: 0;
-    font-size: 1.35rem;
+    font-size: var(--text-xl);
   }
 }
 
 .build-notes {
   flex: 1 1 14rem;
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--on-surface-variant);
 
   &:not(:empty)::before {
     content: "◆";
-    margin-right: 0.5rem;
-    font-size: 0.6rem;
+    margin-right: var(--space-s);
+    font-size: 0.75em;
     color: var(--primary);
   }
 
@@ -2200,7 +1654,7 @@ tr.picked .build-pick {
 .equip {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: var(--space-m);
   align-items: center;
 }
 
@@ -2217,8 +1671,8 @@ tr.picked .build-pick {
 .pieces {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: var(--space-l);
+  margin-bottom: var(--space-3xl);
 }
 
 @container build (min-width: 40rem) {
@@ -2230,27 +1684,24 @@ tr.picked .build-pick {
 .piece {
   display: flex;
   flex-direction: column;
-  padding: 0.9rem 1rem 0.75rem;
-  font-size: 0.9rem;
+  padding: var(--space-l) var(--space-l) var(--space-m);
+  font-size: var(--text-s);
 
   header {
     display: flex;
     flex-direction: column;
     flex-grow: 1;
-    gap: 0.6rem;
+    gap: var(--space-s);
     align-self: stretch;
     min-width: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
 
     .owner {
       display: inline-flex;
-      gap: 0.4rem;
+      gap: var(--space-xs);
       align-items: center;
       min-width: 0;
       margin-top: auto;
-      font-size: 0.8rem;
+      font-size: var(--text-xs);
 
       img {
         width: 1.6rem;
@@ -2265,10 +1716,6 @@ tr.picked .build-pick {
         color: var(--primary);
       }
     }
-  }
-
-  .meta {
-    color: var(--on-surface-variant);
   }
 
   .glyph {
@@ -2289,15 +1736,13 @@ tr.picked .build-pick {
    so who wears the piece sits at its bottom. */
 .piece-body {
   display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
+  gap: var(--space-m);
   align-items: flex-start;
 }
 
 .piece-id {
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0.6rem;
+  gap: var(--space-s);
   align-items: center;
   min-width: 0;
 }
@@ -2305,7 +1750,7 @@ tr.picked .build-pick {
 .piece-title {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: var(--space-3xs);
   align-items: flex-start;
   align-self: center;
   min-width: 0;
@@ -2313,7 +1758,7 @@ tr.picked .build-pick {
 
   strong {
     font-family: var(--font-display);
-    font-size: 1.15rem;
+    font-size: var(--text-l);
   }
 }
 
@@ -2321,12 +1766,11 @@ tr.picked .build-pick {
   position: relative;
   overflow: hidden;
   flex: none;
-  box-sizing: border-box;
   width: 3.5rem;
   height: 3.5rem;
   border: 2px solid var(--rarity);
-  border-radius: 0.25rem;
-  background: #000;
+  border-radius: var(--radius);
+  background: var(--art-backdrop);
   box-shadow: 0 0 14px color-mix(in srgb, var(--rarity) 35%, transparent);
 
   img {
@@ -2338,7 +1782,6 @@ tr.picked .build-pick {
   &.small {
     width: 2.75rem;
     height: 2.75rem;
-    border-width: 2px;
   }
 
   &.small .piece-level {
@@ -2370,7 +1813,7 @@ tr.picked .build-pick {
 .piece-main {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 0.4rem;
+  gap: 0 var(--space-xs);
   align-items: baseline;
   font-weight: 700;
   color: var(--primary);
@@ -2389,8 +1832,8 @@ table.piece-stats {
   flex-shrink: 1;
   width: 50%;
   margin: 0;
-  padding: 0.4rem 0.65rem;
-  border-radius: 0.25rem;
+  padding: var(--space-xs) var(--space-m);
+  border-radius: var(--radius);
   background: var(--surface-container-lowest);
 
   /* Two columns, 40/60: the stat, then its value and glyph, both from the left. The rows are only
@@ -2398,7 +1841,7 @@ table.piece-stats {
   tbody {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    gap: 0.15rem 0.75rem;
+    gap: var(--space-3xs) var(--space-m);
     align-items: baseline;
   }
 
@@ -2449,68 +1892,34 @@ mark.equipped {
 
 /* --- Config ---------------------------------------------------------------------- */
 
-/* Three panels side by side, as many as fit. */
-.config-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr));
-  gap: 1.5rem;
-  align-items: start;
+table.glyphs select.is-planned {
+  border-color: var(--primary);
 }
 
-table.glyphs {
-  select {
-    height: auto;
-    padding-block: 0.25rem;
-
-    &.is-planned {
-      border-color: var(--primary);
-    }
-  }
-}
-
-.reserve {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-
-  table {
-    width: auto;
-  }
-
-  tfoot td {
-    font-weight: 600;
-  }
-
-  button.small {
-    margin: 0;
-    padding: 0.15rem 0.6rem;
-    font-size: 0.8rem;
-  }
+#reserve table {
+  width: auto;
 }
 
 /* --- Accessories ------------------------------------------------------------------ */
 
 /* Weights: a card a champion type, in four zones: who (name, kind, faction, who it came
    from), its stat weights as tiles, the main stats it suits a slot a row, then copy and delete.
-   Its kind on the rail. One under another on narrow screens. */
-.type-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  margin-block: 0.75rem 1rem;
-}
-
+   Its kind on the rail. One under another on narrow screens. Then the sets: a grid of the
+   types each set is for, its value a badge to type into over each column. */
 .type-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem 1.25rem;
+  gap: var(--space-m) var(--space-xl);
   align-items: center;
-  margin: 0;
-  padding: 0.75rem 1rem;
+  padding: var(--space-m) var(--space-l);
   border-left: 3px solid var(--primary);
 
   &.support {
     border-left-color: var(--tertiary);
+
+    .type-kind label:has(:checked) {
+      background: var(--tertiary);
+    }
   }
 
   .stat-tiles {
@@ -2518,113 +1927,47 @@ table.glyphs {
   }
 }
 
-@container page (min-width: 62rem) {
-  .type-card {
-    grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) auto auto;
+input.type-name {
+  height: auto;
+  margin-inline: calc(var(--space-2xs) * -1);
+  padding: var(--space-3xs) var(--space-2xs);
+  border-color: transparent;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+  font-weight: 700;
+  color: var(--heading);
+  background: none;
+
+  &:is(:hover, :focus) {
+    border-color: var(--outline-variant);
+    background: var(--surface-container-lowest);
   }
-}
-
-.type-who {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
-
-  input.type-name {
-    height: auto;
-    margin-inline: -0.3rem;
-    padding: 0.1rem 0.3rem;
-    border-color: transparent;
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--heading);
-    background: none;
-
-    &:is(:hover, :focus) {
-      border-color: var(--outline-variant);
-      background: var(--surface-container-lowest);
-    }
-  }
-}
-
-.type-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
-
-  select {
-    width: auto;
-    height: auto;
-    padding: 0.1rem 1.6rem 0.1rem 0.45rem;
-    font-size: 0.75rem;
-    background-position: center right 0.4rem;
-  }
-}
-
-.type-card.support .type-tags .segmented label:has(:checked) {
-  background: var(--tertiary);
-}
-
-.type-from {
-  margin: 0;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  color: var(--on-surface-variant);
 }
 
 .type-mains {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 0.3rem 0.5rem;
-  align-items: center;
+  gap: var(--space-2xs) var(--space-s);
+  place-items: center start;
   justify-content: start;
-
-  .segmented {
-    justify-self: start;
-  }
 }
 
 .type-actions {
   display: flex;
-  flex-direction: row;
-  gap: 0.3rem;
+  gap: var(--space-2xs);
 
   button {
-    width: 100%;
-    padding: 0.15rem 0.6rem;
-    font-size: 0.75rem;
+    flex: 1;
   }
 }
 
 @container page (min-width: 62rem) {
+  .type-card {
+    grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) auto auto;
+  }
+
   .type-actions {
     flex-direction: column;
-  }
-}
-
-.off-target {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  align-items: center;
-  margin-bottom: 0.75rem;
-
-  label {
-    margin: 0;
-  }
-
-  input {
-    display: inline-block;
-    width: 4.5rem;
-    height: auto;
-    margin: 0 0.4rem;
-    padding: 0.15rem 0.3rem;
-  }
-
-  p {
-    margin: 0;
   }
 }
 
@@ -2633,7 +1976,7 @@ table.set-grid {
 
   th,
   td {
-    padding: 0.2rem;
+    padding: var(--space-2xs);
     text-align: center;
   }
 
@@ -2641,7 +1984,7 @@ table.set-grid {
     position: sticky;
     z-index: 1;
     left: 0;
-    padding-inline: 0.5rem;
+    padding-inline: var(--space-s);
     text-align: left;
     white-space: nowrap;
     background: var(--surface-container-lowest);
@@ -2658,200 +2001,56 @@ table.set-grid {
     }
   }
 
-  /* A set's value as a badge you can type into: brass above 1, red below. The column under the
-   pointer lit (app.js), so a tick finds its set. */
-  .set-values {
-    input[type="number"] {
-      width: 2.6rem;
-      height: auto;
-      margin: 0;
-      padding: 0.1rem;
-      border-color: transparent;
-      border-radius: 0.25rem;
-      font-size: 0.78rem;
-      font-weight: 700;
-      text-align: center;
-      appearance: textfield;
-      background: color-mix(in srgb, var(--on-surface-variant) 12%, transparent);
-    }
+  /* Brass above 1, red below. The column under the pointer lit (app.js), so a tick finds its
+     set. */
+  .set-values input {
+    width: 2.6rem;
+    padding: var(--space-3xs);
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    background: color-mix(in srgb, var(--on-surface-variant) 12%, transparent);
 
-    input.high {
+    &.high {
       color: var(--primary);
       background: color-mix(in srgb, var(--primary) 16%, transparent);
     }
 
-    input.low {
+    &.low {
       color: var(--stat-down);
       background: color-mix(in srgb, var(--stat-down) 18%, transparent);
     }
 
-    input:focus {
-      border-color: var(--primary);
-    }
-
-    input::-webkit-inner-spin-button {
-      margin: 0;
-      appearance: none;
+    &:focus {
+      box-shadow: 0 0 0 1px var(--primary);
     }
   }
 
-  :is(td, th).lit {
-    background: color-mix(in srgb, var(--primary) 9%, var(--surface-container-lowest));
+  :is(td, th).lit,
+  tbody tr:not(.set-group):hover > * {
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface-container-lowest));
   }
 
-  thead th.lit {
+  thead th.lit,
+  .set-group th {
     color: var(--primary);
   }
 
   .set-group th {
-    padding-top: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--primary);
-    letter-spacing: 0.06em;
-  }
-
-  tbody {
-    th {
-      font-weight: 400;
-
-      small {
-        color: var(--on-surface-variant);
-      }
-    }
-
-    tr:not(.set-group):hover > * {
-      background: color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest));
-    }
+    padding-top: var(--space-m);
   }
 
   input[type="checkbox"] {
     margin: 0;
-  }
-}
-
-.cleanup-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr));
-  gap: 0.75rem;
-  margin: 1rem 0;
-
-  article {
-    display: flex;
-    flex-direction: column;
-    padding: 0.75rem 1rem;
-  }
-
-  strong {
-    font-family: var(--font-display);
-    font-size: 1.9rem;
-    line-height: 1.2;
-  }
-
-  small:not(.caps) {
-    color: var(--on-surface-variant);
-  }
-}
-
-table.set-summary td + td,
-table.set-summary th + th {
-  text-align: right;
-}
-
-details.by-set {
-  margin-block: 1rem;
-}
-
-.sell-bar {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin: 1rem 0 0.75rem;
-
-  label {
-    margin: 0;
-  }
-}
-
-table.accessory-list {
-  td {
-    vertical-align: middle;
-  }
-
-  .num {
-    text-align: right;
-    white-space: nowrap;
-  }
-
-  input[type="checkbox"] {
-    margin: 0;
-  }
-}
-
-.tag {
-  margin-left: 0.25rem;
-  padding: 0 0.3rem;
-  border: 1px solid currentcolor;
-  border-radius: 0.25rem;
-  color: var(--rarity-epic);
-}
-
-label.protect {
-  display: inline-flex;
-  gap: 0.3rem;
-  align-items: center;
-  margin: 0;
-  font-size: 0.85em;
-  white-space: nowrap;
-}
-
-form.target {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding-block: 0.75rem;
-
-  label {
-    display: inline-flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin: 0;
-  }
-
-  input {
-    width: 6rem;
-    height: auto;
-    padding-block: 0.2rem;
   }
 }
 
 /* Swaps: a champion to a row, three columns: who, their swaps (one gear pair under another),
    the gain and Equip; who and the gain from the top. One column on narrow screens. */
-.swap-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
-}
-
 .swap-group {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: var(--space-l);
   align-items: start;
-
-  > header.champion-strip {
-    flex-flow: column nowrap;
-    gap: 0.6rem;
-    align-items: flex-start;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  > header .strip-who {
-    flex: none;
-  }
 }
 
 @container page (min-width: 52rem) {
@@ -2860,140 +2059,12 @@ form.target {
   }
 }
 
-.swap-pairs {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.swap-side {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  align-items: flex-end;
-}
-
-.swap-action {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
-  }
-}
-
-/* Empower: a champion's most empowered copy, then its duplicates. */
-.empower-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(17rem, 100%), 1fr));
-  gap: 1rem;
-  margin-bottom: 2rem;
-}
-
-.empower-group {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  padding: 0.75rem 1rem;
-
-  .card-tile {
-    text-decoration: none;
-  }
-}
-
-.empower-copies {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.empower-dupes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.spare-count {
-  flex: none;
-  margin-left: auto;
-}
-
-.empower-note {
-  font-size: 0.75rem;
-  line-height: 1.2;
-  color: var(--on-surface-variant);
-}
-
-h2 + .lede,
-.page-section > h2 + .lede {
-  margin-top: -0.25rem;
-}
-
-/* Chimera trials: the head (title, the rotation, the tally), the slots, what else to bring,
-   gear and assumptions, the search bar, the teams found, then the trial board: a panel per
-   form, Easy → Normal → Hard down it, a trial lit when the team clears it. */
-.chimera-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  margin-bottom: 2.5rem;
-}
-
-.chimera-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem 2rem;
-  align-items: center;
-}
-
-.chimera-title {
-  flex: 1 1 26rem;
-
-  h1 {
-    margin-bottom: 0.35rem;
-  }
-
-  .lede {
-    margin: 0;
-    font-size: 0.9rem;
-  }
-}
-
-.chimera-rotation {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  align-items: flex-start;
-
-  .badge {
-    margin-left: 0.2rem;
-  }
-}
-
-.chimera-problems {
-  border-left: 4px solid var(--error);
-}
-
-.cleared-all {
-  color: var(--stat-up);
-}
-
-.cleared-some {
-  color: var(--stat-down);
-}
-
-/* The slots: five cards, an open one dashed, its picker at the foot. */
-.empty-all {
-  margin-left: auto;
+/* A champion's name as a link, in the heading face. */
+.champion-name {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--heading);
   text-decoration: none;
 
   &:hover {
@@ -3001,13 +2072,26 @@ h2 + .lede,
   }
 }
 
-.chimera-slots {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(11rem, 100%), 1fr));
-  gap: 0.75rem;
+/* Empower: a champion's most empowered copy, then its duplicates. */
+.spare-count {
+  margin-left: auto;
 }
 
-.chimera-slot {
+h2 + .lede,
+.page-section > h2 + .lede {
+  margin-top: calc(var(--space-2xs) * -1);
+}
+
+/* Finding teams (the team finder and the Chimera page; `_team.html`): the slots, what else to
+   bring and the gear (a picker each), the search bar, the options found, then the needs: a
+   panel per Chimera form (its trials across) or per kind of need. Laid out with the
+   primitives; what's here is the parts' own look. */
+.alert {
+  border-left: 4px solid var(--error);
+}
+
+/* A slot: the champion, or an open one with its +, the finder behind it. */
+.team-slot {
   min-height: 9rem;
 
   &.empty {
@@ -3018,75 +2102,43 @@ h2 + .lede,
     border-color: var(--primary);
     border-style: dashed;
   }
-}
 
-.slot-champion {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  align-items: center;
-  text-align: center;
-
-  .card-tile {
-    text-decoration: none;
+  > select {
+    width: 100%;
   }
 }
 
-/* An open slot's +: a large square in the middle of the slot. */
-.slot-plus {
+button.slot-plus {
+  --button-bg: var(--surface-container-low);
+  --button-edge: var(--outline-variant);
+  --button-fg: var(--primary);
+
   display: grid;
   place-items: center;
   width: 4.5rem;
   height: 4.5rem;
   margin-block: auto;
-  border: 1px solid var(--outline-variant);
-  border-radius: 0.5rem;
-  font-size: 2.75rem;
+  padding: 0;
+  border-radius: var(--radius-l);
+  font-size: var(--text-4xl);
   font-weight: 400;
   line-height: 1;
-  background: var(--surface-container-low);
-}
 
-.chimera-slot-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.slot-problem {
-  font-size: 0.75rem;
-  color: var(--stat-down);
-}
-
-.slot-actions {
-  display: flex;
-  gap: 0.35rem;
-  justify-content: center;
-  margin-top: auto;
-
-  button {
-    padding: 0.2rem 0.65rem;
-    font-size: 0.8rem;
+  &:is(:hover, :focus) {
+    --button-bg: var(--surface-container-low);
+    --button-edge: var(--primary);
   }
 }
 
-.slot-relic {
-  width: 100%;
-  margin: 0;
-  padding-block: 0.2rem;
-  font-size: 0.78rem;
-}
-
-/* What else to bring, and gear: the chosen ones by the title, a picker under them. */
-.chips-chosen {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  align-items: center;
+/* A champion's name under their tile. */
+.tile-name {
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  text-align: center;
 }
 
 .chip-remove {
-  margin-left: 0.15rem;
+  margin-left: var(--space-3xs);
   font-weight: 700;
   color: var(--on-surface-variant);
 }
@@ -3099,26 +2151,15 @@ h2 + .lede,
   border-style: dashed;
 }
 
-.count-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  margin-top: 0.75rem;
-
-  select,
-  input {
-    width: auto;
-  }
-
-  input {
-    max-width: 5rem;
-  }
-}
-
-.chip.counted .count-mark {
+.count-mark {
   font-weight: 700;
   color: var(--primary);
+}
+
+.icons {
+  display: inline-flex;
+  flex: none;
+  gap: var(--space-3xs);
 }
 
 /* A searchable picker: a search box over a dropdown of options in groups; a pick adds a chip. */
@@ -3130,23 +2171,23 @@ h2 + .lede,
   position: absolute;
   z-index: 20;
   inset-inline: 0;
-  top: calc(100% + 0.3rem);
+  top: calc(100% + var(--space-2xs));
   overflow-y: auto;
   max-height: 20rem;
-  padding: 0.35rem;
+  padding: var(--space-xs);
   border: 1px solid var(--outline-variant);
-  border-radius: 0.4rem;
+  border-radius: var(--radius-l);
   color: var(--on-surface);
   background: var(--surface-container-low);
 }
 
 .picker-group + .picker-group {
-  margin-top: 0.35rem;
+  margin-top: var(--space-xs);
 }
 
 .picker-group-title {
-  padding: 0.35rem 0.5rem 0.2rem;
-  font-size: 0.7rem;
+  padding: var(--space-xs) var(--space-s) var(--space-2xs);
+  font-size: var(--text-2xs);
 }
 
 /* Options are buttons: the button look (border, fill, focus ring, its text colour: the text
@@ -3155,14 +2196,14 @@ h2 + .lede,
   &,
   &:is(:hover, :active, :focus) {
     display: flex;
-    gap: 0.5rem;
+    gap: var(--space-s);
     align-items: center;
     width: 100%;
     margin: 0;
-    padding: 0.3rem 0.5rem;
+    padding: var(--space-2xs) var(--space-s);
     border: 0;
-    border-radius: 0.25rem;
-    font-size: 0.9rem;
+    border-radius: var(--radius);
+    font-size: var(--text-s);
     font-weight: 400;
     line-height: 1.3;
     color: inherit;
@@ -3179,195 +2220,31 @@ h2 + .lede,
 
 .picker-empty {
   margin: 0;
-  padding: 0.5rem;
+  padding: var(--space-s);
 }
 
-/* What the team needs and how it brings it: two panels side by side where they fit. */
-.chimera-bring {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(34rem, 100%), 1fr));
-  gap: 1.5rem;
-  align-items: start;
+/* The options found: a card each, its members across (any champion where it needs none), a
+   glance at what it clears, and its buttons. The one the needs below show has the brass rail. */
+.team-option.shown {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
 }
 
-.gear-icons {
-  display: inline-flex;
-  gap: 0.1rem;
-}
-
-.assume-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-
-  input,
-  select {
-    flex: 1 1 10rem;
-    width: auto;
-  }
-}
-
-.assume {
-  margin-top: 1rem;
-
-  .panel-note {
-    margin-bottom: 0.6rem;
-  }
-}
-
-/* The team finder: the base needs (a Faction Wars stage's challenge), a panel per kind of need. */
-.finder-base-pick,
-.finder-fw {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.25rem;
-  align-items: center;
-}
-
-.finder-base-pick a {
-  margin-left: auto;
-  text-decoration: none;
-}
-
-.finder-fw {
-  margin-top: 0.85rem;
-
-  label {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    margin: 0;
-  }
-
-  select {
-    width: auto;
-  }
-}
-
-.finder-challenge {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem 0.75rem;
-  align-items: baseline;
-  margin: 0.85rem 0 0;
-}
-
-.finder-base .panel-note {
-  margin: 0.6rem 0 0;
-}
-
-.panel-note.bad {
-  color: var(--stat-down);
-}
-
-.team-targets {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(26rem, 100%), 1fr));
-  gap: 1rem;
-  align-items: start;
-
-  .chimera-extras {
-    margin-top: 0;
-  }
-}
-
-/* The search bar. */
-.chimera-run {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  align-items: center;
-  padding-block: 0.9rem;
-
-  label {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    margin: 0;
-  }
-
-  select {
-    width: auto;
-  }
-
-  button.cta {
-    margin-left: auto;
-    padding-inline: 2rem;
-  }
-}
-
-.run-note {
-  font-size: 0.85rem;
-  color: var(--on-surface-variant);
-
-  .dot {
-    color: var(--tertiary);
-  }
-}
-
-/* The teams found. */
-.chimera-found {
-  max-width: var(--measure);
-  margin: 0 0 1rem;
-  font-size: 0.9rem;
-  color: var(--on-surface-variant);
-}
-
-.chimera-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(19rem, 100%), 1fr));
-  gap: 1rem;
-}
-
-.chimera-option {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-
-  &.shown {
-    border-color: var(--primary);
-    box-shadow: inset 3px 0 0 var(--primary);
-  }
-
-  > header,
-  > footer {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    justify-content: space-between;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-
-  > footer a {
-    flex: 1;
-    padding: 0.35rem 0.5rem;
-    font-size: 0.85rem;
-  }
-}
-
-.chimera-option-members {
+.team-members {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.25rem;
+  gap: var(--space-2xs);
 }
 
-.chimera-option-member {
+.team-member {
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-size: 0.7rem;
-  line-height: 1.15;
-  text-align: center;
+  color: inherit;
   text-decoration: none;
 
-  span {
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+  .tile-name {
+    font-size: var(--text-2xs);
   }
 
   &.suggested .tile-frame {
@@ -3376,33 +2253,25 @@ h2 + .lede,
   }
 }
 
-.chimera-more {
-  margin-top: 1rem;
-}
-
 .free-slot {
   display: grid;
   place-items: center;
   aspect-ratio: 1;
   width: 3.5rem;
   border: 2px dashed var(--outline-variant);
-  border-radius: 6px;
-  font-size: 0.75rem;
+  border-radius: var(--radius-l);
+  font-size: var(--text-2xs);
   color: var(--on-surface-variant);
 }
 
-.chimera-option-member.free {
-  color: var(--on-surface-variant);
-}
-
-.chimera-glance {
+table.glance {
   width: auto;
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--text-xs);
 
   th,
   td {
-    padding: 0.1rem 0.6rem;
+    padding: var(--space-3xs) var(--space-s);
     border: 0;
     text-align: center;
   }
@@ -3410,21 +2279,13 @@ h2 + .lede,
   th {
     text-align: left;
   }
-
-  td.met {
-    color: var(--stat-up);
-  }
-
-  td.unmet {
-    color: var(--stat-down);
-  }
 }
 
 .status-icon {
   flex: none;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius);
   object-fit: contain;
 
   &.small {
@@ -3436,116 +2297,50 @@ h2 + .lede,
     display: inline-grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--primary) 50%, transparent);
-    font-size: 0.8rem;
+    font-size: var(--text-xs);
     color: var(--primary);
     background: color-mix(in srgb, var(--primary) 15%, transparent);
   }
 
   &.small.glyph {
-    font-size: 0.65rem;
+    font-size: var(--text-2xs);
   }
 }
 
-/* The trial board: a row per form, Easy → Normal → Hard across it. */
-.chimera-trials {
-  .section-title {
-    margin-bottom: 1rem;
+/* A panel in its own colour (`--accent`): a Chimera form's (theme.css), else the extras'. */
+.accent-panel {
+  --accent: var(--form-any);
 
-    .badge {
-      font-family: var(--font-text);
-      font-size: 0.8rem;
-    }
+  border-top: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 8%, var(--surface-container-low)),
+    var(--surface-container-low) 50%
+  );
+
+  h3 {
+    font-size: var(--text-l);
+    color: var(--accent);
   }
 }
 
-.chimera-board {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-/* A form's trials three across, a chevron between them; one under the next on a narrow page. */
-.chimera-row-trials {
-  --trial-gap: 1.4rem;
-
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.75rem;
-  align-items: start;
-}
-
-@container page (min-width: 46rem) {
-  .chimera-row-trials {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--trial-gap);
-
-    .trial + .trial::before {
-      content: "›";
-      position: absolute;
-      top: 50%;
-      left: calc(var(--trial-gap) / -2);
-      transform: translate(-50%, -50%);
-      font-size: 1.4rem;
-      color: color-mix(in srgb, var(--form) 70%, var(--on-surface-variant));
-    }
-  }
-}
-
-/* The forms' colours are identity, not status: quiet tints (about half the status colours'
-   chroma) at their own hues, so a form's row can't read as picked, good or bad. */
 .form-ram {
-  --form: #d29f6d;
+  --accent: var(--form-ram);
 }
 
 .form-lion {
-  --form: #cebe82;
+  --accent: var(--form-lion);
 }
 
 .form-snake {
-  --form: #a6be8f;
-}
-
-.chimera-extras {
-  --form: #9aace1;
-
-  margin-top: 1.5rem;
-}
-
-.chimera-form,
-.chimera-extras {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  border-top: 2px solid color-mix(in srgb, var(--form) 70%, transparent);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--form) 8%, var(--surface-container-low)),
-    var(--surface-container-low) 50%
-  );
-}
-
-.chimera-form-head {
-  display: flex;
-  gap: 0.65rem;
-  align-items: center;
-
-  h3 {
-    margin: 0;
-    font-size: 1.15rem;
-    color: var(--form);
-  }
-
-  .badge {
-    margin-left: auto;
-    font-size: 0.8rem;
-  }
+  --accent: var(--form-snake);
 }
 
 .form-icon {
   width: 2.4rem;
   height: 2.4rem;
   object-fit: contain;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--form) 45%, transparent));
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 45%, transparent));
 }
 
 .form-glyph {
@@ -3555,20 +2350,44 @@ h2 + .lede,
   height: 2.1rem;
   border-radius: 50%;
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: var(--text-l);
   font-weight: 700;
   color: var(--surface);
-  background: var(--form);
+  background: var(--accent);
+}
+
+/* A form's trials three across, a chevron between them; one under the next on a narrow page. */
+.trial-row {
+  --trial-gap: var(--space-2xl);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-m);
+  align-items: start;
+}
+
+@container page (min-width: 46rem) {
+  .trial-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--trial-gap);
+
+    .trial + .trial::before {
+      content: "›";
+      position: absolute;
+      top: 50%;
+      left: calc(var(--trial-gap) / -2);
+      transform: translate(-50%, -50%);
+      font-size: var(--text-xl);
+      color: color-mix(in srgb, var(--accent) 70%, var(--on-surface-variant));
+    }
+  }
 }
 
 .trial {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.75rem 0.85rem;
-  border-radius: 0.25rem;
-  font-size: 0.8rem;
+  padding: var(--space-m);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
   line-height: 1.35;
   background: var(--surface-container-lowest);
 
@@ -3576,182 +2395,40 @@ h2 + .lede,
     border-color: color-mix(in srgb, var(--stat-up) 55%, transparent);
     box-shadow: inset 3px 0 0 var(--stat-up);
   }
-
-  > header {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    justify-content: space-between;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-}
-
-.level-pill {
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-/* Difficulty on the status scale: Easy the info teal, Normal middling, Hard bad. */
-.level-easy .level-pill {
-  color: var(--tertiary);
-  background: color-mix(in srgb, var(--tertiary) 20%, transparent);
-}
-
-.level-normal .level-pill {
-  color: var(--stat-mid);
-  background: color-mix(in srgb, var(--stat-mid) 20%, transparent);
-}
-
-.level-hard .level-pill {
-  color: var(--stat-down);
-  background: color-mix(in srgb, var(--stat-down) 20%, transparent);
 }
 
 .trial-state {
-  font-size: 0.7rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
-  color: var(--stat-down);
-}
-
-.trial.met .trial-state {
-  color: var(--stat-up);
-}
-
-.trial-state.waiting {
-  color: var(--stat-mid);
-}
-
-.trial-text {
-  margin: 0;
-  color: var(--on-surface);
 }
 
 .trial-target {
   align-self: flex-start;
-  margin: 0;
-  padding: 0.15rem 0.55rem;
-  border-radius: 0.25rem;
-  font-size: 0.75rem;
+  padding: var(--space-3xs) var(--space-s);
+  border-radius: var(--radius);
+  font-size: var(--text-2xs);
   color: var(--on-surface-variant);
-  background: color-mix(in srgb, var(--form) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 
   strong {
-    color: var(--form);
+    color: var(--accent);
   }
 }
 
-.trial-free {
-  margin: 0;
-  font-style: italic;
-  color: var(--on-surface-variant);
-}
-
-.trial-needs {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  margin: 0;
-  padding: 0;
-
-  li.status {
-    list-style: none;
-  }
-}
-
-.extras-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr));
-  gap: 0.5rem;
-}
-
+/* A need: met or not, what would do, how far it can be counted on, who brings it. */
 .need-mark {
   flex: none;
   font-weight: 700;
-  color: var(--stat-down);
-}
-
-.status.met .need-mark {
-  color: var(--stat-up);
 }
 
 .need-body {
-  display: flex;
   flex: 1;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-width: 0;
-
-  > .meter {
-    margin-top: -0.1rem;
-  }
-}
-
-.need-head {
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-
-  .score-pill {
-    margin-left: auto;
-  }
-}
-
-.score-pill {
-  flex: none;
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-
-  &.high {
-    color: var(--stat-up);
-    background: color-mix(in srgb, var(--stat-up) 16%, transparent);
-  }
-
-  &.mid {
-    color: var(--stat-mid);
-    background: color-mix(in srgb, var(--stat-mid) 16%, transparent);
-  }
-
-  &.low {
-    color: var(--stat-down);
-    background: color-mix(in srgb, var(--stat-down) 16%, transparent);
-  }
-}
-
-.option-scores {
-  display: inline-flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.need-icons {
-  display: inline-flex;
-  flex: none;
-  gap: 0.15rem;
 }
 
 .need-brought {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.15rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.25rem;
+  padding: var(--space-3xs) var(--space-2xs);
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--outline-variant) 30%, transparent);
-}
-
-.need-by {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  align-items: center;
 }
 
 .mini-portrait {
@@ -3762,10 +2439,10 @@ h2 + .lede,
   height: 1.9rem;
   border: 2px solid var(--rarity);
   border-radius: 50%;
-  font-size: 0.6rem;
+  font-size: var(--text-2xs);
   text-decoration: none;
   background: var(--outline-variant);
-  transition: transform 0.12s;
+  transition: transform var(--transition);
 
   &:hover {
     transform: scale(1.15);
@@ -3778,100 +2455,29 @@ h2 + .lede,
   }
 }
 
-.need-note {
-  padding: 0.05rem 0.45rem;
-  border: 1px solid var(--outline-variant);
-  border-radius: 999px;
-  font-size: 0.68rem;
-  color: var(--on-surface-variant);
-
-  &.missing {
-    border-color: color-mix(in srgb, var(--stat-down) 60%, transparent);
-    color: var(--stat-down);
-  }
-}
-
-/* Assumptions: reserved gear. */
-.reserve-add {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  align-items: flex-start;
-  max-inline-size: 40rem;
-
-  form {
-    inline-size: 100%;
-    margin: 0;
-  }
-
-  select {
-    height: auto;
-    margin: 0;
-    padding-block: 0.4rem;
-  }
-
-  button {
-    flex: none;
-    min-inline-size: 7.5rem;
-    margin: 0;
-    padding-block: 0.4rem;
-    white-space: nowrap;
-  }
-}
-
-/* The info page: a section per kind of progress. Faction Wars: a panel per crypt short of its
-   stars, in masonry columns, a row per stage with the stars earned. */
-.info-section {
-  margin-bottom: 2.5rem;
-}
-
-/* Masonry: columns of 32rem at least, each crypt whole in one (down a column, then across);
-   the crypts' own bottom margin spaces them and the section's end. */
+/* The info page. Faction Wars: a panel per crypt short of its stars, in masonry columns of
+   32rem at least, each crypt whole in one (down a column, then across); a row per stage with
+   the stars earned. */
 .crypt-grid {
   columns: 32rem;
-  column-gap: 1.25rem;
+  column-gap: var(--space-xl);
 }
 
 .crypt {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
   break-inside: avoid;
-  margin-bottom: 1.25rem;
-}
+  margin-bottom: var(--space-xl);
 
-.crypt-head {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  border: 0;
-
-  img {
-    width: auto;
-    height: 2.4rem;
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 1.15rem;
-  }
-
-  .badge {
-    margin-left: auto;
-  }
-}
-
-.crypt-stages {
-  th,
-  td {
+  :is(th, td) {
     vertical-align: top;
   }
 
   tbody th {
     width: 3.5rem;
     font-weight: 700;
+  }
+
+  ul {
+    margin: 0;
   }
 }
 
@@ -3880,22 +2486,10 @@ h2 + .lede,
   white-space: nowrap;
 }
 
-.stars-earned {
-  span {
-    color: var(--outline-variant);
+.stars-earned span {
+  color: var(--outline-variant);
 
-    &.on {
-      color: var(--rarity-legendary);
-    }
-  }
-}
-
-.quests {
-  margin: 0;
-  padding-left: 1.1rem;
-
-  li {
-    margin: 0;
-    list-style: disc;
+  &.on {
+    color: var(--rarity-legendary);
   }
 }

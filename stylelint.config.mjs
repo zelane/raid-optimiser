@@ -24,6 +24,22 @@ export default {
       propertyGroups.map((properties) => ({ properties })),
       { unspecified: "bottomAlphabetical" },
     ],
+    // Sizes and colours come from theme.css's tokens: no rem literals in spacing, font sizes
+    // or radii (em stays, for sizes relative to their context; px for hairlines), no raw
+    // colours outside custom properties, no bare durations in transitions.
+    "declaration-property-value-disallowed-list": [
+      {
+        "/^(margin|padding|gap|row-gap|column-gap|inset|top|right|bottom|left)(-|$)/": [
+          "/\\drem/",
+        ],
+        "font-size": ["/\\d(rem|px)/"],
+        "/^border(-[a-z]+)*-radius$/": ["/\\d(rem|px)/"],
+        "/^transition/": ["/\\dm?s\\b/"],
+        "/^(color|background|border|outline|box-shadow|text-shadow|fill|stroke|text-decoration)/":
+          ["/#[0-9a-f]{3,8}\\b/i", "/\\b(rgb|hsl|hwb|lab|lch|oklab|oklch)a?\\(/"],
+      },
+      { message: (property, value) => `"${property}: ${value}": use a theme.css token` },
+    ],
     "no-descending-specificity": null,
     "max-nesting-depth": 3,
     "value-keyword-case": ["lower", { ignoreProperties: ["font-family", "/^--font/"] }],

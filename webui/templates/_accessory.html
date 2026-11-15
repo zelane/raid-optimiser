@@ -9,7 +9,7 @@
   </td>
   <td>
     <strong>{{ row.slot }}</strong> {{ stars(row.rank) }}
-    {% if row.reworked %}<small class="tag" title="reworked already: it can't be again">reworked</small>{% endif %}<br>
+    {% if row.reworked %}<small class="badge quiet" title="reworked already: it can't be again">reworked</small>{% endif %}<br>
     <small>{{ row.set_name }}</small>
     {% if row.faction_icon_url %}<img class="faction small" src="{{ row.faction_icon_url }}" alt="{{ row.faction }}" title="{{ row.faction }}">
     {% elif row.faction %}<small>· {{ row.faction }}</small>{% endif %}
@@ -37,7 +37,7 @@
 {% endmacro %}
 
 {% macro protect_toggle(row) %}
-  <label class="protect" title="Never drop this piece">
+  <label class="inline" title="Never drop this piece">
     <input type="checkbox" name="on" {% if row.protected %}checked{% endif %}
            hx-post="/accessories/{{ row.id }}/protect" hx-trigger="change" hx-target="#cleanup" hx-swap="innerHTML">
     Keep
@@ -48,11 +48,11 @@
    (the gain, or "then sell"), over the optimiser's piece card (`piece`, as `champion` sees
    it: the worn one is theirs and steps back). The one to equip is rimmed in gold. #}
 {% macro gear_card(row, view, champion, kind, label, note="", note_class="") %}
-  <div class="gear-card {{ kind }}">
-    <header>
+  <div class="gear-card stack {{ kind }}" style="--space: var(--space-xs)">
+    <div class="cluster" style="--justify: space-between; --align: baseline">
       <span class="caps">{{ label }}</span>
-      <span class="gear-score">Score <strong>{{ row.now }}</strong>{% if note %} <small class="{{ note_class }}">{{ note }}</small>{% endif %}</span>
-    </header>
+      <span class="note">Score <strong>{{ row.now }}</strong>{% if note %} <small class="{{ note_class }}">{{ note }}</small>{% endif %}</span>
+    </div>
     {{ piece(view, champion) }}
   </div>
 {% endmacro %}

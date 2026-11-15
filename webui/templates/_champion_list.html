@@ -3,8 +3,8 @@
   <div class="champion-grid">
     {% for listed in champions %}
       <article class="champion-card rarity-{{ listed.champion.rarity | lower }}">
-        <a href="/champions/{{ listed.champion.id }}" class="card-tile" tabindex="-1">{{ tile(listed.champion) }}</a>
-        <a href="/champions/{{ listed.champion.id }}" class="card-name">{{ faction(listed.champion) }}<span>{{ listed.champion.name }}</span></a>
+        <a href="/champions/{{ listed.champion.id }}" tabindex="-1">{{ tile(listed.champion) }}</a>
+        <a href="/champions/{{ listed.champion.id }}" class="card-name">{{ faction(listed.champion) }}<span class="clamp">{{ listed.champion.name }}</span></a>
         {{ lock_picker(listed) }}
       </article>
     {% endfor %}

@@ -20,8 +20,8 @@
       </label>
     {% endfor %}
   </div>
-  <div class="target-card well">
-    <div class="target-wave" role="radiogroup" aria-label="Enemy">
+  <div class="target-card well cluster" style="--space: var(--space-l) var(--space-2xl)">
+    <div class="cluster" style="--space: var(--space-xs)" role="radiogroup" aria-label="Enemy">
       {% for enemy in picker.enemies %}
         <button type="submit" name="enemy" value="{{ enemy.key }}" role="radio"
                 aria-checked="{{ 'true' if enemy.picked else 'false' }}"
@@ -35,13 +35,13 @@
         </button>
       {% endfor %}
     </div>
-    <div class="target-facts">
-      <p class="target-name"><strong>{{ picked.name }}</strong>{% if picked.boss %} <small class="badge">Boss</small>{% endif %}
+    <div class="target-facts stack" style="--space: var(--space-s)">
+      <p class="target-name cluster" style="--space: var(--space-2xs) var(--space-s)"><strong>{{ picked.name }}</strong>{% if picked.boss %} <small class="badge">Boss</small>{% endif %}
         <small class="muted">{{ picker.title }} · {{ picked.affinity }}</small></p>
       <dl class="stat-tiles target-stats">
         {% for stat in picked.stats %}<div><dt>{{ stat.label }}</dt><dd>{{ stat.text }}</dd></div>{% endfor %}
       </dl>
-      <small class="target-detached hint">Not in use: damage ranks against the DEF typed in below.</small>
+      <small class="target-detached note">Not in use: damage ranks against the DEF typed in below.</small>
     </div>
   </div>
 </form>

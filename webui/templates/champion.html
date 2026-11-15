@@ -12,21 +12,21 @@
     <section class="target-section" aria-label="Target">
       {% include "_target_picker.html" %}
     </section>
-    <div class="champion-column">
-        <article class="panel champion-profile rarity-{{ champion.rarity | lower }}">
+    <div class="champion-column stack" style="--space: var(--space-2xl)">
+        <article class="panel stack champion-profile rarity-{{ champion.rarity | lower }}">
           <div class="champion-identity">
             <div class="crested crest-{{ champion.rarity | lower }}{{ ' has-crest' if champion.crest_url }}">
               {% if champion.crest_top_url %}<img class="crest crest-top" src="{{ champion.crest_top_url }}" alt="">{% endif %}
               {{ tile(champion, "large") }}
               {% if champion.crest_url %}<img class="crest crest-under" src="{{ champion.crest_url }}" alt="">{% endif %}
             </div>
-            <div class="identity-text">
+            <div class="stack" style="--space: var(--space-xs)">
               <h1> {{ champion.name }}</h1>
               <span>{{ faction(champion) }}</span>
-              <button type="button" class="quiet switch-champion" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
+              <button type="button" class="quiet small" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
               {% if page.forms | length > 1 %}
                 {# The request's `form` field; app.js shows the picked form's stats and skills. #}
-                <div class="form-switch" role="radiogroup" aria-label="Form">
+                <div class="segmented form-switch" role="radiogroup" aria-label="Form">
                   {% for f in page.forms %}
                     <label title="Form {{ f.number + 1 }}: {{ f.role }}">
                       <input type="radio" name="form" form="request" value="{{ f.number }}"{% if loop.first %} checked{% endif %}>
@@ -39,7 +39,7 @@
             </div>
           </div>
           {% for f in page.forms %}
-            <dl class="stat-tiles well current-stats" data-form="{{ f.number }}" aria-label="Stats in the gear worn now"{% if not loop.first %} hidden{% endif %}>
+            <dl class="stat-tiles well" data-form="{{ f.number }}" aria-label="Stats in the gear worn now"{% if not loop.first %} hidden{% endif %}>
               {% for cell in f.current %}<div><dt>{{ cell.label }}</dt><dd>{{ cell.text }}</dd></div>{% endfor %}
             </dl>
           {% endfor %}
@@ -54,9 +54,11 @@
           hx-target="#results"
           hx-indicator="#solving"
           hx-disabled-elt="find button">
-      <div class="targets-column">
+      <div class="stack" style="--space: var(--space-2xl)">
         <fieldset class="panel targets">
           <legend>Stat targets</legend>
+          <div class="stack" style="--space: var(--space-m)">
+          <div class="table-well">
           <table class="limits">
             <thead>
               <tr>
@@ -77,7 +79,8 @@
               {% endfor %}
             </tbody>
           </table>
-          <div class="damage-pick">
+          </div>
+          <div class="damage-pick cluster" style="--space: var(--space-s) var(--space-m)">
             <span class="caps">Damage</span>
             {% for f in page.forms %}
               <select name="damage_skill" data-form="{{ f.number }}" aria-label="Skill to rank damage by"{% if not loop.first %} hidden disabled{% endif %}>
@@ -88,17 +91,18 @@
                 {% endfor %}
               </select>
             {% endfor %}
-            <label>vs DEF <input type="number" name="enemy_def" value="6000" min="0" step="any"></label>
-            <label title="1 ranks first; blank: not ranked">Priority <input type="number" min="1" max="9" name="rank_DAMAGE" placeholder="—" aria-label="Damage priority"></label>
+            <label class="inline">vs DEF <input type="number" name="enemy_def" value="6000" min="0" step="any"></label>
+            <label class="inline" title="1 ranks first; blank: not ranked">Priority <input type="number" min="1" max="9" name="rank_DAMAGE" placeholder="—" aria-label="Damage priority"></label>
           </div>
-          <small class="hint">Damage ranks the skill's critical hit against that much enemy DEF (the target's, once one is picked above): pair it with C.RATE at least 100.</small>
+          <small class="note">Damage ranks the skill's critical hit against that much enemy DEF (the target's, once one is picked above): pair it with C.RATE at least 100.</small>
+          </div>
         </fieldset>
       </div>
-      <div class="request-column">
+      <div class="stack" style="--space: var(--space-2xl)">
         <fieldset class="panel sets">
           <legend>Sets, at least</legend>
           <div id="set-rows"></div>
-          <button type="button" class="add-set">+ Add a set</button>
+          <button type="button" class="dashed add-set">+ Add a set</button>
           {# A set row, numbered by app.js as it adds them (`__n__`); its icon follows the
              picked set's (`data-icon`). #}
           <template id="set-row">
@@ -109,28 +113,30 @@
                 {% for option in page.options.sets %}<option value="{{ option.id }}"{% if option.icon_url %} data-icon="{{ option.icon_url }}"{% endif %}>{{ option.name }}</option>{% endfor %}
               </select>
               <input type="number" name="pieces___n__" min="1" max="9" value="4" aria-label="Pieces">
-              <button type="button" class="remove-set" aria-label="Remove set" title="Remove set">×</button>
+              <button type="button" class="icon remove-set" aria-label="Remove set" title="Remove set">×</button>
             </div>
           </template>
         </fieldset>
         <fieldset class="panel search">
           <legend>Search</legend>
+          <div class="stack" style="--space: var(--space-l)">
           <div class="settings">
             <label class="well" title="How much of its best each ranked goal may give up for the next">
-              Slack (%)
+              <span class="caps">Slack (%)</span>
               <input type="number" name="slack" value="1" min="0" max="50" step="any">
             </label>
             <label class="well">
-              Builds
+              <span class="caps">Builds</span>
               <input type="number" name="builds" value="3" min="1" max="10">
             </label>
             <label class="well" title="Only pieces enhanced past this level">
-              Above level
+              <span class="caps">Above level</span>
               <input type="number" name="above_level" value="8" min="0" max="16">
             </label>
           </div>
+          <div class="stack" style="--space: var(--space-xs)">
           <p class="caps">Leave out gear from</p>
-          <div class="switch-rows well gear-filters" title="Gear the solve may not take; the champion's own is always allowed">
+          <div class="switch-rows well" title="Gear the solve may not take; the champion's own is always allowed">
             {% for rule in page.options.rules %}
             <label>
               <input type="checkbox" role="switch" name="exclude_{{ rule.key }}" checked>
@@ -141,7 +147,7 @@
             <label class="lock-filter">
               <input type="checkbox" role="switch" name="locked">
               <span class="row-name">Champions locked above</span>
-              <select name="lock_level" aria-label="Lock level">
+              <select name="lock_level" class="small" aria-label="Lock level">
                 {% for level in page.options.lock_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
               </select>
             </label>
@@ -150,11 +156,13 @@
               <span class="row-name">Any other champion (unequipped gear only)</span>
             </label>
           </div>
+          </div>
           <div class="actions">
             <button type="submit" class="cta">Find builds</button>
             <button type="reset" class="quiet cta">Reset</button>
           </div>
-          <span id="solving" class="htmx-indicator" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
+          <span id="solving" class="htmx-indicator note" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
+          </div>
         </fieldset>
       </div>
     </form>

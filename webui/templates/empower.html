@@ -4,15 +4,15 @@
 {# A champion card; `note` (HTML) goes under the name, the caller's content beside it. #}
 {% macro card(champion, note="") %}
   <article class="champion-card rarity-{{ champion.rarity | lower }}">
-    <a href="/champions/{{ champion.id }}" class="card-tile" tabindex="-1">{{ tile(champion) }}</a>
-    <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span>{{ champion.name }}</span>{{ caller() if caller }}</a>
+    <a href="/champions/{{ champion.id }}" tabindex="-1">{{ tile(champion) }}</a>
+    <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span class="clamp">{{ champion.name }}</span>{{ caller() if caller }}</a>
     {{ note }}
   </article>
 {% endmacro %}
 
 {% macro small_tiles(champions) %}
-  <div class="empower-dupes">
-    {% for copy in champions %}<a href="/champions/{{ copy.id }}" class="card-tile">{{ tile(copy, "small") }}</a>{% endfor %}
+  <div class="cluster">
+    {% for copy in champions %}<a href="/champions/{{ copy.id }}">{{ tile(copy, "small") }}</a>{% endfor %}
   </div>
 {% endmacro %}
 
@@ -36,7 +36,7 @@
   {% if page.spare %}
     <div class="champion-grid">
       {% for group in page.spare %}
-        {% set note %}{% if group.needed_by %}<small class="empower-note">feeds {{ group.needed_by | join(", ") }}</small>{% endif %}{% endset %}
+        {% set note %}{% if group.needed_by %}<small class="note">feeds {{ group.needed_by | join(", ") }}</small>{% endif %}{% endset %}
         {% call card(group.copy, note) %}<strong class="spare-count">×{{ group.count }}</strong>{% endcall %}
       {% endfor %}
     </div>
@@ -51,15 +51,15 @@
     another champion instead, shown under its name.
   </p>
   {% if page.with_fodder %}
-    <div class="empower-list">
+    <div class="grid" style="--min: 17rem; --space: var(--space-l); --repeat: auto-fill; --align: start">
       {% for group in page.with_fodder %}
-        <article class="empower-group">
-          <a href="/champions/{{ group.champion.id }}" class="card-tile">{{ tile(group.champion) }}</a>
-          <div class="empower-copies">
-            <a href="/champions/{{ group.champion.id }}" class="card-name">{{ faction(group.champion) }}<span>{{ group.champion.name }}</span></a>
+        <article class="cluster" style="--space: var(--space-l); --align: flex-start">
+          <a href="/champions/{{ group.champion.id }}">{{ tile(group.champion) }}</a>
+          <div class="stack" style="--space: var(--space-s)">
+            <a href="/champions/{{ group.champion.id }}" class="card-name">{{ faction(group.champion) }}<span class="clamp">{{ group.champion.name }}</span></a>
             {% if group.copies %}{{ small_tiles(group.copies) }}{% endif %}
             {% if group.substitutes %}
-              <small class="empower-note">With {{ group.substitute }}:</small>
+              <small class="note">With {{ group.substitute }}:</small>
               {{ small_tiles(group.substitutes) }}
             {% endif %}
           </div>
@@ -92,7 +92,7 @@
       <div class="champion-grid">
         {% for item in page.left %}
           {% set note -%}
-            <small class="empower-note">
+            <small class="note">
               {%- if item.substitute %}with {{ item.substitute }}: {{ item.fodder }} owned
               {%- elif item.fodder %}{{ item.fodder }} cop{{ "y" if item.fodder == 1 else "ies" }} to feed
               {%- else %}no duplicate{% endif -%}

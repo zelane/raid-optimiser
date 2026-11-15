@@ -43,16 +43,14 @@
     {% if page.swaps %}
       {# A row per champion in three columns: who; the swaps, one under another, each the piece
          to equip beside the one it replaces; the gain and Equip. #}
-      <div class="swap-list">
+      <div class="stack">
         {% for group in page.swaps %}
           <article class="swap-group">
-            <header class="champion-strip">
-              <a href="/champions/{{ group.champion.id }}" class="card-tile" tabindex="-1">{{ tile(group.champion, "small") }}</a>
-              <div class="strip-who">
-                <a href="/champions/{{ group.champion.id }}" class="strip-name">{{ group.champion.name }}</a>
-              </div>
-            </header>
-            <div class="swap-pairs">
+            <div class="stack" style="--space: var(--space-s); --align: flex-start">
+              <a href="/champions/{{ group.champion.id }}" tabindex="-1">{{ tile(group.champion, "small") }}</a>
+              <a href="/champions/{{ group.champion.id }}" class="champion-name">{{ group.champion.name }}</a>
+            </div>
+            <div class="stack">
               {% for swap in group.swaps %}
                 <div class="gear-pair">
                   {{ gear_card(swap.better, swap.better_piece, group.champion, "candidate", "Equip · " ~ ("in mailbox" if swap.better.where == "mailbox" else "loose"), swap.gain, "up") }}
@@ -61,9 +59,10 @@
                 </div>
               {% endfor %}
             </div>
-            <div class="swap-side">
-              <div class="strip-figure"><span class="caps">Net gain</span><strong class="up">{{ group.gain }}</strong></div>
-              <div class="swap-action">
+            <div class="stack" style="--space: var(--space-s); --align: flex-end">
+              <span class="caps">Net gain</span>
+              <strong class="figure up">{{ group.gain }}</strong>
+              <div class="cluster" style="--justify: flex-end">
                 <span class="swap-result"></span>
                 <button type="button" class="cta" hx-post="/champions/{{ group.champion.id }}/equip"
                         hx-vals='{"artifact_ids": "{{ group.artifact_ids }}"}' hx-target="previous .swap-result"
@@ -87,7 +86,7 @@
       times its shortage factor: ×1.15 when its set, faction and slot have no good piece, down
       to ×0.9 with three or more.
     </p>
-    <div id="cleanup">{% with plan = page.cleanup %}{% include "_cleanup.html" %}{% endwith %}</div>
+    <div id="cleanup" class="stack" style="--space: var(--space-l)">{% with plan = page.cleanup %}{% include "_cleanup.html" %}{% endwith %}</div>
 
   {% elif page.tab == "roll" %}
     {% from "_candidates.html" import candidates %}
@@ -96,10 +95,12 @@
       piece, so pieces below it rank by their value at +12. Only pieces already good once at +16
       on their own rolls are listed for +16. Pieces the clean-up drops aren't listed.
     </p>
-    <h2>To +12</h2>
-    <div class="table-well">{{ candidates(page.enhance.roll, "at +12", page.enhance.shown) }}</div>
-    <h2>To +16</h2>
-    <div class="table-well">{{ candidates(page.enhance.finish, "at +16", page.enhance.shown) }}</div>
+    <div class="stack" style="--space: var(--space-xl)">
+      <h2 class="section-title">To +12</h2>
+      {{ candidates(page.enhance.roll, "at +12", page.enhance.shown) }}
+      <h2 class="section-title">To +16</h2>
+      {{ candidates(page.enhance.finish, "at +16", page.enhance.shown) }}
+    </div>
 
   {% elif page.tab == "rework" %}
     {% from "_candidates.html" import candidates %}
@@ -109,7 +110,7 @@
       faction, and re-picks the main stat and substats, so concentrated rolls in the wrong stats
       and main stats their set has no use for come first. Ranked by the gain, shortage counted.
     </p>
-    <div class="table-well">{{ candidates(page.enhance.rework, "reworked", page.enhance.shown) }}</div>
+    {{ candidates(page.enhance.rework, "reworked", page.enhance.shown) }}
 
   {% else %}
     {% set weights = page.weights %}
@@ -142,7 +143,7 @@
       <span class="filter-count caps"><span data-filter-count>{{ weights.rows | length }}</span> shown</span>
     </form>
     <p id="weight-result"></p>
-    <div class="type-list">
+    <div class="stack" style="--space: var(--space-s)">
       {% for row in weights.rows %}
         {# A type is saved whole on each change. The hidden first button takes Enter, so it
            doesn't copy. #}
@@ -151,25 +152,25 @@
               data-filter-text="{{ row.label }} {{ row.champions | join(' ') }}"
               data-filter-faction="{{ row.faction or '*' }}" data-filter-kind="{{ row.kind }}">
           <button type="submit" disabled hidden></button>
-          <div class="type-who">
+          <div class="stack" style="--space: var(--space-xs)">
             <input type="text" class="type-name" name="label" value="{{ row.label }}" required autocomplete="off" aria-label="Type name">
-            <div class="type-tags">
-              <div class="segmented small" role="radiogroup" aria-label="{{ row.label }}: kind">
+            <div class="cluster" style="--space: var(--space-xs)">
+              <div class="segmented small type-kind" role="radiogroup" aria-label="{{ row.label }}: kind">
                 {% for choice in weights.kinds %}
                   <label><input type="radio" name="kind" value="{{ choice.value }}" autocomplete="off"{% if choice.value == row.kind %} checked{% endif %}>{{ choice.label }}</label>
                 {% endfor %}
               </div>
-              <select name="faction" autocomplete="off" aria-label="{{ row.label }}: faction">
+              <select name="faction" class="small" autocomplete="off" aria-label="{{ row.label }}: faction">
                 <option value=""{% if not row.faction %} selected{% endif %}>Any faction</option>
                 {% for choice in weights.factions %}<option value="{{ choice.value }}"{% if choice.value == row.faction %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
               </select>
             </div>
-            {% if row.champions %}<p class="type-from">from {{ row.champions | join(", ") }}</p>{% endif %}
+            {% if row.champions %}<p class="note">from {{ row.champions | join(", ") }}</p>{% endif %}
           </div>
           <div class="stat-tiles edit">
             {% for cell in row.cells %}
               <label{% if cell.value == 0 %} class="zero"{% endif %}><span class="caps">{{ cell.label }}</span>
-                <input type="number" name="{{ cell.field }}" autocomplete="off" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
+                <input type="number" class="bare" name="{{ cell.field }}" autocomplete="off" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
                        aria-label="{{ row.label }}: {{ cell.label }}"></label>
             {% endfor %}
           </div>
@@ -185,9 +186,9 @@
             {% endfor %}
           </div>
           <div class="type-actions">
-            <button type="submit" class="quiet" formaction="/accessories/types/{{ row.key }}/copy" formmethod="post"
+            <button type="submit" class="quiet small" formaction="/accessories/types/{{ row.key }}/copy" formmethod="post"
                     formnovalidate title="Add a copy of {{ row.label }}">Copy</button>
-            <button type="submit" class="quiet danger" formaction="/accessories/types/{{ row.key }}/delete" formmethod="post"
+            <button type="submit" class="quiet small danger" formaction="/accessories/types/{{ row.key }}/delete" formmethod="post"
                     formnovalidate title="Delete {{ row.label }}" onclick="return confirm('Delete {{ row.label }}?')">Delete</button>
           </div>
         </form>
@@ -201,12 +202,13 @@
       each set is for. A type a set isn't for still counts, at a share of its score. A set for
       no damage type still keeps a C.DMG amulet. New types and new sets start ticked everywhere.
     </p>
-    <div class="off-target well">
+    <div class="stack" style="--space: var(--space-m)">
+    <div class="well cluster" style="--space: var(--space-s) var(--space-l)">
       <label>Types a set isn't for count at
-        <input type="number" name="off_target" value="{{ '%g' % grid.off_target }}" min="0" max="1" step="0.05" autocomplete="off"
+        <input type="number" class="small" name="off_target" value="{{ '%g' % grid.off_target }}" min="0" max="1" step="0.05" autocomplete="off"
                hx-post="/accessories/off-target" hx-target="#set-result">
         of their score</label>
-      <p id="set-result"></p>
+      <p id="set-result" class="note"></p>
     </div>
     <div class="table-well">
     <table class="set-grid">
@@ -218,7 +220,7 @@
         <tr class="set-values">
           <th scope="row">Value</th>
           {% for column in grid.columns %}
-            <td><input type="number" name="factor" class="{{ 'high' if column.factor > 1 else 'low' if column.factor < 1 else '' }}" value="{{ '%g' % column.factor }}" min="0" max="3" step="0.05" autocomplete="off"
+            <td><input type="number" name="factor" class="bare {{ 'high' if column.factor > 1 else 'low' if column.factor < 1 else '' }}" value="{{ '%g' % column.factor }}" min="0" max="3" step="0.05" autocomplete="off"
                        hx-post="/accessories/sets/value" hx-vals='{"set": "{{ column.set_id }}"}' hx-target="#set-result"
                        aria-label="{{ column.set_name }}: value"></td>
           {% endfor %}
@@ -226,7 +228,7 @@
       </thead>
       {% for group in grid.groups %}
         <tbody>
-          <tr class="set-group"><th scope="rowgroup" colspan="{{ 1 + grid.columns | length }}">{{ group.kind }}</th></tr>
+          <tr class="set-group"><th class="caps" scope="rowgroup" colspan="{{ 1 + grid.columns | length }}">{{ group.kind }}</th></tr>
           {% for row in group.rows %}
             <tr>
               <th scope="row">{{ row.label }}{% if row.faction %} <small>{{ row.faction }}</small>{% endif %}</th>
@@ -241,6 +243,7 @@
         </tbody>
       {% endfor %}
     </table>
+    </div>
     </div>
 
   {% endif %}

@@ -1,6 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import tile %}
-{% from "_team.html" import status_icon, score_pill, need_item, team_slots, wants_panel, gear_panel %}
+{% from "_team.html" import score_pill, need_item, team_slots, bring_panels, run_bar, option_card, more_link, needs_panel %}
 
 {# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
    the wanted tag, gear or assumption keyed `without` left out. #}
@@ -18,9 +17,9 @@
 {% block content %}
   {# One GET form for everything the search takes: the page's state is all in its URL. The
      trial board, under it, only shows. #}
-  <form method="get" action="/chimera" class="chimera-page">
-    <header class="chimera-head">
-      <div class="chimera-title">
+  <form method="get" action="/chimera" class="stack" style="--space: var(--space-2xl)">
+    <header class="page-head">
+      <div>
         <h1>Chimera trials</h1>
         <p class="lede">
           Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the
@@ -28,7 +27,7 @@
           immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
         </p>
       </div>
-      <div class="chimera-rotation">
+      <div class="stack" style="--space: var(--space-xs); --align: flex-start">
         <span class="caps">Mythical materials in</span>
         <fieldset class="segmented" role="radiogroup" aria-label="Rotation">
           {% for column in page.columns %}
@@ -38,47 +37,30 @@
             </label>
           {% endfor %}
         </fieldset>
-        <small class="muted">{% for column in page.columns if column.part == page.column %}Easy Ram: {{ column.hint }}{% endfor %}</small>
+        <small class="note">{% for column in page.columns if column.part == page.column %}Easy Ram: {{ column.hint }}{% endfor %}</small>
       </div>
       <div class="tally" title="Trials the team shown clears">
-        <strong class="{{ 'cleared-all' if page.cleared == 9 else 'cleared-some' }}">{{ page.cleared }}<small>/9</small></strong>
+        <strong class="{{ 'up' if page.cleared == 9 else 'down' }}">{{ page.cleared }}<small>/9</small></strong>
         <span class="caps">trials</span>
         {{ score_pill(page.score, "Team score: how far it can count on what the trials need") }}
       </div>
     </header>
 
     {% if page.problems %}
-      <article class="chimera-problems">
+      <article class="alert">
         <strong>The trial rules no longer match the game's data</strong> (a game update?): these trials may be judged wrongly.
         <ul>{% for problem in page.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
       </article>
     {% endif %}
 
     {{ team_slots(page.team, page_url([])) }}
-
-    {# What the team needs besides the trials, and how it brings it: two panels side by side
-       (`_team.html`). #}
-    <div class="chimera-bring">
-      {{ wants_panel(page.team, page.ran, without, "every team must, besides the trials") }}
-
-      {{ gear_panel(page.team, page.ran, without) }}
-    </div>
-
-    <div class="panel chimera-run">
-      <label>
-        <span class="caps">Search from</span>
-        <select name="min_grade">
-          {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>Champions at {{ grade }}★ and up</option>{% endfor %}
-        </select>
-      </label>
-      {% if page.ran %}<span class="run-note"><span class="dot" aria-hidden="true">●</span> Searched {{ page.candidates }} champions (the best copy of each)</span>{% endif %}
-      <button type="submit" name="run" value="true" class="cta">Find teams</button>
-    </div>
+    {{ bring_panels(page.team, page.ran, without, "every team must, besides the trials") }}
+    {{ run_bar(page, page.ran) }}
 
     {% if page.ran %}
-      <section class="chimera-results">
+      <section class="stack" style="--space: var(--space-l)">
         <h2 class="section-title">Teams</h2>
-        <p class="chimera-found">
+        <p class="lede">
           {% if page.partial %}
             No team clears all nine trials: these clear the most.
           {% elif page.found %}
@@ -86,100 +68,59 @@
             Each lists only the champions it needs; any champion can fill its other slots. Best scored first: how far a team can count on what the trials need (each effect's uptime × reliability × reach, from your champions' skills and books).
           {% endif %}
         </p>
-        <div class="chimera-options">
+        <div class="grid" style="--min: 19rem; --space: var(--space-l); --repeat: auto-fill">
           {% for option in page.options %}
-            <article class="chimera-option {{ 'shown' if option.number == page.shown }}" id="option-{{ option.number }}">
-              <header>
-                <strong>Option {{ option.number }}</strong>
-                <span class="option-scores">
-                  {{ score_pill(option.score, "Team score: how far it can count on what the trials need") }}
-                  <strong class="{{ 'cleared-all' if option.cleared == 9 else 'cleared-some' }}">{{ option.cleared }} / 9</strong>
-                </span>
-              </header>
-              <div class="chimera-option-members">
-                {% for slot in option.slots %}
-                  {% if not slot.champion %}
-                    <span class="chimera-option-member free" title="Any champion"><span class="free-slot">any</span><span>Any champion</span></span>
-                  {% else %}
-                    <a href="/champions/{{ slot.champion.id }}" class="chimera-option-member {{ 'suggested' if slot.suggested }}" title="{{ slot.champion.name }}{{ ' (suggested)' if slot.suggested }}{{ ', not needed' if not slot.needed }}">
-                      {{ tile(slot.champion, "small") }}
-                      <span>{{ slot.champion.name }}</span>
-                    </a>
-                  {% endif %}
-                {% endfor %}
-              </div>
-              <table class="chimera-glance" aria-label="Trials cleared">
+            {% call option_card(option, option.number == page.shown, option.cleared, 9,
+                                "Team score: how far it can count on what the trials need", "Show trials",
+                                page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number),
+                                page_url(option.slots)) %}
+              <table class="glance" aria-label="Trials cleared">
                 {% for form, met in option.glance %}
-                  <tr><th scope="row">{{ form }}</th>{% for hit in met %}<td class="{{ 'met' if hit else 'unmet' }}" title="{{ ['Easy', 'Normal', 'Hard'][loop.index0] }}">{{ '✓' if hit else '✗' }}</td>{% endfor %}</tr>
+                  <tr><th scope="row">{{ form }}</th>{% for hit in met %}<td class="{{ 'up' if hit else 'down' }}" title="{{ ['Easy', 'Normal', 'Hard'][loop.index0] }}">{{ '✓' if hit else '✗' }}</td>{% endfor %}</tr>
                 {% endfor %}
               </table>
-              <footer>
-                <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number) }}" role="button" class="quiet"{% if option.number == page.shown %} aria-current="true"{% endif %}>Show trials</a>
-                <a href="{{ page_url(option.slots) }}" role="button">Use this team</a>
-              </footer>
-            </article>
+            {% endcall %}
           {% else %}
             <p>No team found: no champion at {{ page.min_grade }}★ or above adds anything.</p>
           {% endfor %}
         </div>
-        {% if page.more %}
-          <p class="chimera-more">
-            <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="quiet">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
-          </p>
-        {% endif %}
+        {{ more_link(page, page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1))) }}
       </section>
     {% endif %}
   </form>
 
-  <section class="chimera-trials">
+  <section class="page-section">
     <h2 class="section-title">
       Trials{% if page.shown %}: option {{ page.shown }}{% endif %}
       <span class="badge {{ 'good' if page.cleared == 9 else 'bad' }}">{{ page.cleared }} / 9 cleared</span>
     </h2>
     {# A row per form (its accent colour), Easy → Normal → Hard across it. #}
-    <div class="chimera-board">
+    <div class="stack" style="--space: var(--space-2xl)">
       {% for row in page.rows %}
-        <section class="panel chimera-form form-{{ row.form | lower }}">
-          <header class="chimera-form-head">
-            {% if row.icon_url %}<img class="form-icon" src="{{ row.icon_url }}" alt="" aria-hidden="true">{% else %}<span class="form-glyph" aria-hidden="true">{{ row.form[0] }}</span>{% endif %}
-            <h3>{{ row.form }} form</h3>
-            <span class="badge {{ 'good' if row.cleared == row.trials | length else 'bad' }}">{{ row.cleared }} / {{ row.trials | length }}</span>
-          </header>
-          <div class="chimera-row-trials">
+        {% call needs_panel(row.form ~ " form", row.trials, row.form[0], row.icon_url, "form-" ~ row.form | lower) %}
+          <div class="trial-row">
           {% for trial in row.trials %}
-            <article class="trial level-{{ trial.level | lower }} {{ 'met' if trial.met else 'unmet' }}">
-              <header>
-                <span class="level-pill">{{ trial.level }}</span>
-                <span class="trial-state {{ 'waiting' if trial.waits_on }}">{% if trial.met %}Cleared{% elif trial.waits_on %}Needs {{ trial.waits_on }} first{% else %}Not cleared{% endif %}</span>
-              </header>
-              <p class="trial-text">{{ trial.description }}</p>
+            <article class="trial stack{{ ' met' if trial.met }}" style="--space: var(--space-s)">
+              <div class="cluster" style="--justify: space-between">
+                <span class="badge {{ {'Easy': 'info', 'Normal': 'mid'}.get(trial.level, 'bad') }}">{{ trial.level }}</span>
+                <span class="trial-state {{ 'up' if trial.met else 'mid' if trial.waits_on else 'down' }}">{% if trial.met %}Cleared{% elif trial.waits_on %}Needs {{ trial.waits_on }} first{% else %}Not cleared{% endif %}</span>
+              </div>
+              <p>{{ trial.description }}</p>
               <p class="trial-target"><span>Target</span> <strong>{{ trial.target }}</strong>{% if trial.damage %} damage{% endif %}</p>
               {% if trial.needs %}
-                <ul class="trial-needs">
+                <ul class="stack" style="--space: var(--space-xs)">
                   {% for need in trial.needs %}{{ need_item(need) }}{% endfor %}
                 </ul>
               {% else %}
-                <p class="trial-free">Nothing to bring: it's down to the fight.</p>
+                <p class="note">Nothing to bring: it's down to the fight.</p>
               {% endif %}
             </article>
           {% endfor %}
           </div>
-        </section>
+        {% endcall %}
       {% endfor %}
+      {% if page.extras %}{{ needs_panel("Also bringing", page.extras) }}{% endif %}
     </div>
-    {% if page.extras %}
-      <section class="panel chimera-extras">
-        <header class="chimera-form-head">
-          <span class="form-glyph" aria-hidden="true">+</span>
-          <h3>Also bringing</h3>
-          {% set brought = page.extras | selectattr("met") | list | length %}
-          <span class="badge {{ 'good' if brought == page.extras | length else 'bad' }}">{{ brought }} / {{ page.extras | length }}</span>
-        </header>
-        <ul class="trial-needs extras-list">
-          {% for need in page.extras %}{{ need_item(need) }}{% endfor %}
-        </ul>
-      </section>
-    {% endif %}
   </section>
   {% include "_finder.html" %}
 {% endblock %}

@@ -49,7 +49,7 @@ template {
 /* Alegreya Sans runs small and sets old-style figures: a touch larger, figures lined up. */
 body {
   margin: 0;
-  font-size: 1.06rem;
+  font-size: var(--text-body);
   font-variant-numeric: lining-nums;
 }
 
@@ -66,12 +66,12 @@ body {
   box-sizing: content-box;
   max-inline-size: 80rem;
   margin-inline: auto;
-  padding-inline: clamp(1rem, 2.5vw, 2rem);
+  padding-inline: clamp(var(--space-l), 2.5vw, var(--space-3xl));
 }
 
 main.container {
   min-block-size: 100vh;
-  padding-block: 2rem 4rem;
+  padding-block: var(--space-3xl) var(--space-4xl);
 }
 
 /* --- Type ----------------------------------------------------------------------------- */
@@ -90,32 +90,32 @@ h6 {
 }
 
 h1 {
-  font-size: 2.25rem;
+  font-size: var(--text-4xl);
   line-height: 1.125;
 }
 
 h2 {
-  font-size: 1.6rem;
+  font-size: var(--text-2xl);
   line-height: 1.15;
 }
 
 h3 {
-  font-size: 1.25rem;
+  font-size: var(--text-xl);
   line-height: 1.175;
 }
 
 h4 {
-  font-size: 1.1rem;
+  font-size: var(--text-l);
   line-height: 1.2;
 }
 
 h5 {
-  font-size: 1rem;
+  font-size: var(--text-m);
   line-height: 1.225;
 }
 
 h6 {
-  font-size: 1rem;
+  font-size: var(--text-m);
   line-height: 1.25;
 }
 
@@ -127,24 +127,24 @@ h6 {
    heading rules above; a class still outranks it). */
 :where(article, address, blockquote, dl, figure, form, ol, p, pre, table, ul) {
   ~ :is(h1) {
-    margin-block-start: 3rem;
+    margin-block-start: var(--space-4xl);
   }
 
   ~ :is(h2) {
-    margin-block-start: 2.625rem;
+    margin-block-start: var(--space-4xl);
   }
 
   ~ :is(h3) {
-    margin-block-start: 2.25rem;
+    margin-block-start: var(--space-3xl);
   }
 
   ~ :is(h4, h5, h6) {
-    margin-block-start: 1.875rem;
+    margin-block-start: var(--space-3xl);
   }
 }
 
 :where(ul, ol) {
-  padding-inline-start: 1.25rem;
+  padding-inline-start: var(--space-xl);
 }
 
 :where(ol, ul) li {
@@ -185,7 +185,7 @@ sup {
 }
 
 mark {
-  padding: 0.125rem 0.25rem;
+  padding: var(--space-3xs) var(--space-2xs);
   color: var(--on-surface);
   background: color-mix(in srgb, var(--warning) 30%, transparent);
 }
@@ -226,7 +226,7 @@ hr {
     text-decoration-color var(--transition);
 
   &:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
-    color: color-mix(in srgb, var(--primary) 80%, #fff);
+    color: color-mix(in srgb, var(--primary) 80%, var(--highlight));
     text-decoration-color: currentcolor;
   }
 
@@ -246,7 +246,7 @@ hr {
 
 th,
 td {
-  padding: 0.45rem 0.6rem;
+  padding: var(--space-s) var(--space-s);
   border-block-end: 1px solid var(--outline-variant);
   font-weight: 400;
   font-variant-numeric: tabular-nums lining-nums;
@@ -257,12 +257,28 @@ td {
 thead th,
 thead td {
   border-block-end-width: 0.1875rem;
-  font-size: 0.68rem;
+  font-size: var(--text-2xs);
   font-weight: 700;
   color: var(--on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   white-space: nowrap;
+}
+
+/* A figure's cell lines up on the right; a checkbox in a cell sits alone. */
+:is(th, td).num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+:is(th, td) > [type="checkbox"] {
+  margin: 0;
+}
+
+th small,
+td small {
+  font-weight: 400;
+  color: var(--on-surface-variant);
 }
 
 tfoot th,
@@ -316,7 +332,7 @@ kbd {
 code,
 kbd {
   display: inline-block;
-  padding: 0.375rem;
+  padding: var(--space-xs);
 }
 
 pre {
@@ -325,7 +341,7 @@ pre {
 
   > code {
     display: block;
-    padding: 1rem;
+    padding: var(--space-l);
     line-height: var(--line-height);
     background: none;
   }
@@ -352,7 +368,7 @@ button,
   border: 1px solid var(--button-edge);
   border-radius: var(--radius);
   font: inherit;
-  font-size: 1rem;
+  font-size: var(--text-m);
   font-weight: 600;
   line-height: var(--line-height);
   color: var(--button-fg);
@@ -374,7 +390,7 @@ button,
   :focus,
   [aria-current]:not([aria-current="false"])
 ) {
-  --button-bg: color-mix(in srgb, var(--primary) 85%, #fff);
+  --button-bg: color-mix(in srgb, var(--primary) 85%, var(--highlight));
   --button-edge: var(--button-bg);
 }
 
@@ -389,13 +405,50 @@ button,
 
   &:is(:hover, :active, :focus, [aria-current]:not([aria-current="false"])) {
     --button-bg: transparent;
-    --button-edge: color-mix(in srgb, var(--secondary) 80%, #fff);
-    --button-fg: color-mix(in srgb, var(--secondary) 80%, #fff);
+    --button-edge: color-mix(in srgb, var(--secondary) 80%, var(--highlight));
+    --button-fg: color-mix(in srgb, var(--secondary) 80%, var(--highlight));
   }
 
   &:focus-visible {
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--secondary) 40%, transparent);
   }
+}
+
+:is(button, [type="submit"], [type="reset"], [type="button"], [role="button"]).icon {
+  --button-bg: transparent;
+  --button-edge: transparent;
+  --button-fg: var(--on-surface-variant);
+
+  padding: var(--space-3xs) var(--space-xs);
+  line-height: 1;
+
+  &:is(:hover, :active, :focus) {
+    --button-bg: transparent;
+    --button-edge: transparent;
+    --button-fg: var(--stat-down);
+  }
+}
+
+/* What adds another (a set, a slot): dashed, the width of its column. */
+:is(button, [type="button"]).dashed {
+  --button-bg: transparent;
+  --button-edge: var(--outline-variant);
+  --button-fg: var(--on-surface-variant);
+
+  width: 100%;
+  border-style: dashed;
+  font-size: var(--text-xs);
+
+  &:is(:hover, :active, :focus) {
+    --button-bg: transparent;
+    --button-edge: var(--primary);
+    --button-fg: var(--primary);
+  }
+}
+
+:is(button, [type="submit"], [type="reset"], [type="button"], [role="button"]).small {
+  padding: var(--space-3xs) var(--space-s);
+  font-size: var(--text-xs);
 }
 
 :where(button, [type="submit"], [type="reset"], [type="button"], [role="button"])[disabled],
@@ -413,7 +466,7 @@ textarea,
 optgroup {
   margin: 0;
   font: inherit;
-  font-size: 1rem;
+  font-size: var(--text-m);
   line-height: var(--line-height);
   letter-spacing: inherit;
 }
@@ -470,7 +523,7 @@ select:invalid {
 }
 
 select:not([multiple], [size]) {
-  padding-inline-end: calc(var(--control-pad-inline) + 1.5rem);
+  padding-inline-end: calc(var(--control-pad-inline) + var(--space-2xl));
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a39e94' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center right 0.75rem;
@@ -494,8 +547,8 @@ textarea {
 }
 
 [type="search"] {
-  padding-inline-start: calc(var(--control-pad-inline) + 1.75rem) !important;
-  border-radius: 5rem !important;
+  padding-inline-start: calc(var(--control-pad-inline) + var(--space-3xl)) !important;
+  border-radius: var(--radius-pill) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a39e94' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center left calc(var(--control-pad-inline) + 0.125rem);
@@ -511,10 +564,54 @@ textarea {
   height: auto;
 }
 
+/* Numbers are figures: bold, centred. */
+input[type="number"] {
+  font-weight: 700;
+  text-align: center;
+}
+
+/* A field inside a row or card: short, its text small; a number one only as wide as a few
+   digits. */
+:is(input, select).small {
+  width: auto;
+  height: auto;
+  padding-block: var(--space-3xs);
+  padding-inline: var(--space-xs);
+  font-size: var(--text-xs);
+}
+
+select.small {
+  padding-inline-end: var(--space-xl);
+  background-position: center right var(--space-xs);
+}
+
+input[type="number"].small {
+  width: 5em;
+}
+
+/* A number typed in place: no border, fill or spinner, centred, bold; its cell draws the
+   control. */
+input.bare {
+  width: 100%;
+  height: auto;
+  padding: 0;
+  border: 0;
+  font-weight: 700;
+  text-align: center;
+  appearance: textfield;
+  background: none;
+  box-shadow: none;
+
+  &::-webkit-inner-spin-button {
+    margin: 0;
+    appearance: none;
+  }
+}
+
 label,
 legend {
   display: block;
-  margin-block-end: 0.375rem;
+  margin-block-end: var(--space-xs);
   color: var(--on-surface);
 }
 
@@ -525,7 +622,20 @@ legend {
 }
 
 label > :where(input, select, textarea) {
-  margin-block-start: 0.25rem;
+  margin-block-start: var(--space-2xs);
+}
+
+/* A label beside its field, in a row. */
+label.inline {
+  display: inline-flex;
+  gap: var(--space-xs);
+  align-items: center;
+  margin: 0;
+  white-space: nowrap;
+
+  > :where(input, select) {
+    margin: 0;
+  }
 }
 
 fieldset {
@@ -541,7 +651,7 @@ fieldset {
   + small {
     display: block;
     width: 100%;
-    margin-block: 0.25rem 0;
+    margin-block: var(--space-2xs) 0;
     color: var(--on-surface-variant);
   }
 
@@ -551,30 +661,33 @@ fieldset {
 }
 
 [type="range"] {
+  --range-track: 0.375rem;
+  --range-thumb: 1.25rem;
+
   width: 100%;
-  height: 1.25rem;
+  height: var(--range-thumb);
   padding: 0;
   border: 0;
   appearance: none;
   background: none;
 
   &::-webkit-slider-runnable-track {
-    height: 0.375rem;
+    height: var(--range-track);
     border-radius: var(--radius);
     background: var(--outline);
   }
 
   &::-moz-range-track {
-    height: 0.375rem;
+    height: var(--range-track);
     border-radius: var(--radius);
     background: var(--outline);
   }
 
   &::-webkit-slider-thumb {
     cursor: pointer;
-    width: 1.25rem;
-    height: 1.25rem;
-    margin-top: -0.4375rem;
+    width: var(--range-thumb);
+    height: var(--range-thumb);
+    margin-top: calc((var(--range-track) - var(--range-thumb)) / 2);
     border: 2px solid var(--surface);
     border-radius: 50%;
     appearance: none;
@@ -583,8 +696,8 @@ fieldset {
 
   &::-moz-range-thumb {
     cursor: pointer;
-    width: 1.25rem;
-    height: 1.25rem;
+    width: var(--range-thumb);
+    height: var(--range-thumb);
     border: 2px solid var(--surface);
     border-radius: 50%;
     background: var(--primary);
@@ -682,7 +795,7 @@ label:has(> [type="checkbox"], > [type="radio"]) {
     height: 100%;
     border-radius: 50%;
     background: var(--surface);
-    transition: margin 0.1s ease-in-out;
+    transition: margin var(--transition);
   }
 
   &:checked {
@@ -748,7 +861,7 @@ details {
     float: inline-end;
     width: 1rem;
     height: 1rem;
-    margin-inline-start: 0.5rem;
+    margin-inline-start: var(--space-s);
     background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a39e94' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")
       right center / 1rem auto no-repeat;
     transition: transform var(--transition);
@@ -760,7 +873,7 @@ details {
   }
 
   &[open] > summary {
-    margin-block-end: 1rem;
+    margin-block-end: var(--space-l);
     color: var(--on-surface-variant);
   }
 
@@ -786,7 +899,7 @@ dialog {
   padding: 0;
   border: 0;
   color: var(--on-surface);
-  background: rgb(8 9 10 / 75%);
+  background: var(--scrim);
   backdrop-filter: blur(0.375rem);
 
   &:not([open]) {
@@ -801,7 +914,7 @@ dialog {
     overflow: auto;
     width: 100%;
     max-height: calc(100vh - 2rem);
-    margin: 1rem;
+    margin: var(--space-l);
   }
 }
 
@@ -820,24 +933,24 @@ nav {
     list-style: none;
 
     &:first-of-type {
-      margin-inline-start: -0.5rem;
+      margin-inline-start: calc(var(--space-s) * -1);
     }
 
     &:last-of-type {
-      margin-inline-end: -0.5rem;
+      margin-inline-end: calc(var(--space-s) * -1);
     }
   }
 
   li {
     display: inline-block;
     margin: 0;
-    padding: 0.6rem 0.5rem;
+    padding: var(--space-s) var(--space-s);
     list-style: none;
 
     :where(a, [role="link"]) {
       display: inline-block;
-      margin: -0.3rem -0.5rem;
-      padding: 0.3rem 0.5rem;
+      margin: calc(var(--space-2xs) * -1) calc(var(--space-s) * -1);
+      padding: var(--space-2xs) var(--space-s);
       border-radius: var(--radius);
 
       &:not(:hover) {
@@ -847,7 +960,7 @@ nav {
 
     :is(button, [role="button"], input, select) {
       height: auto;
-      padding: calc(0.3rem - 2px) 0.5rem;
+      padding: calc(var(--space-2xs) - 2px) var(--space-s);
     }
   }
 }
@@ -862,7 +975,7 @@ nav {
     display: inline-block;
     width: 0.9em;
     height: 0.9em;
-    margin-inline-end: 0.5rem;
+    margin-inline-end: var(--space-s);
     border: 2px solid currentcolor;
     border-inline-end-color: transparent;
     border-radius: 50%;
@@ -889,37 +1002,105 @@ nav {
 /* --- Primitives (Every Layout) ---------------------------------------------------------------
    For laying out new work: compose these rather than spacing elements by hand. Each takes its
    own custom properties (`--space`, `--min`, `--side-width`, `--threshold`).
-   - stack: one under another, `--space` between.
-   - cluster: a wrapping row (tags, buttons), `--space` around.
+   - stack: one under another, `--space` between, `--align` across (stretch).
+   - cluster: a wrapping row (tags, buttons), `--space` around, `--align` (center) and
+     `--justify` (start); `push` sends a child and what follows to the far end.
+   A list laid out by one is unstyled. `clamp` cuts text to `--lines` (2) lines.
    - with-sidebar: a fixed-ish side beside content that takes the rest; stacks when narrow.
    - switcher: a row of equals that becomes a column below `--threshold`.
    - grid: as many `--min`-wide columns as fit. */
 
+/* A primitive's parameters are its own: they don't reach the primitives inside it. */
+@property --space {
+  inherits: false;
+  syntax: "*";
+}
+
+@property --align {
+  inherits: false;
+  syntax: "*";
+}
+
+@property --justify {
+  inherits: false;
+  syntax: "*";
+}
+
+@property --min {
+  inherits: false;
+  syntax: "*";
+}
+
+@property --repeat {
+  inherits: false;
+  syntax: "*";
+}
+
+@property --lines {
+  inherits: false;
+  syntax: "*";
+}
+
 .stack {
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  gap: var(--space, var(--space-l));
+  align-items: var(--align, stretch);
+  min-width: 0;
 
   > * {
     margin-block: 0;
-  }
-
-  > * + * {
-    margin-block-start: var(--space, var(--s0));
   }
 }
 
 .cluster {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space, var(--s-1));
-  align-items: center;
+  gap: var(--space, var(--space-s));
+  align-items: var(--align, center);
+  justify-content: var(--justify, flex-start);
+
+  > * {
+    margin: 0;
+  }
+}
+
+.push {
+  margin-inline-start: auto;
+}
+
+.stack > .push {
+  margin: auto 0 0;
+}
+
+/* A field or button taking its share of a row (from `--basis`, 0). */
+.grow {
+  flex: 1 1 var(--basis, 0);
+  width: auto;
+  min-width: 0;
+}
+
+:is(ul, ol):is(.stack, .cluster, .grid) {
+  margin: 0;
+  padding: 0;
+
+  > li {
+    margin: 0;
+    list-style: none;
+  }
+}
+
+.clamp {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--lines, 2);
 }
 
 .with-sidebar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space, var(--s1));
+  gap: var(--space, var(--space-2xl));
 
   > :first-child {
     flex-basis: var(--side-width, 16rem);
@@ -936,7 +1117,7 @@ nav {
 .switcher {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space, var(--s1));
+  gap: var(--space, var(--space-2xl));
 
   > * {
     flex-basis: calc((var(--threshold, 40rem) - 100%) * 999);
@@ -946,6 +1127,7 @@ nav {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(var(--min, 16rem), 100%), 1fr));
-  gap: var(--space, var(--s1));
+  grid-template-columns: repeat(var(--repeat, auto-fit), minmax(min(var(--min, 16rem), 100%), 1fr));
+  gap: var(--space, var(--space-2xl));
+  align-items: var(--align, stretch);
 }

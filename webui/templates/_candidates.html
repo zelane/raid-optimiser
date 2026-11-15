@@ -1,7 +1,9 @@
 {% from "_accessory.html" import accessory_cells %}
 {% macro candidates(rows, after_label, shown) %}
   {% if rows %}
-    <table class="accessory-list">
+    <div class="stack" style="--space: var(--space-xs)">
+    <div class="table-well">
+    <table>
       <thead><tr><th>#</th><th></th><th>Piece</th><th>Main</th><th>Substats</th>
         <th class="num">Now</th><th class="num">{{ after_label }}</th><th class="num" title="shortage counted">Priority</th><th>Best for</th></tr></thead>
       <tbody>
@@ -17,7 +19,9 @@
         {% endfor %}
       </tbody>
     </table>
-    {% if rows | length >= shown %}<p class="hint">The first {{ shown }} shown.</p>{% endif %}
+    </div>
+    {% if rows | length >= shown %}<p class="note">The first {{ shown }} shown.</p>{% endif %}
+    </div>
   {% else %}
     <p>Nothing to list.</p>
   {% endif %}

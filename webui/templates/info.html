@@ -2,7 +2,7 @@
 {% block title %}Faction Wars: Raid optimiser{% endblock %}
 {% block content %}
   {% set fw = page.faction_wars %}
-  <section class="info-section" aria-labelledby="fw-heading">
+  <section aria-labelledby="fw-heading">
     <header class="page-head">
       <div>
         <h1 id="fw-heading">Faction Wars {{ fw.difficulty }}</h1>
@@ -20,14 +20,14 @@
 
     <div class="crypt-grid">
     {% for crypt in fw.crypts %}
-      <article class="panel crypt">
-        <header class="crypt-head">
-          {% if crypt.banner_url %}<img src="{{ crypt.banner_url }}" alt="">{% endif %}
+      <article class="panel stack crypt" style="--space: var(--space-m)">
+        <div class="cluster" style="--space: var(--space-m)">
+          {% if crypt.banner_url %}<img class="faction" src="{{ crypt.banner_url }}" alt="">{% endif %}
           <h3>{{ crypt.name }}</h3>
-          <span class="badge">{{ crypt.stars }}/{{ crypt.max_stars }} stars</span>
-        </header>
+          <span class="badge push">{{ crypt.stars }}/{{ crypt.max_stars }} stars</span>
+        </div>
         <div class="table-well">
-        <table class="crypt-stages">
+        <table>
           <thead><tr><th>Stage</th><th>Stars</th><th>Still to do</th></tr></thead>
           <tbody>
             {% for row in crypt.rows %}
@@ -45,7 +45,7 @@
                     {{ row.open[-1] }}
                     <small class="muted">(or {{ row.open[:-1] | join(", or ") }})</small>
                   {% else %}
-                    <ul class="quests">{% for quest in row.open %}<li>{{ quest }}</li>{% endfor %}</ul>
+                    <ul>{% for quest in row.open %}<li>{{ quest }}</li>{% endfor %}</ul>
                   {% endif %}
                 </td>
               </tr>

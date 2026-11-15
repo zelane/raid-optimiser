@@ -9,35 +9,35 @@
   {%- else %}<span class="status-icon glyph {{ size }}" title="{{ label }}" aria-label="{{ label }}">✦</span>{% endif -%}
 {%- endmacro %}
 
-{# A score (%) as a small pill, coloured by how far it can be counted on. #}
-{% macro score_pill(score, title="") -%}
-  <span class="score-pill {{ 'high' if score >= 75 else 'mid' if score >= 45 else 'low' }}"{% if title %} title="{{ title }}"{% endif %}>{{ score }}%</span>
+{# A score (%) as a badge, coloured by how far it can be counted on. #}
+{% macro score_pill(score, title="", extra="") -%}
+  <span class="badge {{ 'good' if score >= 75 else 'mid' if score >= 45 else 'bad' }} {{ extra }}"{% if title %} title="{{ title }}"{% endif %}>{{ score }}%</span>
 {%- endmacro %}
 
 {# A need: met or not, what would do (icons), and who brings it (portraits) or what else does. #}
 {% macro need_item(need) -%}
 <li class="status {{ 'met' if need.met else 'missing' }}">
-  <span class="need-mark" aria-label="{{ 'met' if need.met else 'not met' }}">{{ "✓" if need.met else "✗" }}</span>
-  <div class="need-body">
-    <span class="need-head">
-      {%- if need.asks %}<span class="need-icons">{% for icon in need.asks %}{{ status_icon(icon.url, icon.label) }}{% endfor %}</span>{% endif -%}
-      <span class="need-label">{{ need.label }}</span>
-      {% if need.met %}{{ score_pill(need.score, "How far the team can count on it: uptime × reliability × reach") }}{% endif %}
+  <span class="need-mark {{ 'up' if need.met else 'down' }}" aria-label="{{ 'met' if need.met else 'not met' }}">{{ "✓" if need.met else "✗" }}</span>
+  <div class="need-body stack" style="--space: var(--space-2xs)">
+    <span class="cluster" style="--space: var(--space-xs)">
+      {%- if need.asks %}<span class="icons">{% for icon in need.asks %}{{ status_icon(icon.url, icon.label) }}{% endfor %}</span>{% endif -%}
+      <span>{{ need.label }}</span>
+      {% if need.met %}{{ score_pill(need.score, "How far the team can count on it: uptime × reliability × reach", "push") }}{% endif %}
     </span>
-    {% if need.met %}<span class="meter {{ 'high' if need.score >= 75 else 'mid' if need.score >= 45 else 'low' }}" aria-hidden="true"><span style="width: {{ need.score }}%"></span></span>{% endif %}
+    {% if need.met %}<span class="meter {{ 'good' if need.score >= 75 else 'mid' if need.score >= 45 else 'bad' }}" aria-hidden="true"><span style="width: {{ need.score }}%"></span></span>{% endif %}
     {% if need.contributors or need.notes or need.brought %}
-      <div class="need-by">
+      <div class="cluster" style="--space: var(--space-2xs)">
         {% for contributor in need.contributors %}
           {% set champion = contributor.champion %}
           <a href="/champions/{{ champion.id }}" class="mini-portrait rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}: {{ contributor.score }}% ({{ contributor.detail }})">
             {% if champion.portrait_url %}<img src="{{ champion.portrait_url }}" alt="{{ champion.name }}" loading="lazy">{% else %}<span>{{ champion.name[:2] }}</span>{% endif %}
           </a>
         {% endfor %}
-        {% if need.brought %}<span class="need-brought" title="What the team brings toward it">{% for icon in need.brought %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>{% endif %}
-        {% for note in need.notes %}<span class="need-note">{{ note }}</span>{% endfor %}
+        {% if need.brought %}<span class="icons need-brought" title="What the team brings toward it">{% for icon in need.brought %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>{% endif %}
+        {% for note in need.notes %}<span class="badge quiet">{{ note }}</span>{% endfor %}
       </div>
     {% elif not need.met %}
-      <div class="need-by"><span class="need-note missing">nobody brings it</span></div>
+      <div class="cluster"><span class="badge bad">nobody brings it</span></div>
     {% endif %}
   </div>
 </li>
@@ -50,28 +50,27 @@
 {% macro team_slots(team, empty_url) %}
     <section class="panel">
       <header class="panel-head">
-        <h2>Your champions</h2>
         {% set placed = team.slots | selectattr("champion") | list | length %}
-        <span class="badge">{{ placed }} placed · {{ team.slots | length - placed }} open</span>
-        <a href="{{ empty_url }}" class="caps empty-all">Empty all</a>
+        <h2>Your champions <span class="badge">{{ placed }} placed · {{ team.slots | length - placed }} open</span></h2>
+        <a href="{{ empty_url }}" class="caps">Empty all</a>
       </header>
-      <datalist id="chimera-champions">
+      <datalist id="team-champions">
         {% for choice in team.choices %}<option value="{{ choice.label }}"></option>{% endfor %}
       </datalist>
-      <div class="chimera-slots">
+      <div class="grid" style="--min: 11rem; --space: var(--space-m)">
         {% for slot in team.slots %}
           {# The slot's field is hidden: the finder (+, Change) fills it and submits. #}
-          <div class="slot chimera-slot{{ ' suggested' if slot.suggested }}{{ ' empty' if not slot.champion }}">
+          <div class="slot stack team-slot{{ ' suggested' if slot.suggested }}{{ ' empty' if not slot.champion }}">
             <span class="caps">Slot {{ loop.index }}{% if slot.suggested %} · suggested{% endif %}</span>
             <input type="hidden" name="slot" id="slot-{{ loop.index }}" value="{{ slot.choice }}">
             {% if slot.champion %}
-              <div class="slot-champion">
-                <a href="/champions/{{ slot.champion.id }}" class="card-tile" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
-                <span class="chimera-slot-name">{{ slot.champion.name }}</span>
+              <div class="stack" style="--space: var(--space-2xs); --align: center">
+                <a href="/champions/{{ slot.champion.id }}" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
+                <span class="tile-name clamp">{{ slot.champion.name }}</span>
               </div>
             {% endif %}
             {% if slot.relics %}
-              <select name="relic" id="relic-{{ loop.index }}" class="slot-relic" aria-label="Relic for slot {{ loop.index }}" onchange="this.form.submit()">
+              <select name="relic" id="relic-{{ loop.index }}" class="small" aria-label="Relic for slot {{ loop.index }}" onchange="this.form.submit()">
                 {% for option in slot.relics %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
               </select>
             {% else %}
@@ -79,12 +78,12 @@
             {% endif %}
             {% if not slot.champion %}
               <button type="button" class="slot-plus" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}" aria-label="Find a champion for slot {{ loop.index }}" title="Find a champion">+</button>
-              {% if slot.problem %}<small class="slot-problem">“{{ slot.choice }}”: {{ slot.problem }}</small>{% endif %}
+              {% if slot.problem %}<small class="note bad">“{{ slot.choice }}”: {{ slot.problem }}</small>{% endif %}
             {% endif %}
             {% if slot.choice %}
-              <div class="slot-actions">
-                {% if slot.champion %}<button type="button" class="quiet" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}">Change</button>{% endif %}
-                <button type="button" class="quiet" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
+              <div class="cluster push" style="--space: var(--space-xs); --justify: center">
+                {% if slot.champion %}<button type="button" class="quiet small" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}">Change</button>{% endif %}
+                <button type="button" class="quiet small" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
                         onclick="document.getElementById('slot-{{ loop.index }}').value = ''; document.getElementById('relic-{{ loop.index }}').value = ''; this.form.submit()">×</button>
               </div>
             {% endif %}
@@ -98,17 +97,17 @@
    searchable picker adding one (picker.js), and a count (so many different debuffs or buffs)
    to add. `subtitle`: what it's besides. #}
 {% macro wants_panel(team, ran, without, subtitle) %}
-      <section class="panel">
+      <section class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head">
           <h2>Also bring <small class="muted">{{ subtitle }}</small></h2>
-          <div class="chips-chosen">
+          <div class="cluster" style="--space: var(--space-xs)">
             {% for want in team.wanted %}
               <a class="chip on" href="{{ without(want.key) }}" title="Stop asking for {{ want.label }}">
                 {{ status_icon(want.icon_url, want.label, "small") }}{{ want.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
             {% for count in team.counts %}
-              <a class="chip on counted" href="{{ without(count.key) }}" title="Stop asking for {{ count.label }}">
+              <a class="chip on" href="{{ without(count.key) }}" title="Stop asking for {{ count.label }}">
                 <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
@@ -139,14 +138,14 @@
             <p class="picker-empty muted" hidden>Nothing matches</p>
           </div>
         </div>
-        <div class="count-form">
+        <div class="cluster">
           <span class="caps">Or so many different</span>
-          <select name="count_side" aria-label="Debuffs or buffs">
+          <select name="count_side" class="small" aria-label="Debuffs or buffs">
             <option value="debuff">debuffs</option>
             <option value="buff">buffs</option>
           </select>
-          <input type="number" name="count_n" min="1" max="10" placeholder="3" aria-label="How many">
-          <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="quiet">Add</button>
+          <input type="number" name="count_n" class="small" min="1" max="10" placeholder="3" aria-label="How many">
+          <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="quiet small">Add</button>
         </div>
       </section>
 {% endmacro %}
@@ -154,10 +153,10 @@
 {# How the team brings it besides skills: gear and assumptions as removable chips, a picker
    adding gear, and the assume form (who, what). #}
 {% macro gear_panel(team, ran, without) %}
-      <section class="panel">
+      <section class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head">
           <h2>Gear, relics &amp; assumptions <small class="muted">how the team brings it, besides skills</small></h2>
-          <div class="chips-chosen">
+          <div class="cluster" style="--space: var(--space-xs)">
             {% for gear in team.gear_on %}
               <a class="chip on" href="{{ without(gear.key) }}" title="Stop allowing {{ gear.name }}">
                 {% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}{{ gear.name }}<span class="chip-remove" aria-hidden="true">×</span>
@@ -185,7 +184,7 @@
                   <div class="picker-group-title caps">{{ group.title }}</div>
                   {% for gear in left %}
                     <button type="button" class="picker-option" role="option" data-value="{{ gear.key }}" title="{{ gear.name }}: {{ gear.brings | map(attribute='label') | join(', ') }}">
-                      <span class="gear-icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
+                      <span class="icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
                       <span>{{ gear.name }}{% if gear.faction %} <small class="muted">{{ gear.faction }} only</small>{% endif %}</span>
                     </button>
                   {% endfor %}
@@ -195,11 +194,11 @@
             <p class="picker-empty muted" hidden>Nothing matches</p>
           </div>
         </div>
-        <div class="assume">
-          <p class="panel-note">Assume: a blessing, a book to come. A champion (or the team, left empty) brings what you name.</p>
-          <div class="assume-form">
-            <input type="search" name="assume_who" list="chimera-champions" placeholder="Champion (empty: the team)" autocomplete="off" aria-label="Who brings it">
-            <select name="assume_what" aria-label="What they bring">
+        <div class="stack" style="--space: var(--space-s)">
+          <p class="note">Assume: a blessing, a book to come. A champion (or the team, left empty) brings what you name.</p>
+          <div class="cluster" style="--basis: 10rem">
+            <input type="search" name="assume_who" class="grow" list="team-champions" placeholder="Champion (empty: the team)" autocomplete="off" aria-label="Who brings it">
+            <select name="assume_what" class="grow" aria-label="What they bring">
               <option value="">brings…</option>
               {% for group in team.wants %}
                 <optgroup label="{{ group.title }}">
@@ -211,4 +210,84 @@
           </div>
         </div>
       </section>
+{% endmacro %}
+
+{# What the team needs besides the content, and how it brings it: two panels side by side
+   where they fit. #}
+{% macro bring_panels(team, ran, without, subtitle) %}
+    <div class="grid" style="--min: 34rem; --align: start">
+      {{ wants_panel(team, ran, without, subtitle) }}
+      {{ gear_panel(team, ran, without) }}
+    </div>
+{% endmacro %}
+
+{# The search bar: the champions searched from, what the last search covered, Find. #}
+{% macro run_bar(page, searched) %}
+    <div class="panel cluster" style="--space: var(--space-m) var(--space-2xl)">
+      <label class="inline">
+        <span class="caps">Search from</span>
+        <select name="min_grade">
+          {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>Champions at {{ grade }}★ and up</option>{% endfor %}
+        </select>
+      </label>
+      {% if searched %}<span class="note">Searched {{ page.candidates }} champions (the best copy of each)</span>{% endif %}
+      <button type="submit" name="run" value="true" class="cta push">Find teams</button>
+    </div>
+{% endmacro %}
+
+{# A team found: its score and how much it meets (`met` of `total`), its members (any
+   champion where it needs none), then a link showing its needs below and one using it.
+   `caller`, if any, adds a glance under the members. #}
+{% macro option_card(option, shown, met, total, score_title, show_label, show_url, use_url) %}
+  <article class="stack team-option{{ ' shown' if shown }}" style="--space: var(--space-m)" id="option-{{ option.number }}">
+    <div class="cluster" style="--justify: space-between">
+      <strong>Option {{ option.number }}</strong>
+      <span class="cluster">
+        {{ score_pill(option.score, score_title) }}
+        <strong class="{{ 'up' if met == total else 'down' }}">{{ met }} / {{ total }}</strong>
+      </span>
+    </div>
+    <div class="team-members">
+      {% for slot in option.slots %}
+        {% if not slot.champion %}
+          <span class="team-member muted" title="Any champion"><span class="free-slot">any</span><span class="tile-name">Any champion</span></span>
+        {% else %}
+          <a href="/champions/{{ slot.champion.id }}" class="team-member{{ ' suggested' if slot.suggested }}" title="{{ slot.champion.name }}{{ ' (suggested)' if slot.suggested }}{{ ', not needed' if not slot.needed }}">
+            {{ tile(slot.champion, "small") }}
+            <span class="tile-name clamp">{{ slot.champion.name }}</span>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% if caller %}{{ caller() }}{% endif %}
+    <div class="cluster push">
+      <a href="{{ show_url }}" role="button" class="quiet small grow"{% if shown %} aria-current="true"{% endif %}>{{ show_label }}</a>
+      <a href="{{ use_url }}" role="button" class="small grow">Use this team</a>
+    </div>
+  </article>
+{% endmacro %}
+
+{# The link listing more options (`page.more` of them). #}
+{% macro more_link(page, url) %}
+  {% if page.more %}
+    <p><a href="{{ url }}#option-{{ page.listed + 1 }}" role="button" class="quiet">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a></p>
+  {% endif %}
+{% endmacro %}
+
+{# A panel of needs in its accent colour (`accent`: a form's class), headed by its icon or
+   glyph and how many are met. `caller`, if any, is the body; else the needs as a grid. #}
+{% macro needs_panel(title, needs, glyph="+", icon_url="", accent="") %}
+  <section class="panel stack accent-panel {{ accent }}" style="--space: var(--space-m)">
+    <header class="cluster" style="--space: var(--space-s)">
+      {% if icon_url %}<img class="form-icon" src="{{ icon_url }}" alt="" aria-hidden="true">{% else %}<span class="form-glyph" aria-hidden="true">{{ glyph }}</span>{% endif %}
+      <h3>{{ title }}</h3>
+      {% set met = needs | selectattr("met") | list | length %}
+      <span class="badge push {{ 'good' if met == needs | length else 'bad' }}">{{ met }} / {{ needs | length }}</span>
+    </header>
+    {% if caller %}{{ caller() }}{% else %}
+      <ul class="grid" style="--min: 18rem; --space: var(--space-s)">
+        {% for need in needs %}{{ need_item(need) }}{% endfor %}
+      </ul>
+    {% endif %}
+  </section>
 {% endmacro %}

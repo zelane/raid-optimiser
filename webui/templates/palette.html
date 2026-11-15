@@ -6,22 +6,15 @@
 {% block title %}Palette{% endblock %}
 {% block content %}
 <style>
-  .pal { display: flex; flex-direction: column; gap: 2rem; }
-  .pal-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
-  .pal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; }
-  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.6rem; }
-  .swatch { display: flex; flex-direction: column; border: 1px solid var(--outline-variant); border-radius: var(--radius-panel); overflow: hidden; }
+  .swatch { border: 1px solid var(--outline-variant); border-radius: var(--radius-panel); overflow: hidden; }
   .swatch-chip { height: 3.25rem; display: grid; place-items: center; font-weight: 700; }
-  .swatch-meta { padding: 0.35rem 0.5rem; font-size: 0.75rem; background: var(--surface-container-low); }
-  .swatch-meta code { padding: 0; background: none; font-size: 0.72rem; }
-  .text-on { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem; border: 1px solid var(--outline-variant); border-radius: var(--radius-panel); }
-  .layers { display: flex; flex-wrap: wrap; padding: 1rem; gap: 1rem; background: var(--surface); border: 1px solid var(--outline-variant); }
-  .layers > div { flex: 1 1 10rem; padding: 1rem; border-radius: var(--radius-panel); border: 1px solid var(--outline-variant); }
-  .rarities { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  .rarities span { padding: 0.2rem 0.6rem; border: 2px solid var(--rarity); border-radius: 0.25rem; color: var(--rarity); font-weight: 700; }
+  .swatch-meta { padding: var(--space-xs) var(--space-s); background: var(--surface-container-low); }
+  .layers { padding: var(--space-l); background: var(--surface); border: 1px solid var(--outline-variant); }
+  .layers > div, .text-on { padding: var(--space-l); border-radius: var(--radius-panel); border: 1px solid var(--outline-variant); }
+  .rarities span { padding: var(--space-2xs) var(--space-s); border: 2px solid var(--rarity); border-radius: var(--radius); color: var(--rarity); font-weight: 700; }
 </style>
 
-<div class="pal">
+<div class="stack" style="--space: var(--space-3xl)">
   <div class="page-head">
     <div>
       <h1>Palette</h1>
@@ -31,7 +24,7 @@
   </div>
 
   {# --- Colours -------------------------------------------------------------- #}
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Colours</h2>
     {% set swatches = [
       ("--primary", "--on-primary"), ("--secondary", "--on-secondary"),
@@ -40,55 +33,55 @@
       ("--on-surface", "--surface"), ("--on-surface-variant", "--surface"),
       ("--heading", "--surface"), ("--outline", "--on-surface"), ("--outline-variant", "--on-surface"),
     ] %}
-    <div class="swatches">
+    <div class="grid" style="--min: 9.5rem; --space: var(--space-s); --repeat: auto-fill">
       {% for bg, fg in swatches %}
-        <div class="swatch">
+        <div class="swatch stack" style="--space: 0">
           <div class="swatch-chip" style="background: var({{ bg }}); color: var({{ fg }})">Aa</div>
-          <div class="swatch-meta"><code>{{ bg }}</code><br><span class="muted" data-var="{{ bg }}"></span></div>
+          <div class="swatch-meta note"><code>{{ bg }}</code><br><span data-var="{{ bg }}"></span></div>
         </div>
       {% endfor %}
     </div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Surfaces</h2>
-    <p class="panel-note">The slab, then the containers from lowest (insets: wells, fields, tables) to high (hovered and selected rows).</p>
+    <p class="note">The slab, then the containers from lowest (insets: wells, fields, tables) to high (hovered and selected rows).</p>
     {% set surfaces = [
       ("--surface", "The page slab."), ("--surface-container-lowest", "Wells, fields, tables."),
       ("--surface-container-low", "Panels, the top bar, code."), ("--surface-container", "Spare."),
       ("--surface-container-high", "Hovered and selected rows."),
     ] %}
-    <div class="layers">
+    <div class="layers grid" style="--min: 10rem; --space: var(--space-l)">
       {% for name, use in surfaces %}<div style="background: var({{ name }})"><span class="caps">{{ name }}</span><p>{{ use }}</p></div>{% endfor %}
     </div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Text on surfaces</h2>
-    <div class="pal-grid">
+    <div class="grid" style="--min: 16rem; --space: var(--space-l); --align: start">
       {% for bg in ["--surface", "--surface-container-low", "--surface-container"] %}
-        <div class="text-on" style="background: var({{ bg }})">
+        <div class="text-on stack" style="--space: var(--space-2xs); background: var({{ bg }})">
           <span class="caps">{{ bg }}</span>
-          <strong style="font-family: var(--font-display); font-size: 1.3rem; color: var(--heading)">A heading in Alegreya</strong>
+          <strong class="champion-name">A heading in Alegreya</strong>
           <span>Body text, the bone white of the page.</span>
-          <span class="muted">Muted text: notes and hints.</span>
-          <span><a href="#">A link</a> · <span class="up">+12% up</span> · <span class="down">−8% down</span> · <span style="color: var(--stat-mid)">mid</span> · <span style="color: var(--tertiary)">tertiary</span></span>
+          <span class="muted">Muted text.</span> <span class="note">A note: small and muted.</span>
+          <span><a href="#">A link</a> · <span class="up">+12% up</span> · <span class="down">−8% down</span> · <span class="mid">mid</span> · <span class="info">info</span></span>
         </div>
       {% endfor %}
     </div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Rarity</h2>
-    <div class="rarities">
+    <div class="rarities cluster">
       {% for r in ["common", "uncommon", "rare", "epic", "legendary", "mythical"] %}<span class="rarity-{{ r }}">{{ r | capitalize }}</span>{% endfor %}
     </div>
     {% if champions %}
-      <div class="champion-grid" style="margin-top: 1rem">
+      <div class="champion-grid">
         {% for champion in champions %}
           <article class="champion-card rarity-{{ champion.rarity | lower }}">
-            <a href="/champions/{{ champion.id }}" class="card-tile" tabindex="-1">{{ tile(champion) }}</a>
-            <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span>{{ champion.name }}</span></a>
+            <a href="/champions/{{ champion.id }}" tabindex="-1">{{ tile(champion) }}</a>
+            <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span class="clamp">{{ champion.name }}</span></a>
           </article>
         {% endfor %}
       </div>
@@ -96,9 +89,9 @@
   </section>
 
   {# --- Controls ------------------------------------------------------------- #}
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Buttons and links</h2>
-    <div class="pal-row">
+    <div class="cluster">
       <button>Primary</button>
       <button class="cta">Run · CTA</button>
       <button class="quiet">Quiet</button>
@@ -107,19 +100,20 @@
       <button disabled>Disabled</button>
       <a href="#">A link</a>
     </div>
-    <p class="panel-note" style="margin-top: 0.75rem">Primary next to danger: they should never be mistaken for each other.</p>
-    <div class="pal-row"><button>Equip</button><button class="danger">Sell</button><span class="badge">accent</span><span class="badge bad">bad</span></div>
+    <p class="note">Primary next to danger: they should never be mistaken for each other.</p>
+    <div class="cluster"><button>Equip</button><button class="danger">Sell</button><span class="badge">accent</span><span class="badge bad">bad</span></div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Badges, chips, statuses</h2>
-    <div class="pal-row">
-      <span class="badge">default</span><span class="badge good">good</span>
-      <span class="badge bad">bad</span><span class="badge info">info</span>
+    <div class="cluster">
+      <span class="badge">default</span><span class="badge good">good</span><span class="badge mid">mid</span>
+      <span class="badge bad">bad</span><span class="badge info">info</span><span class="badge quiet">quiet</span><span class="badge quiet bad">quiet bad</span>
+      <span class="figure up">+29.9</span>
       <span class="caps">caps label</span>
       <mark>marked text</mark> <ins>inserted</ins> <del>deleted</del> <code>code</code>
     </div>
-    <div class="pal-row" style="margin-top: 0.75rem">
+    <div class="cluster">
       <label class="chip"><input type="checkbox">Off chip</label>
       <label class="chip on"><input type="checkbox" checked>On chip</label>
       <span class="chip assumed">Assumed</span>
@@ -127,24 +121,24 @@
       {{ status_icon("/static/assets/statuses/BlockBuffs.png", "Block Buffs") }}
       {{ status_icon("", "No icon") }}
     </div>
-    <ul class="pal-grid" style="margin-top: 0.75rem; padding: 0; list-style: none">
+    <ul class="grid" style="--min: 16rem; --space: var(--space-s)">
       <li class="status met">✓ Decrease DEF on the Chimera</li>
       <li class="status missing">✗ Block Buffs: nobody brings it</li>
       <li class="status">A plain status</li>
     </ul>
-    <div class="pal-grid" style="margin-top: 0.75rem">
+    <div class="grid" style="--min: 16rem; --space: var(--space-l); --align: start">
       <div><span class="caps">meter high</span><span class="meter"><span style="width: 85%"></span></span></div>
       <div><span class="caps">meter mid</span><span class="meter mid"><span style="width: 55%"></span></span></div>
-      <div><span class="caps">meter low</span><span class="meter low"><span style="width: 20%"></span></span></div>
+      <div><span class="caps">meter low</span><span class="meter bad"><span style="width: 20%"></span></span></div>
     </div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Forms</h2>
-    <div class="pal-grid">
-      <article class="panel">
+    <div class="grid" style="--min: 16rem; --space: var(--space-l); --align: start">
+      <article class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head"><h3>Fields</h3><span class="caps">panel-head</span></header>
-        <div style="display: flex; flex-direction: column; gap: 0.6rem">
+        <div class="stack" style="--space: var(--space-s)">
           <input type="text" placeholder="Placeholder">
           <input type="text" value="Focused field" autofocus>
           <input type="text" value="Invalid" aria-invalid="true">
@@ -154,48 +148,45 @@
           <input type="range" value="60">
         </div>
       </article>
-      <article class="panel">
+      <article class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head"><h3>Toggles</h3></header>
         <div class="segmented">
           <label><input type="radio" name="seg" checked>Easy</label>
           <label><input type="radio" name="seg">Normal</label>
           <label><input type="radio" name="seg">Hard</label>
         </div>
-        <div class="pal-row" style="margin-top: 0.75rem">
+        <div class="cluster">
           <span class="caps">small, checkboxes</span>
           <div class="segmented small">
             <label><input type="checkbox" checked>ACC</label><label><input type="checkbox">RES</label>
             <label><input type="checkbox" checked>ATK</label><label><input type="checkbox">HP</label>
           </div>
         </div>
-        <div class="switch-rows" style="margin-top: 0.75rem">
+        <div class="switch-rows">
           <label><span class="row-name">Reserved gear</span><span class="row-note">3 rules</span><input type="checkbox" role="switch" checked></label>
-          <label><span class="row-name">Locked champions</span><select><option>above 3</option></select></label>
+          <label><span class="row-name">Locked champions</span><select class="small"><option>above 3</option></select></label>
           <label><span class="row-name">Worn by others</span><input type="checkbox" role="switch"></label>
         </div>
       </article>
-      <article class="panel">
+      <article class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head"><h3>Tabs and stats</h3></header>
         <nav class="page-tabs"><a href="#" aria-current="page">Swaps <span class="badge">4</span></a><a href="#">Roll <span class="badge">12</span></a><a href="#">Clean up</a></nav>
-        <dl class="stat-tiles well" style="margin-top: 0.75rem">
+        <dl class="stat-tiles well">
           <div><dt>HP</dt><dd>48,210</dd></div><div><dt>ATK</dt><dd>1,544</dd></div>
           <div><dt>DEF</dt><dd>3,902</dd></div><div><dt>SPD</dt><dd class="up">241</dd></div>
           <div><dt>C.RATE</dt><dd>100%</dd></div><div><dt>ACC</dt><dd class="down">180</dd></div>
         </dl>
-        <div class="stat-tiles edit" style="margin-top: 0.75rem">
-          <label><span class="caps">SPD</span><input type="number" value="4" step="0.5"></label>
-          <label><span class="caps">ATK</span><input type="number" value="5" step="0.5"></label>
-          <label class="zero"><span class="caps">HP</span><input type="number" value="0" step="0.5"></label>
-          <label><span class="caps">C.DMG</span><input type="number" value="5" step="0.5"></label>
-        </div>
-        <div class="weight-chips" style="margin-top: 0.75rem">
-          <span class="weight-chip"><span class="caps">SPD</span>1.0</span><span class="weight-chip"><span class="caps">ACC</span>0.8</span><span class="weight-chip"><span class="caps">HP%</span>0.5</span>
+        <div class="stat-tiles edit">
+          <label><span class="caps">SPD</span><input type="number" class="bare" value="4" step="0.5"></label>
+          <label><span class="caps">ATK</span><input type="number" class="bare" value="5" step="0.5"></label>
+          <label class="zero"><span class="caps">HP</span><input type="number" class="bare" value="0" step="0.5"></label>
+          <label><span class="caps">C.DMG</span><input type="number" class="bare" value="5" step="0.5"></label>
         </div>
       </article>
     </div>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Filter bar</h2>
     <form class="filter-bar" data-filter=".pal-filtered">
       <input type="search" name="text" placeholder="Name" aria-label="Name">
@@ -207,7 +198,7 @@
       </div>
       <span class="filter-count caps"><span data-filter-count>3</span> shown</span>
     </form>
-    <ul class="pal-row" style="margin-top: 0.75rem; padding: 0; list-style: none">
+    <ul class="cluster">
       <li class="pal-filtered chip" data-filter-text="Gharol" data-filter-faction="Orcs" data-filter-kind="damage">Gharol · Orcs · damage</li>
       <li class="pal-filtered chip" data-filter-text="Any ATK" data-filter-faction="*" data-filter-kind="damage">Any ATK · any faction · damage</li>
       <li class="pal-filtered chip" data-filter-text="Tormin" data-filter-faction="Dwarves" data-filter-kind="support">Tormin · Dwarves · support</li>
@@ -215,15 +206,15 @@
   </section>
 
   {# --- Containers ----------------------------------------------------------- #}
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Containers</h2>
-    <div class="pal-grid">
-      <article class="panel"><header class="panel-head"><h3>Panel</h3><span class="badge info">info</span></header><p class="panel-note">A panel note explains the panel.</p><div class="well">A well, an inset back down on the slab.</div></article>
+    <div class="grid" style="--min: 16rem; --space: var(--space-l); --align: start">
+      <article class="panel stack" style="--space: var(--space-m)"><header class="panel-head"><h3>Panel</h3><span class="badge info">info</span></header><p class="note">A note explains the panel.</p><div class="well">A well, an inset back down on the slab.</div></article>
       <div class="slot"><strong>A slot</strong><span class="muted">Something placed</span></div>
       <div class="slot empty">+ An empty slot</div>
       <article><header>Plain article</header>Plain <code>&lt;article&gt;</code>.<footer>Footer</footer></article>
     </div>
-    <div class="table-well" style="margin-top: 1rem">
+    <div class="table-well">
       <table class="striped">
         <thead><tr><th>Piece</th><th>Set</th><th>Value</th><th>Change</th></tr></thead>
         <tbody>
@@ -234,10 +225,10 @@
         </tbody>
       </table>
     </div>
-    <details class="section" open style="margin-top: 1rem"><summary><h2>A collapsible section</h2></summary><p>Its diamond turns when it opens.</p></details>
+    <details class="section" open><summary><h2>A collapsible section</h2></summary><p>Its diamond turns when it opens.</p></details>
   </section>
 
-  <section class="page-section">
+  <section class="page-section stack" style="--space: var(--space-m)">
     <h2>Gear</h2>
     {% set stat = {"label": "SPD", "amount": "16", "optimised": true, "planned_amount": none, "planned_glyph": none, "glyph": "4"} %}
     {% set sub2 = {"label": "C.RATE", "amount": "9%", "optimised": true, "planned_amount": "15%", "planned_glyph": none, "glyph": none} %}
@@ -248,9 +239,9 @@
     {% set epic = {"rarity": "Epic", "set_name": "Lifesteal", "slot": "Boots", "image_url": "/static/assets/pieces/2_boots.png", "level": 12, "planned_level": 16, "rank": 6, "stars": none, "ascend_level": 0, "primary": {"label": "SPD", "amount": "40", "optimised": true, "planned_amount": "45"}, "ascension": none, "substats": [stat, sub3], "equipped": false, "worn_by": "Someone"} %}
     {% set champ = {"name": "Champion", "portrait_url": none} %}
     <div class="gear-pair" style="container: page / inline-size">
-      <div class="gear-card candidate"><header><span class="caps">Take</span><span class="gear-score"><strong>14.2</strong> score</span></header>{{ piece(legend, champ) }}</div>
+      <div class="gear-card candidate stack" style="--space: var(--space-xs)"><div class="cluster" style="--justify: space-between"><span class="caps">Take</span><span class="note"><strong>14.2</strong> score</span></div>{{ piece(legend, champ) }}</div>
       <span class="gear-pair-arrow">→</span>
-      <div class="gear-card worn"><header><span class="caps">Replaces</span><span class="gear-score"><strong>9.1</strong> score</span></header>{{ piece(epic, champ) }}</div>
+      <div class="gear-card worn stack" style="--space: var(--space-xs)"><div class="cluster" style="--justify: space-between"><span class="caps">Replaces</span><span class="note"><strong>9.1</strong> score</span></div>{{ piece(epic, champ) }}</div>
     </div>
   </section>
 </div>
