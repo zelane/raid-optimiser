@@ -29,7 +29,7 @@
 
   {% if page.tab == "swaps" %}
     {% from "_accessory.html" import gear_card %}
-    {% from "_macros.html" import tile %}
+    {% from "_macros.html" import champion %}
     <p class="lede">
       Champions wearing an accessory that a loose one clearly beats as it is now (by 10% or
       more; not counting what rolling or a rework might make of it),
@@ -46,10 +46,7 @@
       <div class="stack">
         {% for group in page.swaps %}
           <article class="swap-group">
-            <div class="stack" style="--space: var(--space-s); --align: flex-start">
-              <a href="/champions/{{ group.champion.id }}" tabindex="-1">{{ tile(group.champion, "small") }}</a>
-              <a href="/champions/{{ group.champion.id }}" class="champion-name">{{ group.champion.name }}</a>
-            </div>
+            {{ champion(group.champion, banner=true) }}
             <div class="stack">
               {% for swap in group.swaps %}
                 <div class="gear-pair">

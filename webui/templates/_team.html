@@ -1,7 +1,7 @@
 {#- A team finder's shared parts (`service.team` views), for the pages that find teams. Each
    lives in the page's one GET form. `without(key)`: the page's URL with that wanted tag, gear
    or assumption left out (a macro the page passes in); `ran`: a search ran (kept on submit). -#}
-{% from "_macros.html" import tile %}
+{% from "_macros.html" import champion %}
 
 {# A buff, debuff or effect: the game's icon, or a glyph where it has none. #}
 {% macro status_icon(url, label, size="") -%}
@@ -64,10 +64,7 @@
             <span class="caps">Slot {{ loop.index }}{% if slot.suggested %} · suggested{% endif %}</span>
             <input type="hidden" name="slot" id="slot-{{ loop.index }}" value="{{ slot.choice }}">
             {% if slot.champion %}
-              <div class="stack" style="--space: var(--space-2xs); --align: center">
-                <a href="/champions/{{ slot.champion.id }}" tabindex="-1">{{ tile(slot.champion, "small") }}</a>
-                <span class="tile-name clamp">{{ slot.champion.name }}</span>
-              </div>
+              {{ champion(slot.champion, "small") }}
             {% endif %}
             {% if slot.relics %}
               <select name="relic" id="relic-{{ loop.index }}" class="small" aria-label="Relic for slot {{ loop.index }}" onchange="this.form.submit()">
@@ -250,12 +247,10 @@
     <div class="team-members">
       {% for slot in option.slots %}
         {% if not slot.champion %}
-          <span class="team-member muted" title="Any champion"><span class="free-slot">any</span><span class="tile-name">Any champion</span></span>
+          <span class="champion small muted" title="Any champion"><span class="free-slot">any</span><span class="champion-name">Any champion</span></span>
         {% else %}
-          <a href="/champions/{{ slot.champion.id }}" class="team-member{{ ' suggested' if slot.suggested }}" title="{{ slot.champion.name }}{{ ' (suggested)' if slot.suggested }}{{ ', not needed' if not slot.needed }}">
-            {{ tile(slot.champion, "small") }}
-            <span class="tile-name clamp">{{ slot.champion.name }}</span>
-          </a>
+          {{ champion(slot.champion, "small", extra="suggested" if slot.suggested else "",
+                      attrs={"title": slot.champion.name ~ (" (suggested)" if slot.suggested else "") ~ (", not needed" if not slot.needed else "")}) }}
         {% endif %}
       {% endfor %}
     </div>

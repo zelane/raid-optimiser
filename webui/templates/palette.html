@@ -1,7 +1,7 @@
 {#- A test page: the theme's colours and the shared components (app.css) side by side, with
     made-up content, so the palette can be judged in place. Not in the nav: /palette. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import tile, faction, piece %}
+{% from "_macros.html" import champion as listed, piece %}
 {% from "_team.html" import status_icon, score_pill %}
 {% block title %}Palette{% endblock %}
 {% block content %}
@@ -62,7 +62,7 @@
       {% for bg in ["--surface", "--surface-container-low", "--surface-container"] %}
         <div class="text-on stack" style="--space: var(--space-2xs); background: var({{ bg }})">
           <span class="caps">{{ bg }}</span>
-          <strong class="champion-name">A heading in Alegreya</strong>
+          <h3>A heading in Alegreya</h3>
           <span>Body text, the bone white of the page.</span>
           <span class="muted">Muted text.</span> <span class="note">A note: small and muted.</span>
           <span><a href="#">A link</a> · <span class="up">+12% up</span> · <span class="down">−8% down</span> · <span class="mid">mid</span> · <span class="info">info</span></span>
@@ -79,10 +79,7 @@
     {% if champions %}
       <div class="champion-grid">
         {% for champion in champions %}
-          <article class="champion-card rarity-{{ champion.rarity | lower }}">
-            <a href="/champions/{{ champion.id }}" tabindex="-1">{{ tile(champion) }}</a>
-            <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span class="clamp">{{ champion.name }}</span></a>
-          </article>
+          {{ listed(champion, banner=true, card=true) }}
         {% endfor %}
       </div>
     {% endif %}

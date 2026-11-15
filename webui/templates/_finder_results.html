@@ -1,20 +1,20 @@
-{% from "_macros.html" import tile %}
-{# The finder's list: each a link to the champion's optimiser, carrying what a Chimera slot
-   takes (`data-choice`). #}
+{% from "_macros.html" import champion, lock_picker %}
+{# The champions the filters match, as cards: on the list each with their lock; in the finder
+   (`picking`) each a pick, carrying what a team slot takes (`data-choice`). #}
 <p class="caps">
   {{ finder.found }} champion{{ "s" if finder.found != 1 }}
   {%- if finder.found > finder.picks | length %}: the first {{ finder.picks | length }}, narrow the search for the rest{% endif %}
 </p>
 {% if finder.picks %}
-  <div class="grid" style="--min: 5.5rem; --space: var(--space-m) var(--space-s); --repeat: auto-fill">
-    {% for pick in finder.picks %}
-      <a href="/champions/{{ pick.champion.id }}" class="finder-pick stack" style="--space: var(--space-2xs); --align: center" data-choice="{{ pick.choice }}"
-         title="{{ pick.choice }}">
-        {{ tile(pick.champion, "small") }}
-        <span class="clamp">{{ pick.champion.name }}</span>
-      </a>
+  <div class="champion-grid">
+    {% for listed in finder.picks %}
+      {% if picking %}
+        {{ champion(listed.champion, banner=true, card=true, extra="finder-pick", attrs={"data-choice": listed.choice, "title": listed.choice}) }}
+      {% else %}
+        {% call champion(listed.champion, banner=true, card=true) %}{{ lock_picker(listed) }}{% endcall %}
+      {% endif %}
     {% endfor %}
   </div>
 {% else %}
-  <p class="muted">No champion matches: try fewer letters, or another rarity.</p>
+  <p>No champion matches: try fewer letters, or other filters.</p>
 {% endif %}

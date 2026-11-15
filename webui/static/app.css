@@ -846,7 +846,9 @@ fieldset.panel {
    scale with the tile's font size. */
 .tile {
   --tile-width: 5rem;
+  --crest-height: 0px;
 
+  position: relative;
   width: var(--tile-width);
   margin: 0;
   font-size: calc(var(--tile-width) / 4.5);
@@ -870,6 +872,47 @@ fieldset.panel {
       margin: 0 -0.05em;
     }
   }
+}
+
+/* The rarity's crest over the frame's lower edge (and a Mythical's over its top edge), on
+   top of the frame as the game sets them, at the tile's scale; the stars move down under it,
+   about two thirds of the crest over the frame. */
+.tile.crested {
+  &.rarity-epic {
+    --crest-height: calc(var(--tile-width) * 0.13);
+  }
+
+  &.rarity-legendary {
+    --crest-height: calc(var(--tile-width) * 0.118);
+  }
+
+  &.rarity-mythical {
+    --crest-height: calc(var(--tile-width) * 0.235);
+  }
+
+  .champion-stars {
+    margin-top: calc(var(--crest-height) * 0.35);
+  }
+}
+
+.crest {
+  pointer-events: none;
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: none;
+}
+
+.crest-top {
+  top: 0;
+  height: calc(var(--tile-width) * 0.14);
+}
+
+.crest-under {
+  top: calc(var(--tile-width) * 182 / 140 - var(--crest-height));
+  height: var(--crest-height);
 }
 
 .tile-frame {
@@ -975,18 +1018,49 @@ img.faction {
   gap: var(--space-l) var(--space-m);
 }
 
-a:has(> .tile) {
+/* A champion wherever one is listed (`_macros.champion`): the tile, the name under it (after
+   the faction's banner), as one link; its name smaller under a small tile. `card` on a card,
+   lit in their rarity when pointed at; `suggested` ringed. */
+:is(.champion, .champion > a) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  align-items: center;
+  min-width: 0;
+  color: var(--on-surface);
+  text-align: center;
   text-decoration: none;
 }
 
-.champion-card {
+.champion-name {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  gap: var(--space-2xs);
   align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  font-size: var(--text-xs);
+  line-height: 1.2;
+
+  img.faction {
+    flex: none;
+    height: 1.6rem;
+  }
+}
+
+.champion.small .champion-name {
+  font-size: var(--text-2xs);
+}
+
+.champion.suggested .tile-frame {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+}
+
+.champion.card {
   padding: var(--space-s);
-  border-color: transparent;
-  text-align: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background: var(--surface-container-low);
   transition:
     border-color var(--transition),
     box-shadow var(--transition);
@@ -997,27 +1071,13 @@ a:has(> .tile) {
     box-shadow: 0 0 0.75rem -0.25rem color-mix(in srgb, var(--rarity) 25%, transparent);
   }
 
+  .champion-name {
+    min-height: 2.4em;
+  }
+
   select.lock {
     width: 100%;
     font-size: var(--text-2xs);
-  }
-}
-
-.card-name {
-  display: flex;
-  gap: var(--space-2xs);
-  align-items: center;
-  justify-content: center;
-  max-width: 100%;
-  min-height: 2.4em;
-  font-size: var(--text-xs);
-  line-height: 1.2;
-  color: var(--on-surface);
-  text-decoration: none;
-
-  img.faction {
-    flex: none;
-    height: 1.6rem;
   }
 }
 
@@ -1047,27 +1107,6 @@ dialog.finder > article {
 
   &.htmx-request {
     opacity: 0.7;
-  }
-}
-
-.finder-pick {
-  padding: var(--space-xs) var(--space-2xs);
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  font-size: var(--text-2xs);
-  line-height: 1.15;
-  color: var(--on-surface);
-  text-align: center;
-  text-decoration: none;
-
-  &:hover,
-  &:focus-visible {
-    border-color: color-mix(in srgb, var(--rarity) 50%, transparent);
-    background: var(--surface-container-lowest);
-  }
-
-  .tile {
-    --tile-width: 4rem;
   }
 }
 
@@ -1110,8 +1149,8 @@ main.container {
   }
 }
 
-/* The champion: portrait (crested) with name, faction and the form switch beside it, then
-   their stats in the gear worn now, lit faintly in their rarity's colour. */
+/* The champion: portrait with name and faction beside it, the form switch (a mythical's),
+   then their stats in the gear worn now, lit faintly in their rarity's colour. */
 .champion-profile {
   background:
     radial-gradient(
@@ -1144,57 +1183,6 @@ main.container {
     align-items: flex-start;
     padding-top: var(--space-s);
   }
-}
-
-/* The rarity's crest set over the portrait frame's lower edge (and a Mythical's over its top
-   edge), on top of the frame as the game sets them; the stars move down under it. Each crest
-   at the same scale to its sprite (0.04rem a pixel: the Mythical helm is 70 px tall, the Epic
-   chevron 36), about two thirds of it over the frame. */
-.crested {
-  --frame-height: calc(8.5rem * 182 / 140);
-  --crest-height: 0rem;
-
-  position: relative;
-  display: flex;
-  flex: none;
-  justify-content: center;
-  margin-top: var(--space-s);
-
-  &.crest-mythical {
-    --crest-height: 2rem;
-  }
-
-  &.crest-legendary {
-    --crest-height: 1rem;
-  }
-
-  &.crest-epic {
-    --crest-height: 1.1rem;
-  }
-
-  &.has-crest .champion-stars {
-    margin-top: var(--crest-height);
-  }
-}
-
-.crest {
-  pointer-events: none;
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
-  max-width: none;
-}
-
-.crest-top {
-  top: 0;
-  height: 1.2rem;
-}
-
-.crest-under {
-  top: calc(var(--frame-height) - var(--crest-height));
-  height: var(--crest-height);
 }
 
 /* A mythical's form switch, after the game's: two helms in a dark pill (a `segmented`), the
@@ -2059,24 +2047,6 @@ table.set-grid {
   }
 }
 
-/* A champion's name as a link, in the heading face. */
-.champion-name {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 700;
-  color: var(--heading);
-  text-decoration: none;
-
-  &:hover {
-    color: var(--primary);
-  }
-}
-
-/* Empower: a champion's most empowered copy, then its duplicates. */
-.spare-count {
-  margin-left: auto;
-}
-
 h2 + .lede,
 .page-section > h2 + .lede {
   margin-top: calc(var(--space-2xs) * -1);
@@ -2128,13 +2098,6 @@ button.slot-plus {
     --button-bg: var(--surface-container-low);
     --button-edge: var(--primary);
   }
-}
-
-/* A champion's name under their tile. */
-.tile-name {
-  font-size: var(--text-xs);
-  line-height: 1.2;
-  text-align: center;
 }
 
 .chip-remove {
@@ -2234,23 +2197,6 @@ button.slot-plus {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--space-2xs);
-}
-
-.team-member {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: inherit;
-  text-decoration: none;
-
-  .tile-name {
-    font-size: var(--text-2xs);
-  }
-
-  &.suggested .tile-frame {
-    outline: 2px dashed var(--primary);
-    outline-offset: 2px;
-  }
 }
 
 .free-slot {

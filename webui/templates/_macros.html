@@ -1,9 +1,12 @@
 {% macro stars(count) %}<span class="stars" title="{{ count }} stars">{{ "★" * count }}</span>{% endmacro %}
 
 {# A champion as the game's collection shows them: the portrait in its rarity frame, with
-   affinity, level and empower on it, and the stars under it. #}
+   affinity, level and empower on it, the rarity's crest over its lower edge (and a
+   Mythical's over its top), and the stars under it. #}
 {% macro tile(champion, size="") %}
-  <figure class="tile {{ size }} rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}, {{ champion.rarity }}">
+  <figure class="tile {{ size }} rarity-{{ champion.rarity | lower }}{{ ' crested' if champion.crest_url }}" title="{{ champion.name }}, {{ champion.rarity }}">
+    {% if champion.crest_top_url %}<img class="crest crest-top" src="{{ champion.crest_top_url }}" alt="">{% endif %}
+    {% if champion.crest_url %}<img class="crest crest-under" src="{{ champion.crest_url }}" alt="">{% endif %}
     <div class="tile-frame frame-{{ champion.rarity | lower }}">
       {% if champion.portrait_url %}<img class="tile-art" src="{{ champion.portrait_url }}" alt="{{ champion.name }}">
       {% else %}<span class="tile-missing">{{ champion.name }}</span>{% endif %}
@@ -13,6 +16,29 @@
     </div>
     {{ champion_stars(champion) }}
   </figure>
+{% endmacro %}
+
+{# A champion wherever one is listed: their tile and, unless `name` is false, their name
+   under it (after their faction's banner with `banner`), linking to their optimiser (`href`:
+   true for that, a URL, or false for no link). `size`: the tile's ("small", "large"); `card`:
+   on a card, lit in their rarity when pointed at; `extra`: the root's own classes (a hook, a
+   state), `attrs` its attributes (title, data-*). What a `call` block adds goes under the
+   link (a lock picker, a note). #}
+{% macro champion(c, size="", name=true, banner=false, card=false, href=true, extra="", attrs={}) %}
+  {%- set url = ("/champions/" ~ c.id) if href is sameas true else href -%}
+  {%- set classes = "champion " ~ size ~ (" card" if card else "") ~ " rarity-" ~ c.rarity | lower ~ " " ~ extra -%}
+  {%- set attributes %}{% for key, value in attrs.items() %} {{ key }}="{{ value }}"{% endfor %}{% endset -%}
+  {%- set body -%}
+    {{ tile(c, size) }}
+    {%- if name %}<span class="champion-name">{% if banner %}{{ faction(c) }}{% endif %}<span class="clamp">{{ c.name }}</span></span>{% endif -%}
+  {%- endset -%}
+  {%- if caller -%}
+    <div class="{{ classes }}"{{ attributes }}>{% if url %}<a href="{{ url }}">{{ body }}</a>{% else %}{{ body }}{% endif %}{{ caller() }}</div>
+  {%- elif url -%}
+    <a href="{{ url }}" class="{{ classes }}"{{ attributes }}>{{ body }}</a>
+  {%- else -%}
+    <div class="{{ classes }}"{{ attributes }}>{{ body }}</div>
+  {%- endif -%}
 {% endmacro %}
 
 {% macro faction(champion) %}

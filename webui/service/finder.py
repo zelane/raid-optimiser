@@ -1,43 +1,48 @@
 """
-finder.py - the champion finder: the account's champions whose name holds the text, of a
-rarity and a faction and at least so many stars, in the game's default order. The pages that
-open it decide what a pick does (the champion's optimiser, a team slot).
+finder.py - the account's champions as the champion list and the finder (the picker dialog)
+list them: whose name holds the text, of a rarity and a faction and at least so many stars,
+in the game's default order, each with their lock. The list locks them; a page opening the
+finder decides what a pick does (the champion's optimiser, a team slot).
 
 - `FINDER_LIMIT`: the most it lists
-- `FinderPick`, `FinderView`: a champion as it lists them, and the list
-- `find_champions`: what the finder asks for
+- `ListedChampion`, `FinderView`: a champion as it lists them, and the list
+- `find_champions`, `lock_champion`: what the pages ask for
 - `account_factions`: the factions its filter offers
 """
 
 from dataclasses import dataclass
 
-from optimiser.account import Account, faction_name
+from optimiser.account import Account, Champion, Locks, faction_name
+from optimiser.paths import STORE
+from optimiser.store import write_lock
 from webui.forms.finder import GRADES, RARITIES, FinderQuery
 from webui.service.champions import game_order
 from webui.service.views import ChampionRow, champion_row, choice_label
 
-FINDER_LIMIT = 60
+FINDER_LIMIT = 200
 
 
 @dataclass(frozen=True)
-class FinderPick:
-    """`choice`: the champion as the Chimera slot picker names them ("Name, 6★ L60 #id")."""
+class ListedChampion:
+    """`choice`: the champion as the team slots name them ("Name, 6★ L60 #id"); `lock`: their
+    lock level (0: unlocked)."""
 
     champion: ChampionRow
     choice: str
+    lock: int
 
 
 @dataclass(frozen=True)
 class FinderView:
     query: FinderQuery
-    picks: list[FinderPick]  # the first `FINDER_LIMIT`
+    picks: list[ListedChampion]  # the first `FINDER_LIMIT`
     found: int
     rarities: tuple[str, ...]
     factions: tuple[str, ...]
     grades: tuple[int, ...]
 
 
-def find_champions(account: Account, query: FinderQuery) -> FinderView:
+def find_champions(account: Account, locks: Locks, query: FinderQuery) -> FinderView:
     """The matches; a faction the account has none of means any."""
     wanted = query.text.casefold()
     factions = account_factions(account)
@@ -51,8 +56,18 @@ def find_champions(account: Account, query: FinderQuery) -> FinderView:
         and c.grade >= query.min_grade
     ]
     matches.sort(key=game_order, reverse=True)
-    picks = [FinderPick(champion_row(c), choice_label(c)) for c in matches[:FINDER_LIMIT]]
+    picks = [listed(c, locks.get(c.id, 0)) for c in matches[:FINDER_LIMIT]]
     return FinderView(query, picks, len(matches), RARITIES, factions, GRADES)
+
+
+def lock_champion(champion: Champion, level: int) -> ListedChampion:
+    """Locks the champion at `level` (0 unlocks them)."""
+    write_lock(STORE, champion.id, level)
+    return listed(champion, level)
+
+
+def listed(champion: Champion, lock: int) -> ListedChampion:
+    return ListedChampion(champion_row(champion), choice_label(champion), lock)
 
 
 def account_factions(account: Account) -> tuple[str, ...]:

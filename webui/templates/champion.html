@@ -15,29 +15,28 @@
     <div class="champion-column stack" style="--space: var(--space-2xl)">
         <article class="panel stack champion-profile rarity-{{ champion.rarity | lower }}">
           <div class="champion-identity">
-            <div class="crested crest-{{ champion.rarity | lower }}{{ ' has-crest' if champion.crest_url }}">
-              {% if champion.crest_top_url %}<img class="crest crest-top" src="{{ champion.crest_top_url }}" alt="">{% endif %}
-              {{ tile(champion, "large") }}
-              {% if champion.crest_url %}<img class="crest crest-under" src="{{ champion.crest_url }}" alt="">{% endif %}
-            </div>
+            {{ tile(champion, "large") }}
             <div class="stack" style="--space: var(--space-xs)">
-              <h1> {{ champion.name }}</h1>
+              <h1>{{ champion.name }}</h1>
               <span>{{ faction(champion) }}</span>
               <button type="button" class="quiet small" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
-              {% if page.forms | length > 1 %}
-                {# The request's `form` field; app.js shows the picked form's stats and skills. #}
-                <div class="segmented form-switch" role="radiogroup" aria-label="Form">
-                  {% for f in page.forms %}
-                    <label title="Form {{ f.number + 1 }}: {{ f.role }}">
-                      <input type="radio" name="form" form="request" value="{{ f.number }}"{% if loop.first %} checked{% endif %}>
-                      {% if f.icon_url %}<img class="form-on" src="{{ f.icon_url }}" alt=""><img class="form-off" src="{{ f.idle_url or f.icon_url }}" alt="">{% endif %}
-                      <span>{{ f.role }}</span>
-                    </label>
-                  {% endfor %}
-                </div>
-              {% endif %}
             </div>
           </div>
+          {% if page.forms | length > 1 %}
+            {# The request's `form` field; app.js shows the picked form's stats and skills. #}
+            <div class="cluster" style="--justify: space-between">
+              <span class="caps">Form</span>
+              <div class="segmented form-switch" role="radiogroup" aria-label="Form">
+                {% for f in page.forms %}
+                  <label title="Form {{ f.number + 1 }}: {{ f.role }}">
+                    <input type="radio" name="form" form="request" value="{{ f.number }}"{% if loop.first %} checked{% endif %}>
+                    {% if f.icon_url %}<img class="form-on" src="{{ f.icon_url }}" alt=""><img class="form-off" src="{{ f.idle_url or f.icon_url }}" alt="">{% endif %}
+                    <span>{{ f.role }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          {% endif %}
           {% for f in page.forms %}
             <dl class="stat-tiles well" data-form="{{ f.number }}" aria-label="Stats in the gear worn now"{% if not loop.first %} hidden{% endif %}>
               {% for cell in f.current %}<div><dt>{{ cell.label }}</dt><dd>{{ cell.text }}</dd></div>{% endfor %}

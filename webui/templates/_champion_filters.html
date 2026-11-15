@@ -1,0 +1,24 @@
+{# The champion filters (name, rarity, faction, fewest stars), on the champion list and in the
+   finder dialog: as they change, `/finder` lists the matches into `target`. `picking`: the
+   dialog's, whose list picks rather than locks. finder.js remembers the filters (not the
+   name) in this browser, the same for both. #}
+{% macro champion_filters(target, picking=false) %}
+  <form class="filter-bar grow" data-champion-filters hx-get="/finder" hx-target="{{ target }}"
+        hx-trigger="input changed delay:200ms, change, filters:apply" onsubmit="return false">
+    {% if picking %}<input type="hidden" name="pick" value="1">{% endif %}
+    <input type="search" name="q" placeholder="{{ 'Name (Enter takes the first)' if picking else 'Find a champion by name' }}"
+           aria-label="Champion name" autocomplete="off"{% if not picking %} autofocus{% endif %}>
+    <select name="rarity" aria-label="Rarity">
+      <option value="">Any rarity</option>
+      {% for rarity in finder_rarities %}<option value="{{ rarity }}">{{ rarity }}</option>{% endfor %}
+    </select>
+    <select name="faction" aria-label="Faction">
+      <option value="">Any faction</option>
+      {% for faction in finder_factions() %}<option value="{{ faction }}">{{ faction }}</option>{% endfor %}
+    </select>
+    <select name="grade" aria-label="Fewest stars">
+      <option value="">Any stars</option>
+      {% for grade in finder_grades %}<option value="{{ grade }}">{{ grade }}★{% if grade < 6 %} and up{% endif %}</option>{% endfor %}
+    </select>
+  </form>
+{% endmacro %}

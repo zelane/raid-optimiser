@@ -1,18 +1,14 @@
 {% extends "base.html" %}
-{% from "_macros.html" import tile, faction %}
+{% from "_macros.html" import champion as listed %}
 
-{# A champion card; `note` (HTML) goes under the name, the caller's content beside it. #}
+{# A champion card; `note` (HTML) under the name. #}
 {% macro card(champion, note="") %}
-  <article class="champion-card rarity-{{ champion.rarity | lower }}">
-    <a href="/champions/{{ champion.id }}" tabindex="-1">{{ tile(champion) }}</a>
-    <a href="/champions/{{ champion.id }}" class="card-name">{{ faction(champion) }}<span class="clamp">{{ champion.name }}</span>{{ caller() if caller }}</a>
-    {{ note }}
-  </article>
+  {% call listed(champion, banner=true, card=true) %}{{ note }}{% endcall %}
 {% endmacro %}
 
 {% macro small_tiles(champions) %}
   <div class="cluster">
-    {% for copy in champions %}<a href="/champions/{{ copy.id }}">{{ tile(copy, "small") }}</a>{% endfor %}
+    {% for copy in champions %}{{ listed(copy, "small", name=false) }}{% endfor %}
   </div>
 {% endmacro %}
 
@@ -37,7 +33,8 @@
     <div class="champion-grid">
       {% for group in page.spare %}
         {% set note %}{% if group.needed_by %}<small class="note">feeds {{ group.needed_by | join(", ") }}</small>{% endif %}{% endset %}
-        {% call card(group.copy, note) %}<strong class="spare-count">×{{ group.count }}</strong>{% endcall %}
+        {% set label %}<strong>×{{ group.count }}</strong> {{ note }}{% endset %}
+        {{ card(group.copy, label) }}
       {% endfor %}
     </div>
   {% else %}
@@ -54,9 +51,8 @@
     <div class="grid" style="--min: 17rem; --space: var(--space-l); --repeat: auto-fill; --align: start">
       {% for group in page.with_fodder %}
         <article class="cluster" style="--space: var(--space-l); --align: flex-start">
-          <a href="/champions/{{ group.champion.id }}">{{ tile(group.champion) }}</a>
+          {{ listed(group.champion, banner=true) }}
           <div class="stack" style="--space: var(--space-s)">
-            <a href="/champions/{{ group.champion.id }}" class="card-name">{{ faction(group.champion) }}<span class="clamp">{{ group.champion.name }}</span></a>
             {% if group.copies %}{{ small_tiles(group.copies) }}{% endif %}
             {% if group.substitutes %}
               <small class="note">With {{ group.substitute }}:</small>

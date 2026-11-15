@@ -1,13 +1,12 @@
 {% extends "base.html" %}
+{% from "_champion_filters.html" import champion_filters %}
 {% block content %}
   <div class="stack">
-  <div class="cluster" style="--space: var(--space-s) var(--space-2xl); --basis: 18rem">
-    <h1>Champions</h1>
-    <div class="filter-bar grow">
-      <input type="search" name="query" placeholder="Find a champion by name" aria-label="Find a champion by name" autofocus
-             hx-get="/champions" hx-trigger="input changed delay:250ms, search" hx-target="#champion-list">
+    <div class="cluster" style="--space: var(--space-s) var(--space-2xl); --basis: 24rem">
+      <h1>Champions</h1>
+      {{ champion_filters("#champion-list") }}
     </div>
-  </div>
-  <div id="champion-list">{% include "_champion_list.html" %}</div>
+    <div id="champion-list" class="stack" style="--space: var(--space-s)">{% include "_finder_results.html" %}</div>
   </div>
 {% endblock %}
+{% block scripts %}<script src="{{ static_url('finder.js') }}"></script>{% endblock %}

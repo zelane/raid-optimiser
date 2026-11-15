@@ -267,13 +267,17 @@ the game itself.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
   missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
-- Champion finder (`webui/service/finder.py`, `forms/finder.py`, `_finder.html`,
-  `_finder_results.html`, `static/finder.js`, route `/finder`): a dialog a page includes, opened
-  by any button marked `data-finder`; name, rarity and fewest stars filter the account's
-  champions (htmx). A pick goes to the champion's optimiser, or with `data-finder="slot"` fills
-  the field `data-finder-target` names with the pickers' "Name, 6★ L60 #id" (`views.
-  choice_label`) and submits its form. Used by the champion page's Switch champion and the
-  Chimera slots (+ when open, Change when filled; their `slot` fields are hidden).
+- Champion list and finder, one list (`webui/service/finder.py`: `find_champions`,
+  `lock_champion`; `forms/finder.py`; `_champion_filters.html`, `_finder_results.html`,
+  `_finder.html`, `static/finder.js`; routes `/` and `/finder`): name, rarity, faction and
+  fewest stars filter the account's champions (htmx), shown as champion cards. On the list
+  (`/`) each carries their lock; the finder is a dialog a page includes, opened by any button
+  marked `data-finder`, whose form sends `pick=1`: its cards are picks, no lock. A pick goes to
+  the champion's optimiser, or with `data-finder="slot"` fills the field `data-finder-target`
+  names with the pickers' "Name, 6★ L60 #id" (`views.choice_label`) and submits its form.
+  The filters (not the name) are remembered in the browser, shared by the list and the
+  dialog. Used by the champion page's Switch champion and the team slots (+ when open,
+  Change when filled; their `slot` fields are hidden).
 - Target picker (`webui/service/targets.py`, `forms/targets.py`, `_target_picker.html`,
   `static/target.js`, route `/targets`): a reusable component, top of the champion page. Zone
   (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
@@ -324,8 +328,10 @@ the game itself.
   `status` (`met`/`missing`), `segmented` (`small`; checkboxes for several) and `page-tabs`
   (the same look for links), `filter-bar` (`data-filter`: filters items in the page, app.js),
   `slot` (`empty`), `stat-tiles` (`edit`), `switch-rows`, `page-head`, `tally`, `cta`,
-  `danger` (selling), `champion-grid`/`champion-card`/`card-name`, `champion-name` (a name
-  link in the heading face), `tile-name`, `gear-pair` (`gear-card` `candidate`/`worn` over
+  `danger` (selling), `champion` (`_macros.champion(c, size, name, banner, card, href,
+  extra, attrs)`: every listed champion, tile and name as one link, a `call` block's extras
+  under it; `card`, `small`, `suggested`; its `tile` carries the rarity's crest, scaled by
+  `--tile-width`) in a `champion-grid`, `gear-pair` (`gear-card` `candidate`/`worn` over
   the optimiser's `piece` card), `meter`; in tables, `num` cells. Heads' own margins are
   zero-specificity (`:where`), so a primitive's gap wins. Build pages from those, the
   primitives and the tokens; `/palette` shows them all.

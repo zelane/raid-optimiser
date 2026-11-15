@@ -1,42 +1,34 @@
 """
-champions.py - the champion list and a champion's page: in each of their forms, their stats
-now and the skills damage can be ranked by; the request form's options; and their runs.
+champions.py - a champion's page: in each of their forms, their stats now and the skills
+damage can be ranked by; the request form's options; and their runs. The champion list is
+the finder's (`service.finder`).
 
-- `SEARCH_LIMIT`, `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the pages' shape, and
-  the game's default champion order
-- `ListedChampion`, `StatOption`, `SetOption`, `RuleOption`, `FormOptions`, `SkillOption`,
-  `FormView`, `ChampionPage`: the views
-- `search_champions`, `lock_champion`, `champion_page`: what the pages ask for
-- `game_order`, `listed_champion`, `form_options`, `form_views`, `skill_options`,
-  `describe_goal`, `current_stats`: what they share
+- `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the page's shape, and the game's
+  default champion order
+- `StatOption`, `SetOption`, `RuleOption`, `FormOptions`, `SkillOption`, `FormView`,
+  `ChampionPage`: the views
+- `champion_page`: what the page asks for
+- `game_order`, `form_options`, `form_views`, `skill_options`, `describe_goal`,
+  `current_stats`: what it shares
 """
 
 from dataclasses import dataclass, replace
 
-from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats, worn_gear
+from optimiser.account import LOCK_LEVELS, Account, Champion, Stat, Stats, worn_gear
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.labels import PERCENT_STATS, STAT_LABELS, rule_label
 from optimiser.paths import STORE
 from optimiser.reserve import Rule, reservations, reserved_count, rule_key
 from optimiser.stats import build_stats
-from optimiser.store import latest_run, write_lock
+from optimiser.store import latest_run
 from webui.service.results import StatCell, stat_cells
 from webui.service.runs import RunEntryView, RunView, run_history, run_view
 from webui.service.views import ChampionRow, asset_url, champion_row
 
-SEARCH_LIMIT = 200
 SUPPORT_CHECK_DEF = 6000  # any DEF will do: whether a skill can be ranked doesn't depend on it
 # The game's numbers for sorting: `HeroRarity`, and `ElementExtension.GetCompareToValue`.
 RARITY_ORDER = {"Common": 1, "Uncommon": 2, "Rare": 3, "Epic": 4, "Legendary": 5, "Mythical": 6}
 AFFINITY_ORDER = {"Spirit": 1, "Magic": 2, "Force": 3, "Void": 4}
-
-
-@dataclass(frozen=True)
-class ListedChampion:
-    """A champion on the champion list, with their lock (0: unlocked)."""
-
-    champion: ChampionRow
-    lock: int
 
 
 @dataclass(frozen=True)
@@ -105,20 +97,6 @@ class ChampionPage:
     latest: RunView | None  # shown, and its form restored, when the page opens
 
 
-def search_champions(account: Account, locks: Locks, query: str) -> list[ListedChampion]:
-    """Champions whose name contains `query`, in the game's default order."""
-    wanted = query.casefold().strip()
-    matches = [c for c in account.champions.values() if wanted in c.name.casefold()]
-    matches.sort(key=game_order, reverse=True)
-    return [listed_champion(c, locks.get(c.id, 0)) for c in matches[:SEARCH_LIMIT]]
-
-
-def lock_champion(champion: Champion, level: int) -> ListedChampion:
-    """Locks the champion at `level` (0 unlocks them)."""
-    write_lock(STORE, champion.id, level)
-    return listed_champion(champion, level)
-
-
 def champion_page(account: Account, rules: tuple[Rule, ...], champion: Champion) -> ChampionPage:
     latest = latest_run(STORE, champion.id)
     return ChampionPage(
@@ -144,10 +122,6 @@ def game_order(champion: Champion) -> tuple[int, ...]:
         champion.type_id,
         champion.id,
     )
-
-
-def listed_champion(champion: Champion, lock: int) -> ListedChampion:
-    return ListedChampion(champion_row(champion), lock)
 
 
 def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:

@@ -3,7 +3,7 @@ app.py - the web entry point: routes that render the service's views as HTML. On
 module and the templates know about HTTP or HTML; a JSON API would sit beside it.
 
 - `app`, `templates`: the FastAPI app and its Jinja templates (uncached: edits show at once)
-- `index`, `champion_list`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
+- `index`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
@@ -35,7 +35,7 @@ from webui.forms.chimera import Unknown, parse_chimera
 from webui.forms.common import FormErrors
 from webui.forms.finder import GRADES as FINDER_GRADES
 from webui.forms.finder import RARITIES as FINDER_RARITIES
-from webui.forms.finder import parse_finder_query
+from webui.forms.finder import FinderQuery, parse_finder_query
 from webui.forms.request import parse_equip, parse_request
 from webui.forms.settings import (
     FlagSetting,
@@ -110,32 +110,27 @@ templates.env.globals["optimiser_url"] = lambda: optimiser_url()
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    champions = champion_pages.search_champions(
-        current.current_account(), current.current_locks(), ""
+    """The champion list: the finder's list, unfiltered, each champion with their lock."""
+    view = finder_pages.find_champions(
+        current.current_account(), current.current_locks(), FinderQuery()
     )
-    return templates.TemplateResponse(request, "index.html", {"champions": champions})
+    return templates.TemplateResponse(request, "index.html", {"finder": view, "picking": False})
 
 
 @app.get("/palette", response_class=HTMLResponse)
 def palette(request: Request):
     """The theme's colours and the shared components, for checking the palette in place."""
-    listed = champion_pages.search_champions(current.current_account(), current.current_locks(), "")
+    view = finder_pages.find_champions(
+        current.current_account(), current.current_locks(), FinderQuery()
+    )
     by_rarity = {}
 
-    for row in listed:
+    for row in view.picks:
         by_rarity.setdefault(row.champion.rarity, row.champion)
 
     return templates.TemplateResponse(
         request, "palette.html", {"champions": list(by_rarity.values())}
     )
-
-
-@app.get("/champions", response_class=HTMLResponse)
-def champion_list(request: Request, query: str = ""):
-    champions = champion_pages.search_champions(
-        current.current_account(), current.current_locks(), query
-    )
-    return templates.TemplateResponse(request, "_champion_list.html", {"champions": champions})
 
 
 @app.post("/champions/{champion_id}/lock", response_class=HTMLResponse)
@@ -148,7 +143,7 @@ async def lock(request: Request, champion_id: int):
             return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
 
         case level:
-            listed = champion_pages.lock_champion(champion, level)
+            listed = finder_pages.lock_champion(champion, level)
             return templates.TemplateResponse(request, "_lock.html", {"listed": listed})
 
 
@@ -415,11 +410,13 @@ def targets(request: Request):
 
 @app.get("/finder", response_class=HTMLResponse)
 def finder(request: Request):
-    """The champion finder's list, for its query (`_finder.html` asks as the user types)."""
+    """The champions the filters match, as the list or the finder dialog asks while the user
+    types (`_champion_filters.html`); `pick=1`: the dialog's, picks rather than locks."""
     view = finder_pages.find_champions(
-        current.current_account(), parse_finder_query(request.query_params)
+        current.current_account(), current.current_locks(), parse_finder_query(request.query_params)
     )
-    return templates.TemplateResponse(request, "_finder_results.html", {"finder": view})
+    context = {"finder": view, "picking": request.query_params.get("pick") == "1"}
+    return templates.TemplateResponse(request, "_finder_results.html", context)
 
 
 @app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)

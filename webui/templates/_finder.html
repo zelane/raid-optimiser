@@ -1,29 +1,15 @@
 {# The champion finder (`finder.js`): a dialog any button marked `data-finder` opens. Its list
-   comes from `/finder` as the filters change (name, rarity, faction, fewest stars). A pick is a link to the champion's optimiser;
+   comes from `/finder` as the filters change (the champion list's: `_champion_filters.html`). A pick is a link to the champion's optimiser;
    an opener marked `data-finder="slot"` instead puts the champion in the field named by
    `data-finder-target` (as the Chimera slots name them) and submits its form. #}
+{% from "_champion_filters.html" import champion_filters %}
 <dialog id="finder" class="finder" aria-labelledby="finder-title">
   <article class="stack" style="--space: var(--space-m)">
     <div class="panel-head">
       <h2 id="finder-title">Find a champion</h2>
       <button type="button" class="icon" data-finder-close aria-label="Close">×</button>
     </div>
-    <form class="filter-bar" hx-get="/finder" hx-target="#finder-results"
-          hx-trigger="input changed delay:200ms, change, finder:open" onsubmit="return false">
-      <input type="search" name="q" placeholder="Name (Enter takes the first)" aria-label="Champion name" autocomplete="off">
-      <select name="rarity" aria-label="Rarity">
-        <option value="">Any rarity</option>
-        {% for rarity in finder_rarities %}<option value="{{ rarity }}">{{ rarity }}</option>{% endfor %}
-      </select>
-      <select name="faction" aria-label="Faction">
-        <option value="">Any faction</option>
-        {% for faction in finder_factions() %}<option value="{{ faction }}">{{ faction }}</option>{% endfor %}
-      </select>
-      <select name="grade" aria-label="Fewest stars">
-        <option value="">Any stars</option>
-        {% for grade in finder_grades %}<option value="{{ grade }}">{{ grade }}★{% if grade < 6 %} and up{% endif %}</option>{% endfor %}
-      </select>
-    </form>
+    {{ champion_filters("#finder-results", picking=true) }}
     <div id="finder-results" class="finder-results stack" style="--space: var(--space-s)" aria-live="polite"></div>
   </article>
 </dialog>
