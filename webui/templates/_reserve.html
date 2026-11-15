@@ -8,7 +8,7 @@
       <tr>
         <td>{{ rule.label }}</td>
         <td>{{ rule.pieces }}</td>
-        <td><button class="secondary outline small" hx-post="/reserve" hx-vals='{"rule": "{{ rule.key }}"}'
+        <td><button class="quiet small" hx-post="/reserve" hx-vals='{"rule": "{{ rule.key }}"}'
                     hx-target="#reserve" hx-swap="outerHTML">Remove</button></td>
       </tr>
       {% endfor %}
@@ -22,7 +22,7 @@
 
   <div class="reserve-add">
     {% if reserve.tags %}
-    <form role="group" hx-post="/reserve" hx-vals='{"on": "1"}' hx-target="#reserve" hx-swap="outerHTML">
+    <form class="joined" hx-post="/reserve" hx-vals='{"on": "1"}' hx-target="#reserve" hx-swap="outerHTML">
       <select name="rule" aria-label="Champion tag">
         {% for tag in reserve.tags %}<option value="{{ tag.key }}">{{ tag.label }}</option>{% endfor %}
       </select>
@@ -30,7 +30,7 @@
     </form>
     {% endif %}
     {% if reserve.teams %}
-    <form role="group" hx-post="/reserve" hx-vals='{"on": "1"}' hx-target="#reserve" hx-swap="outerHTML">
+    <form class="joined" hx-post="/reserve" hx-vals='{"on": "1"}' hx-target="#reserve" hx-swap="outerHTML">
       <select name="rule" aria-label="Saved team">
         {% for team in reserve.teams %}<option value="{{ team.key }}">{{ team.label }}</option>{% endfor %}
       </select>

@@ -91,6 +91,7 @@ install:
 # After a pull/game/HH update (Raid can run): deps, HH patch, game data, assets
 update:
     uv sync --all-groups
+    npm ci --silent
     @if [ -d "{{HH_DIR}}" ]; then just hh-patch -q; \
     else echo "HH extractor not found at {{HH_DIR}}: skipped the patch (just configure, then just update)"; fi
     just static
@@ -138,8 +139,20 @@ lint:
 style:
     uv run --project ~/repo/python-style python-style {{py}}
 
+# The web UI's CSS: Prettier's format (one declaration a line), then stylelint (standard
+# config, properties in one order, nesting at most 3 deep)
+css:
+    node_modules/.bin/prettier --check --log-level warn "webui/static/*.css"
+    node_modules/.bin/stylelint "webui/static/*.css"
+
+# Fix what can be: format, sort properties, format again
+css-fix:
+    node_modules/.bin/prettier --write --log-level warn "webui/static/*.css"
+    node_modules/.bin/stylelint --fix "webui/static/*.css"
+    node_modules/.bin/prettier --write --log-level warn "webui/static/*.css"
+
 # Format, lint and style-check
-check: fmt lint style
+check: fmt lint style css
 
 # Dump the installed game's IL2CPP metadata (offline) into data/dump/<game version>
 dump:

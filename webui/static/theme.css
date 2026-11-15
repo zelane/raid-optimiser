@@ -1,144 +1,71 @@
 /*
  * The theme, Vault: the game's own vernacular, a dark hall of warm charcoal, brass for what you
- * act on, bone-white text. Dark only: base.html sets Pico's data-theme="dark", and these rules
- * select on it, so they outrank Pico's own dark theme (loaded before them).
- * Its colours are --m-* variables, then one block maps Pico's and the app's variables onto them,
- * so every page picks them up (--m-display is the heading face, --m-card the panels). Its
- * typefaces: Alegreya for headings and the wordmark, Alegreya Sans (old-style figures off:
- * tables line up) for everything else. Panels are warm slate cards (--m-card) on the obsidian
- * slab, their insets (tables, fields) the slab again.
+ * act on, bone-white text. Dark only. Loaded first: base.css (the elements) and app.css (the
+ * components) only ever read these tokens.
+ *
+ * Colours are Material 3's roles. Depth is a ladder of surface tones, the page's slab at the
+ * bottom (`--surface`), then containers from lowest (insets: wells, fields, tables) to highest;
+ * `--on-*` is what reads on top of its namesake. `outline` draws a control's edge, `outline-
+ * variant` the hairlines between things. Beyond Material: `--heading` (headings' warmer white)
+ * and the app's status trio (`--stat-up/mid/down`), named for what they mean in a build.
+ *
+ * Type: Alegreya for headings and the wordmark, Alegreya Sans (lining figures, so tables line
+ * up) for everything else.
  */
 
-/* --- Colours and type --------------------------------------------------------- */
+:root {
+  /* --- Colour roles -------------------------------------------------------------- */
+  --primary: #e6895c;
+  --on-primary: #1a1408;
+  --secondary: #a9b1ba;
+  --on-secondary: #121110;
+  --tertiary: #7cc4b8;
+  --error: #ec5162; /* a true red, well clear of the coral primary: bad, losses, selling */
+  --success: #3fb950;
+  --warning: #e8b543; /* amber: middling (scores, Normal), and marks */
+  --surface: #0e0d0e;
+  --surface-container-lowest: #0e0d0e; /* insets sit back down on the slab */
+  --surface-container-low: #131214; /* panels, the top bar */
+  --surface-container: #171615;
+  --surface-container-high: #2a2825; /* hovered and selected rows */
+  --on-surface: #ebe3d0;
+  --on-surface-variant: #a39e94; /* muted: notes, labels, what steps back */
+  --heading: #f3e7c9;
+  --outline: #3a3833;
+  --outline-variant: color-mix(in srgb, var(--outline) 55%, var(--surface));
+  --shadow: #000;
+  --selection: color-mix(in srgb, var(--primary) 45%, transparent);
+  --stat-up: var(--success);
+  --stat-down: var(--error);
+  --stat-mid: var(--warning); /* between: a score that's fair, Normal trials, waiting */
 
-:root[data-theme='dark'] {
-  --pico-font-family-sans-serif: 'Alegreya Sans', 'Noto Sans', sans-serif;
-  --m-display: 'Alegreya', Georgia, serif;
-  --m-primary: #e6895c;
-  --m-on-primary: #1a1408;
-  --m-secondary: #a9b1ba;
-  --m-on-secondary: #121110;
-  --m-tertiary: #7cc4b8;
-  --m-error: #ec5162; /* a true red, well clear of the coral primary: bad, losses, selling */
-  --m-surface: #0e0d0e;
-  --m-on-surface: #ebe3d0;
-  --m-surface-variant: #131214;
-  --m-card: #171615;
-  --m-on-surface-variant: #a39e94;
-  --m-outline: #3a3833;
-  --m-shadow: #000;
-  --m-hover: #2a2825;
-  --m-selection: #e6895c; /* the primary */
-  --m-green: #3fb950;
-  --m-yellow: #e8b543; /* amber: middling (scores, Normal), and marks */
-  --m-heading: #f3e7c9;
-  --m-mix: #fff; /* hovers lighten */
+  /* --- Type ------------------------------------------------------------------------ */
+  --font-text: "Alegreya Sans", "Noto Sans", sans-serif;
+  --font-display: "Alegreya", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* About 20% under the browser's size, growing with the window: 80% to 105%. */
+  --font-size: clamp(80%, 73% + 0.333vw, 105%);
+  --line-height: 1.5;
+  --measure: 72ch;
+
+  /* --- Space and shape ----------------------------------------------------------------
+     A modular scale (Every Layout's): one ratio, steps either side of 1rem, for new layouts.
+     The named sizes are what the components were built with. */
+  --ratio: 1.5;
+  --s-2: calc(var(--s-1) / var(--ratio));
+  --s-1: calc(var(--s0) / var(--ratio));
+  --s0: 1rem;
+  --s1: calc(var(--s0) * var(--ratio));
+  --s2: calc(var(--s1) * var(--ratio));
+  --s3: calc(var(--s2) * var(--ratio));
+  --flow-space: 0.75rem; /* between blocks of prose */
+  --panel-pad: 1.25rem;
+  --control-pad-block: 0.4rem;
+  --control-pad-inline: 0.7rem;
+  --radius: 0.25rem;
+  --radius-panel: 0.2rem;
+  --transition: 0.15s ease-in-out;
+
   color-scheme: dark;
-}
-
-/* Alegreya Sans runs small and sets old-style figures: a touch larger, figures lined up. */
-:root[data-theme='dark'] body {
-  font-size: 1.06rem;
-  background: var(--m-surface);
-}
-:root[data-theme='dark'] main.container { min-height: 100vh; padding-block: 2rem 4rem; }
-:root[data-theme='dark'] .topbar { margin-bottom: 0; }
-/* Room inside the content's edges on a wide page, the top bar's ends in line with it. */
-@media (min-width: 1024px) {
-  :root[data-theme='dark'] :is(main.container, .topbar nav.container) { padding-inline: 2rem; }
-}
-:root[data-theme='dark'] :is(body, input, select, button, textarea) { font-variant-numeric: lining-nums; }
-
-/* --- Onto Pico's variables and the app's ---------------------------------------- */
-
-:root[data-theme='dark'] {
-  --pico-background-color: var(--m-surface);
-  --pico-color: var(--m-on-surface);
-  --pico-text-selection-color: color-mix(in srgb, var(--m-selection) 45%, transparent);
-  --pico-muted-color: var(--m-on-surface-variant);
-  --pico-muted-border-color: color-mix(in srgb, var(--m-outline) 55%, var(--m-surface));
-
-  --pico-primary: var(--m-primary);
-  --pico-primary-background: var(--m-primary);
-  --pico-primary-border: var(--m-primary);
-  --pico-primary-underline: color-mix(in srgb, var(--m-primary) 50%, transparent);
-  --pico-primary-hover: color-mix(in srgb, var(--m-primary) 80%, var(--m-mix));
-  --pico-primary-hover-background: color-mix(in srgb, var(--m-primary) 85%, var(--m-mix));
-  --pico-primary-hover-border: var(--pico-primary-hover-background);
-  --pico-primary-hover-underline: var(--pico-primary-hover);
-  --pico-primary-focus: color-mix(in srgb, var(--m-primary) 40%, transparent);
-  --pico-primary-inverse: var(--m-on-primary);
-
-  --pico-secondary: var(--m-secondary);
-  --pico-secondary-background: var(--m-secondary);
-  --pico-secondary-border: var(--m-secondary);
-  --pico-secondary-underline: color-mix(in srgb, var(--m-secondary) 50%, transparent);
-  --pico-secondary-hover: color-mix(in srgb, var(--m-secondary) 80%, var(--m-mix));
-  --pico-secondary-hover-background: color-mix(in srgb, var(--m-secondary) 85%, var(--m-mix));
-  --pico-secondary-hover-border: var(--pico-secondary-hover-background);
-  --pico-secondary-hover-underline: var(--pico-secondary-hover);
-  --pico-secondary-focus: color-mix(in srgb, var(--m-secondary) 40%, transparent);
-  --pico-secondary-inverse: var(--m-on-secondary);
-
-  --pico-contrast: var(--m-on-surface);
-  --pico-contrast-background: var(--m-on-surface);
-  --pico-contrast-border: var(--m-on-surface);
-  --pico-contrast-inverse: var(--m-surface);
-
-  --pico-h1-color: var(--m-heading, var(--m-on-surface));
-  --pico-h2-color: var(--m-heading, var(--m-on-surface));
-  --pico-h3-color: var(--m-heading, var(--m-on-surface));
-  --pico-h4-color: var(--m-heading, var(--m-on-surface));
-  --pico-h5-color: var(--m-heading, var(--m-on-surface));
-  --pico-h6-color: var(--m-heading, var(--m-on-surface));
-
-  --stat-up: var(--m-green);
-  --stat-down: var(--m-error);
-  --stat-mid: var(--m-yellow);
-  --accent: var(--m-primary);
-
-  --pico-ins-color: var(--m-green);
-  --pico-del-color: var(--m-error);
-  --pico-mark-background-color: color-mix(in srgb, var(--m-yellow) 30%, transparent);
-  --pico-mark-color: var(--m-on-surface);
-  --pico-code-background-color: var(--m-surface-variant);
-  --pico-code-color: var(--m-on-surface-variant);
-
-  --pico-form-element-background-color: var(--m-surface);
-  --pico-form-element-selected-background-color: var(--m-hover);
-  --pico-form-element-border-color: var(--m-outline);
-  --pico-form-element-color: var(--m-on-surface);
-  --pico-form-element-placeholder-color: var(--m-on-surface-variant);
-  --pico-form-element-active-background-color: var(--m-surface);
-  --pico-form-element-active-border-color: var(--m-primary);
-  --pico-form-element-focus-color: var(--m-primary);
-  --pico-switch-background-color: var(--m-outline);
-  --pico-switch-checked-background-color: var(--m-primary);
-  --pico-switch-color: var(--m-surface);
-
-  --pico-card-background-color: #131214;
-  --pico-card-border-color: var(--m-outline);
-  --pico-card-sectioning-background-color: var(--m-surface-variant);
-  --pico-card-box-shadow: 0 0.25rem 1.25rem color-mix(in srgb, var(--m-shadow) 12%, transparent);
-  --pico-box-shadow: var(--pico-card-box-shadow);
-
-  --pico-dropdown-background-color: var(--m-surface-variant);
-  --pico-dropdown-border-color: var(--m-outline);
-  --pico-dropdown-color: var(--m-on-surface);
-  --pico-dropdown-hover-background-color: var(--m-hover);
-
-  --pico-table-border-color: color-mix(in srgb, var(--m-outline) 45%, var(--m-surface));
-  --pico-table-row-stripped-background-color: color-mix(
-    in srgb,
-    var(--m-surface-variant) 60%,
-    transparent
-  );
-
-  --pico-tooltip-background-color: var(--m-on-surface);
-  --pico-tooltip-color: var(--m-surface);
-
-  --pico-accordion-border-color: var(--m-outline);
-  --pico-accordion-close-summary-color: var(--m-on-surface);
-  --pico-accordion-open-summary-color: var(--m-on-surface-variant);
-  --pico-accordion-active-summary-color: var(--m-primary);
 }

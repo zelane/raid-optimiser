@@ -10,13 +10,13 @@
   .pal-row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
   .pal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 1rem; }
   .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.6rem; }
-  .swatch { display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); overflow: hidden; }
+  .swatch { display: flex; flex-direction: column; border: 1px solid var(--outline-variant); border-radius: var(--radius-panel); overflow: hidden; }
   .swatch-chip { height: 3.25rem; display: grid; place-items: center; font-weight: 700; }
-  .swatch-meta { padding: 0.35rem 0.5rem; font-size: 0.75rem; background: var(--panel-bg); }
+  .swatch-meta { padding: 0.35rem 0.5rem; font-size: 0.75rem; background: var(--surface-container-low); }
   .swatch-meta code { padding: 0; background: none; font-size: 0.72rem; }
-  .text-on { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); }
-  .layers { display: flex; padding: 1rem; gap: 1rem; background: var(--m-surface); border: 1px solid var(--panel-border); }
-  .layers > div { flex: 1; padding: 1rem; border-radius: var(--panel-radius); border: 1px solid var(--panel-border); }
+  .text-on { display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 1rem; border: 1px solid var(--outline-variant); border-radius: var(--radius-panel); }
+  .layers { display: flex; flex-wrap: wrap; padding: 1rem; gap: 1rem; background: var(--surface); border: 1px solid var(--outline-variant); }
+  .layers > div { flex: 1 1 10rem; padding: 1rem; border-radius: var(--radius-panel); border: 1px solid var(--outline-variant); }
   .rarities { display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .rarities span { padding: 0.2rem 0.6rem; border: 2px solid var(--rarity); border-radius: 0.25rem; color: var(--rarity); font-weight: 700; }
 </style>
@@ -34,14 +34,11 @@
   <section class="page-section">
     <h2>Colours</h2>
     {% set swatches = [
-      ("--m-surface", "--m-on-surface"), ("--m-surface-variant", "--m-on-surface"),
-      ("--m-card", "--m-on-surface"), ("--pico-card-background-color", "--m-on-surface"),
-      ("--m-hover", "--m-on-surface"), ("--m-outline", "--m-on-surface"),
-      ("--m-primary", "--m-on-primary"), ("--m-secondary", "--m-on-secondary"),
-      ("--m-tertiary", "--m-surface"), ("--m-error", "--m-surface"),
-      ("--m-green", "--m-surface"), ("--m-yellow", "--m-surface"),
-      ("--m-on-surface", "--m-surface"), ("--m-on-surface-variant", "--m-surface"),
-      ("--m-heading", "--m-surface"),
+      ("--primary", "--on-primary"), ("--secondary", "--on-secondary"),
+      ("--tertiary", "--surface"), ("--error", "--surface"),
+      ("--success", "--surface"), ("--warning", "--surface"),
+      ("--on-surface", "--surface"), ("--on-surface-variant", "--surface"),
+      ("--heading", "--surface"), ("--outline", "--on-surface"), ("--outline-variant", "--on-surface"),
     ] %}
     <div class="swatches">
       {% for bg, fg in swatches %}
@@ -54,23 +51,25 @@
   </section>
 
   <section class="page-section">
-    <h2>Layers</h2>
-    <p class="panel-note">The slab, an inset, the panel as it is now (<code>--pico-card-background-color</code>), and <code>--m-card</code>, which nothing uses yet.</p>
+    <h2>Surfaces</h2>
+    <p class="panel-note">The slab, then the containers from lowest (insets: wells, fields, tables) to high (hovered and selected rows).</p>
+    {% set surfaces = [
+      ("--surface", "The page slab."), ("--surface-container-lowest", "Wells, fields, tables."),
+      ("--surface-container-low", "Panels, the top bar, code."), ("--surface-container", "Spare."),
+      ("--surface-container-high", "Hovered and selected rows."),
+    ] %}
     <div class="layers">
-      <div style="background: var(--m-surface)"><span class="caps">surface</span><p>The page slab.</p></div>
-      <div style="background: var(--m-surface-variant)"><span class="caps">surface-variant</span><p>Code, dropdowns.</p></div>
-      <div style="background: var(--panel-bg)"><span class="caps">panel (now)</span><p>Panels, slots, tally.</p></div>
-      <div style="background: var(--m-card)"><span class="caps">--m-card</span><p>Unused.</p></div>
+      {% for name, use in surfaces %}<div style="background: var({{ name }})"><span class="caps">{{ name }}</span><p>{{ use }}</p></div>{% endfor %}
     </div>
   </section>
 
   <section class="page-section">
     <h2>Text on surfaces</h2>
     <div class="pal-grid">
-      {% for bg in ["--m-surface", "--panel-bg", "--m-card"] %}
+      {% for bg in ["--surface", "--surface-container-low", "--surface-container"] %}
         <div class="text-on" style="background: var({{ bg }})">
           <span class="caps">{{ bg }}</span>
-          <strong style="font-family: var(--m-display); font-size: 1.3rem; color: var(--m-heading)">A heading in Alegreya</strong>
+          <strong style="font-family: var(--font-display); font-size: 1.3rem; color: var(--heading)">A heading in Alegreya</strong>
           <span>Body text, the bone white of the page.</span>
           <span class="muted">Muted text: notes and hints.</span>
           <span><a href="#">A link</a> · <span class="up">+12% up</span> · <span class="down">−8% down</span> · <span style="color: var(--stat-mid)">mid</span> · <span style="color: var(--tertiary)">tertiary</span></span>
@@ -102,10 +101,8 @@
     <div class="pal-row">
       <button>Primary</button>
       <button class="cta">Run · CTA</button>
-      <button class="secondary">Secondary</button>
-      <button class="contrast">Contrast</button>
-      <button class="outline">Outline</button>
-      <button class="outline secondary">Outline secondary</button>
+      <button class="quiet">Quiet</button>
+      <button class="quiet danger">Quiet danger</button>
       <button class="danger">Sell 12 pieces</button>
       <button disabled>Disabled</button>
       <a href="#">A link</a>
@@ -164,6 +161,13 @@
           <label><input type="radio" name="seg">Normal</label>
           <label><input type="radio" name="seg">Hard</label>
         </div>
+        <div class="pal-row" style="margin-top: 0.75rem">
+          <span class="caps">small, checkboxes</span>
+          <div class="segmented small">
+            <label><input type="checkbox" checked>ACC</label><label><input type="checkbox">RES</label>
+            <label><input type="checkbox" checked>ATK</label><label><input type="checkbox">HP</label>
+          </div>
+        </div>
         <div class="switch-rows" style="margin-top: 0.75rem">
           <label><span class="row-name">Reserved gear</span><span class="row-note">3 rules</span><input type="checkbox" role="switch" checked></label>
           <label><span class="row-name">Locked champions</span><select><option>above 3</option></select></label>
@@ -178,11 +182,36 @@
           <div><dt>DEF</dt><dd>3,902</dd></div><div><dt>SPD</dt><dd class="up">241</dd></div>
           <div><dt>C.RATE</dt><dd>100%</dd></div><div><dt>ACC</dt><dd class="down">180</dd></div>
         </dl>
+        <div class="stat-tiles edit" style="margin-top: 0.75rem">
+          <label><span class="caps">SPD</span><input type="number" value="4" step="0.5"></label>
+          <label><span class="caps">ATK</span><input type="number" value="5" step="0.5"></label>
+          <label class="zero"><span class="caps">HP</span><input type="number" value="0" step="0.5"></label>
+          <label><span class="caps">C.DMG</span><input type="number" value="5" step="0.5"></label>
+        </div>
         <div class="weight-chips" style="margin-top: 0.75rem">
           <span class="weight-chip"><span class="caps">SPD</span>1.0</span><span class="weight-chip"><span class="caps">ACC</span>0.8</span><span class="weight-chip"><span class="caps">HP%</span>0.5</span>
         </div>
       </article>
     </div>
+  </section>
+
+  <section class="page-section">
+    <h2>Filter bar</h2>
+    <form class="filter-bar" data-filter=".pal-filtered">
+      <input type="search" name="text" placeholder="Name" aria-label="Name">
+      <select name="faction" aria-label="Faction"><option value="">Any faction</option><option value="Orcs">Orcs</option><option value="Dwarves">Dwarves</option></select>
+      <div class="segmented small">
+        <label><input type="radio" name="kind" value="" checked>All <small>3</small></label>
+        <label><input type="radio" name="kind" value="damage">Damage <small>2</small></label>
+        <label><input type="radio" name="kind" value="support">Support <small>1</small></label>
+      </div>
+      <span class="filter-count caps"><span data-filter-count>3</span> shown</span>
+    </form>
+    <ul class="pal-row" style="margin-top: 0.75rem; padding: 0; list-style: none">
+      <li class="pal-filtered chip" data-filter-text="Gharol" data-filter-faction="Orcs" data-filter-kind="damage">Gharol · Orcs · damage</li>
+      <li class="pal-filtered chip" data-filter-text="Any ATK" data-filter-faction="*" data-filter-kind="damage">Any ATK · any faction · damage</li>
+      <li class="pal-filtered chip" data-filter-text="Tormin" data-filter-faction="Dwarves" data-filter-kind="support">Tormin · Dwarves · support</li>
+    </ul>
   </section>
 
   {# --- Containers ----------------------------------------------------------- #}
@@ -192,7 +221,7 @@
       <article class="panel"><header class="panel-head"><h3>Panel</h3><span class="badge info">info</span></header><p class="panel-note">A panel note explains the panel.</p><div class="well">A well, an inset back down on the slab.</div></article>
       <div class="slot"><strong>A slot</strong><span class="muted">Something placed</span></div>
       <div class="slot empty">+ An empty slot</div>
-      <article><header>Pico article</header>Plain <code>&lt;article&gt;</code>.<footer>Footer</footer></article>
+      <article><header>Plain article</header>Plain <code>&lt;article&gt;</code>.<footer>Footer</footer></article>
     </div>
     <div class="table-well" style="margin-top: 1rem">
       <table class="striped">

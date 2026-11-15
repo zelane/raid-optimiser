@@ -8,7 +8,7 @@
       <h2 id="finder-title">Find a champion</h2>
       <button type="button" class="finder-close" data-finder-close aria-label="Close">×</button>
     </header>
-    <form class="finder-filters" hx-get="/finder" hx-target="#finder-results"
+    <form class="filter-bar finder-filters" hx-get="/finder" hx-target="#finder-results"
           hx-trigger="input changed delay:200ms, change, finder:open" onsubmit="return false">
       <input type="search" name="q" placeholder="Name (Enter takes the first)" aria-label="Champion name" autocomplete="off">
       <select name="rarity" aria-label="Rarity">

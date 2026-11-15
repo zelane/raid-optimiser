@@ -23,7 +23,7 @@
             <div class="identity-text">
               <h1> {{ champion.name }}</h1>
               <span>{{ faction(champion) }}</span>
-              <button type="button" class="secondary outline switch-champion" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
+              <button type="button" class="quiet switch-champion" data-finder title="Another champion's optimiser">⇄ Switch champion</button>
               {% if page.forms | length > 1 %}
                 {# The request's `form` field; app.js shows the picked form's stats and skills. #}
                 <div class="form-switch" role="radiogroup" aria-label="Form">
@@ -152,7 +152,7 @@
           </div>
           <div class="actions">
             <button type="submit" class="cta">Find builds</button>
-            <button type="reset" class="secondary outline cta">Reset</button>
+            <button type="reset" class="quiet cta">Reset</button>
           </div>
           <span id="solving" class="htmx-indicator" aria-busy="true">Solving… <span id="timer">0.0s</span></span>
         </fieldset>

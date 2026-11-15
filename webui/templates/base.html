@@ -1,6 +1,5 @@
 <!doctype html>
-{#- Vault is dark only: Pico's own dark theme underneath, so its icons and controls match. #}
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,9 +7,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Alegreya:wght@500;700&display=swap">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2.0.6/css/pico.min.css">
-  <link rel="stylesheet" href="{{ static_url('app.css') }}">
   <link rel="stylesheet" href="{{ static_url('theme.css') }}">
+  <link rel="stylesheet" href="{{ static_url('base.css') }}">
+  <link rel="stylesheet" href="{{ static_url('app.css') }}">
   {#- app.css's frames, fetched with the page rather than once the stylesheet is parsed. #}
   {%- for rarity in ["common", "rare", "epic", "legendary", "mythical"] %}
   <link rel="preload" as="image" href="/static/assets/frames/{{ rarity }}.png">
@@ -45,18 +44,27 @@
       <ul class="tools">
         <li class="sync">
           <small class="sync-status">{{ synced_ago() }}</small>
-          <button class="outline secondary" hx-post="/sync" hx-target="previous .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
+          <button class="quiet" hx-post="/sync" hx-target="previous .sync-status" hx-disabled-elt="this" title="Read the account from the running game">Sync</button>
         </li>
       </ul>
     </nav>
-    {%- for label, link, tabs in sections if tabs | length > 1 and tabs | selectattr(2) | list %}
-      <nav class="container tabs" aria-label="{{ label }}">
-        <ul>
-          {%- for path, tab, current in tabs %}
-          <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ tab }}</a></li>
-          {%- endfor %}
-        </ul>
-      </nav>
+    {#- The band under the bar: a page's own tabs (its `subnav` block: a `nav.container.tabs`)
+        if it has any, else its section's pages. #}
+    {%- set own_tabs = self.subnav() | trim %}
+    {%- if false %}{% block subnav %}{% endblock %}{% endif %}
+    {%- if own_tabs %}
+      <div class="subbar">{{ own_tabs }}</div>
+    {%- endif %}
+    {%- for label, link, tabs in sections if not own_tabs and tabs | length > 1 and tabs | selectattr(2) | list %}
+      <div class="subbar">
+        <nav class="container tabs" aria-label="{{ label }}">
+          <ul>
+            {%- for path, tab, current in tabs %}
+            <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ tab }}</a></li>
+            {%- endfor %}
+          </ul>
+        </nav>
+      </div>
     {%- endfor %}
   </header>
   <main class="container">

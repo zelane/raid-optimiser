@@ -1,9 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Accessories: Raid optimiser{% endblock %}
-{% block content %}
-  <header class="page-head">
-    <h1>Accessories</h1>
-    <nav class="page-tabs" aria-label="Steps">
+{% block subnav %}
+    <nav class="container tabs" aria-label="Steps">
+      <ul>
       {#- Each step with what it holds (every list is worked out on each load anyway). #}
       {%- set shown = page.enhance.shown %}
       {#- The enhance lists stop at `shown`: a full one may hold more ("+"). #}
@@ -17,10 +16,15 @@
             ("cleanup", "4. Clean up", page.cleanup.to_sell | length, "to sell", "bad"),
             ("weights", "Weights", none, "", "")] %}
       {% for key, label, count, what, tone in steps %}
-        <a href="/accessories?tab={{ key }}"{% if page.tab == key %} aria-current="page"{% endif %}>{{ label }}
-          {%- if count is not none %} <span class="badge {{ tone }}" title="{{ count }} {{ what }}">{{ count }}</span>{% endif %}</a>
+        <li><a href="/accessories?tab={{ key }}"{% if page.tab == key %} aria-current="page"{% endif %}>{{ label }}
+          {%- if count is not none %} <span class="badge {{ tone }}" title="{{ count }} {{ what }}">{{ count }}</span>{% endif %}</a></li>
       {% endfor %}
+      </ul>
     </nav>
+{% endblock %}
+{% block content %}
+  <header class="page-head">
+    <h1>Accessories</h1>
   </header>
 
   {% if page.tab == "swaps" %}
@@ -117,56 +121,79 @@
       off more than one stat wants a type of its own. Supports that weigh both HP and DEF count
       the lesser of the two twice more. Changes save as you make them.
     </p>
-    <div class="table-well">
-    <table class="weights">
-      <thead><tr>
-        <th>Type</th><th>For</th><th>Kind</th>
-        {% for label in weights.stats %}<th>{{ label }}</th>{% endfor %}
-        <th></th>
-      </tr></thead>
-      {% for row in weights.rows %}
-        <tbody hx-post="/accessories/types" hx-trigger="change" hx-include="this"
-               hx-vals='{"type": "{{ row.key }}"}' hx-target="#weight-result">
-          <tr>
-            <th scope="row"><input type="text" name="label" value="{{ row.label }}" required autocomplete="off" aria-label="Type name"></th>
-            <td><select name="faction" autocomplete="off" aria-label="{{ row.label }}: faction">
-              <option value=""{% if not row.faction %} selected{% endif %}>Any faction</option>
-              {% for choice in weights.factions %}<option value="{{ choice.value }}"{% if choice.value == row.faction %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
-            </select></td>
-            <td><select name="kind" autocomplete="off" aria-label="{{ row.label }}: kind">
-              {% for choice in weights.kinds %}<option value="{{ choice.value }}"{% if choice.value == row.kind %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
-            </select></td>
-            {% for cell in row.cells %}
-              <td><input type="number" name="{{ cell.field }}" autocomplete="off" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
-                         aria-label="{{ row.label }}: {{ cell.label }}"></td>
-            {% endfor %}
-            <td rowspan="2"><div class="type-actions">
-              <form method="post" action="/accessories/types/{{ row.key }}/copy"><button type="submit" class="secondary outline" title="Add a copy of {{ row.label }}">Copy</button></form>
-              <form method="post" action="/accessories/types/{{ row.key }}/delete"
-                    onsubmit="return confirm('Delete {{ row.label }}?')"><button type="submit" class="secondary outline danger" title="Delete {{ row.label }}">Delete</button></form>
-            </div></td>
-          </tr>
-          <tr class="type-detail">
-            <td class="type-from">{% if row.champions %}from {{ row.champions | join(", ") }}{% endif %}</td>
-            <td colspan="{{ 2 + weights.stats | length }}"><div class="type-mains">
-              {% for slot in row.mains %}
-                <div class="type-slot"><span class="caps">{{ slot.slot }}</span>
-                  {% for option in slot.options %}
-                    <label class="chip mini"><input type="checkbox" name="{{ option.field }}" autocomplete="off"{% if option.on %} checked{% endif %}
-                           aria-label="{{ row.label }}: {{ slot.slot }} {{ option.label }}">{{ option.label }}</label>
-                  {% endfor %}
-                </div>
-              {% endfor %}
-            </div></td>
-          </tr>
-        </tbody>
-      {% endfor %}
-    </table>
-    </div>
-    <div class="type-add">
+    <section class="page-section">
+    <header class="panel-head">
+      <h2 class="section-title">Types</h2>
       <form method="post" action="/accessories/types/add"><button type="submit">Add a type</button></form>
-      <p id="weight-result"></p>
+    </header>
+    <form class="filter-bar" data-filter=".type-card" aria-label="Filter the types">
+      <input type="search" name="text" placeholder="Type or champion" aria-label="Type or champion" autocomplete="off">
+      <select name="faction" aria-label="Faction" autocomplete="off">
+        <option value="">Any faction</option>
+        {% for choice in weights.factions %}<option value="{{ choice.value }}">{{ choice.label }}</option>{% endfor %}
+      </select>
+      <div class="segmented small" role="radiogroup" aria-label="Kind">
+        <label><input type="radio" name="kind" value="" checked autocomplete="off">All <small>{{ weights.rows | length }}</small></label>
+        {% for choice in weights.kinds %}
+          <label><input type="radio" name="kind" value="{{ choice.value }}" autocomplete="off">{{ choice.label }}
+            <small>{{ weights.rows | selectattr("kind", "equalto", choice.value) | list | length }}</small></label>
+        {% endfor %}
+      </div>
+      <span class="filter-count caps"><span data-filter-count>{{ weights.rows | length }}</span> shown</span>
+    </form>
+    <p id="weight-result"></p>
+    <div class="type-list">
+      {% for row in weights.rows %}
+        {# A type is saved whole on each change. The hidden first button takes Enter, so it
+           doesn't copy. #}
+        <form class="type-card panel {{ row.kind }}" hx-post="/accessories/types" hx-trigger="change"
+              hx-vals='{"type": "{{ row.key }}"}' hx-target="#weight-result"
+              data-filter-text="{{ row.label }} {{ row.champions | join(' ') }}"
+              data-filter-faction="{{ row.faction or '*' }}" data-filter-kind="{{ row.kind }}">
+          <button type="submit" disabled hidden></button>
+          <div class="type-who">
+            <input type="text" class="type-name" name="label" value="{{ row.label }}" required autocomplete="off" aria-label="Type name">
+            <div class="type-tags">
+              <div class="segmented small" role="radiogroup" aria-label="{{ row.label }}: kind">
+                {% for choice in weights.kinds %}
+                  <label><input type="radio" name="kind" value="{{ choice.value }}" autocomplete="off"{% if choice.value == row.kind %} checked{% endif %}>{{ choice.label }}</label>
+                {% endfor %}
+              </div>
+              <select name="faction" autocomplete="off" aria-label="{{ row.label }}: faction">
+                <option value=""{% if not row.faction %} selected{% endif %}>Any faction</option>
+                {% for choice in weights.factions %}<option value="{{ choice.value }}"{% if choice.value == row.faction %} selected{% endif %}>{{ choice.label }}</option>{% endfor %}
+              </select>
+            </div>
+            {% if row.champions %}<p class="type-from">from {{ row.champions | join(", ") }}</p>{% endif %}
+          </div>
+          <div class="stat-tiles edit">
+            {% for cell in row.cells %}
+              <label{% if cell.value == 0 %} class="zero"{% endif %}><span class="caps">{{ cell.label }}</span>
+                <input type="number" name="{{ cell.field }}" autocomplete="off" value="{{ '%g' % cell.value }}" min="0" max="10" step="0.5"
+                       aria-label="{{ row.label }}: {{ cell.label }}"></label>
+            {% endfor %}
+          </div>
+          <div class="type-mains">
+            {% for slot in row.mains %}
+              <span class="caps">{{ slot.slot }}</span>
+              <div class="segmented small">
+                {% for option in slot.options %}
+                  <label><input type="checkbox" name="{{ option.field }}" autocomplete="off"{% if option.on %} checked{% endif %}
+                         aria-label="{{ row.label }}: {{ slot.slot }} {{ option.label }}">{{ option.label }}</label>
+                {% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+          <div class="type-actions">
+            <button type="submit" class="quiet" formaction="/accessories/types/{{ row.key }}/copy" formmethod="post"
+                    formnovalidate title="Add a copy of {{ row.label }}">Copy</button>
+            <button type="submit" class="quiet danger" formaction="/accessories/types/{{ row.key }}/delete" formmethod="post"
+                    formnovalidate title="Delete {{ row.label }}" onclick="return confirm('Delete {{ row.label }}?')">Delete</button>
+          </div>
+        </form>
+      {% endfor %}
     </div>
+    </section>
 
     <h2>Sets</h2>
     <p class="lede">
@@ -174,7 +201,7 @@
       each set is for. A type a set isn't for still counts, at a share of its score. A set for
       no damage type still keeps a C.DMG amulet. New types and new sets start ticked everywhere.
     </p>
-    <div class="off-target">
+    <div class="off-target well">
       <label>Types a set isn't for count at
         <input type="number" name="off_target" value="{{ '%g' % grid.off_target }}" min="0" max="1" step="0.05" autocomplete="off"
                hx-post="/accessories/off-target" hx-target="#set-result">
@@ -191,7 +218,7 @@
         <tr class="set-values">
           <th scope="row">Value</th>
           {% for column in grid.columns %}
-            <td><input type="number" name="factor" value="{{ '%g' % column.factor }}" min="0" max="3" step="0.05" autocomplete="off"
+            <td><input type="number" name="factor" class="{{ 'high' if column.factor > 1 else 'low' if column.factor < 1 else '' }}" value="{{ '%g' % column.factor }}" min="0" max="3" step="0.05" autocomplete="off"
                        hx-post="/accessories/sets/value" hx-vals='{"set": "{{ column.set_id }}"}' hx-target="#set-result"
                        aria-label="{{ column.set_name }}: value"></td>
           {% endfor %}

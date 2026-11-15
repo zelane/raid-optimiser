@@ -83,8 +83,8 @@
             {% endif %}
             {% if slot.choice %}
               <div class="slot-actions">
-                {% if slot.champion %}<button type="button" class="secondary outline" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}">Change</button>{% endif %}
-                <button type="button" class="secondary outline" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
+                {% if slot.champion %}<button type="button" class="quiet" data-finder="slot" data-finder-target="slot-{{ loop.index }}" data-finder-reset="relic-{{ loop.index }}">Change</button>{% endif %}
+                <button type="button" class="quiet" title="Empty this slot" aria-label="Empty slot {{ loop.index }}"
                         onclick="document.getElementById('slot-{{ loop.index }}').value = ''; document.getElementById('relic-{{ loop.index }}').value = ''; this.form.submit()">×</button>
               </div>
             {% endif %}
@@ -146,7 +146,7 @@
             <option value="buff">buffs</option>
           </select>
           <input type="number" name="count_n" min="1" max="10" placeholder="3" aria-label="How many">
-          <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="secondary outline">Add</button>
+          <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="quiet">Add</button>
         </div>
       </section>
 {% endmacro %}
@@ -207,7 +207,7 @@
                 </optgroup>
               {% endfor %}
             </select>
-            <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="secondary outline">Assume</button>
+            <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="quiet">Assume</button>
           </div>
         </div>
       </section>

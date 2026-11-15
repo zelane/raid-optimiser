@@ -18,7 +18,7 @@
       {%- if todo %}<span class="planned">{{ todo | join(", ") }}</span>{% endif -%}
     </p>
     <div class="equip">
-      <button class="secondary outline" hx-post="/champions/{{ results.champion.id }}/preview"
+      <button class="quiet" hx-post="/champions/{{ results.champion.id }}/preview"
               hx-vals='{"artifact_ids": "{{ build.artifact_ids | join(",") }}"}'
               hx-target="next .equip-result" hx-disabled-elt="this" hx-indicator="this">
         Preview in game

@@ -256,7 +256,8 @@ the game itself.
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
 - Nav (`base.html` `sections`): Optimiser, Accessories, Teams, Info; a section with several pages
-  shows them as tabs under the bar. Optimiser: the champion list, the champion last solved for
+  shows them as tabs in a band under the bar (`subbar`), unless the page fills it itself (its
+  `subnav` block: Accessories' steps). Optimiser: the champion list, the champion last solved for
   (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera. Info: Faction Wars
   (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
@@ -279,7 +280,7 @@ the game itself.
   `target:picked` (the champion page sets `enemy_def`); its hidden `target`
   ("stage:wave:slot", `form="request"`) is saved with runs and restored quietly. The panel dims
   when `enemy_def` no longer matches it.
-- `webui/`: FastAPI + Jinja + htmx + Pico CSS. `service/` is framework-free (frozen
+- `webui/`: FastAPI + Jinja + htmx, our own CSS (no framework). `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
   cached account, locks), `views` (champion rows, piece names and art) and `scores` (accessory
@@ -288,17 +289,25 @@ the game itself.
   solve form and build buttons, `settings`: the forms that change the store, `chimera`, and
   `common`: `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
   `reader.py` return; only `app.py` and `templates/` know about HTTP/HTML.
-  One theme, Vault, in `static/theme.css` (dark only: `base.html` sets Pico's `data-theme="dark"`).
-  The look (◆ section titles) follows the Stitch design system the
-  user supplied, but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over
-  the spec's fonts. `static/app.css` opens with a base layer
-  over Pico (short controls, no margins on controls or sections: layouts space with `gap`;
-  tables headed in caps on whatever holds them; cards with a rim, no shadow) and the shared
-  components: `panel`/`panel-head`, `well`, `table-well`, `caps`, `badge` (`good`/`bad`/
-  `info`), `chip` (`on`), `status` (`met`/`missing`), `segmented`, `slot` (`empty`),
-  `stat-tiles`, `switch-rows`, `page-head`, `page-tabs` (a badge for a count), `tally`, `cta`,
-  `danger` (selling), `champion-strip`, `gear-pair` (`gear-card` `candidate`/`worn` over the optimiser's `piece` card), `meter`,
-  `weight-chip`. Build pages from those rather than overriding Pico per element.
+  Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
+  colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
+  `--surface-container-lowest`…`-high` for depth, `--on-surface`, `--on-surface-variant` for
+  muted, `--outline`/`--outline-variant`), plus `--heading`, `--stat-up/mid/down`, fonts, an
+  Every Layout modular scale (`--s-2`…`--s3`) and the named sizes. `static/base.css`: the
+  elements themselves (reset; prose's flow margins, zero-specificity; tables headed in caps;
+  buttons filled brass, `quiet` for secondary; fields, checkboxes, switches; cards with a rim,
+  no shadow; dialogs; nav) and Every Layout's primitives (`stack`, `cluster`, `with-sidebar`,
+  `switcher`, `grid`) for new layouts; `.joined` joins a field and its button. Spacing is the
+  parent's job (`gap`, the primitives), with logical properties. `static/app.css`: the
+  components. The look (◆ section titles) follows the Stitch design system the user supplied,
+  but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over the spec's
+  fonts. The shared components: `panel`/`panel-head`, `well`, `table-well`, `caps`, `badge`
+  (`good`/`bad`/`info`), `chip` (`on`), `status` (`met`/`missing`), `segmented` (`small`;
+  checkboxes for several), `filter-bar` (`data-filter`: filters items in the page, app.js),
+  `slot` (`empty`), `stat-tiles` (`edit`), `switch-rows`, `page-head`, `page-tabs` (a badge for
+  a count), `tally`, `cta`, `danger` (selling), `champion-strip`, `gear-pair` (`gear-card`
+  `candidate`/`worn` over the optimiser's `piece` card), `meter`, `weight-chip`. Build pages
+  from those and the tokens; `/palette` shows them all.
 
 ## Commands
 
@@ -314,7 +323,8 @@ just static           # re-export the game's tables (part of update)
 just schema-refresh   # when the export says the dump predates the game: dump, schema, static
 just web              # http://127.0.0.1:8000 (web-restart, web-stop)
 just assets           # portraits and icons from the game's bundles (part of update)
-just check            # black + ruff over all Python, then the house style checker
+just check            # black + ruff over all Python, the house style checker, then stylelint
+just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css
 uv run --group dev pytest   # tests/ (not part of just check)
 ```
 
@@ -331,6 +341,12 @@ and black at line length 100, over `optimiser webui capture tools` (`just check`
 package of click commands run as `uv run python -m tools.<name>`: paths come in as arguments,
 never hard-coded, and the project's own paths from `optimiser.paths`. `capture/hh_capture.py`
 runs inside mitmproxy (`uv run --group capture`), so it stays standalone.
+CSS: Prettier formats it (one declaration a line, width 100, `.prettierrc.json`) and stylelint
+checks it (`just css`, in `just check`; `just css-fix` fixes both). `stylelint.config.mjs`: the
+standard config, properties in the clean-order preset's order (stylelint-order), and native
+nesting at most 3 deep (`&` for the same element: `&:hover`, `&.on`; bare for descendants).
+Nest under a single selector, not a list (`&` would act as `:is()` and raise specificity).
+`package.json` holds only that tooling (`npm ci`, part of `just update`).
 Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 
 ## Stat model (verified exact against the game)

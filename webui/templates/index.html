@@ -2,8 +2,10 @@
 {% block content %}
   <div class="list-head">
     <h1>Champions</h1>
-    <input type="search" name="query" placeholder="Find a champion by name" aria-label="Find a champion by name" autofocus
-           hx-get="/champions" hx-trigger="input changed delay:250ms, search" hx-target="#champion-list">
+    <div class="filter-bar">
+      <input type="search" name="query" placeholder="Find a champion by name" aria-label="Find a champion by name" autofocus
+             hx-get="/champions" hx-trigger="input changed delay:250ms, search" hx-target="#champion-list">
+    </div>
   </div>
   <div id="champion-list">{% include "_champion_list.html" %}</div>
 {% endblock %}

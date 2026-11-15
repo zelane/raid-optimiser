@@ -114,7 +114,7 @@
                 {% endfor %}
               </table>
               <footer>
-                <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number) }}" role="button" class="secondary outline"{% if option.number == page.shown %} aria-current="true"{% endif %}>Show trials</a>
+                <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number) }}" role="button" class="quiet"{% if option.number == page.shown %} aria-current="true"{% endif %}>Show trials</a>
                 <a href="{{ page_url(option.slots) }}" role="button">Use this team</a>
               </footer>
             </article>
@@ -124,7 +124,7 @@
         </div>
         {% if page.more %}
           <p class="chimera-more">
-            <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="secondary outline">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
+            <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="quiet">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
           </p>
         {% endif %}
       </section>
