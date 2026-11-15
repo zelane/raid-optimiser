@@ -22,13 +22,14 @@
   {#- The menu's sections: (label, link, its tabs as (link, label, open now)). A section
       with tabs shows them in the bar's second row on its pages. Optimiser: the champion
       list, the champion last solved for (their optimiser), the settings solves use; Info:
-      the account's progress. #}
+      the account's progress; Teams: the team finder, and the Chimera's trials. #}
   {%- set sections = [
         ("Optimiser", "/", [("/", "Champions", here == "/"),
                             (optimiser_url(), "Optimiser", here.startswith("/champions/")),
                             ("/config", "Config", here == "/config")]),
         ("Accessories", "/accessories", [("/accessories", "Accessories", here.startswith("/accessories"))]),
-        ("Chimera", "/chimera", [("/chimera", "Chimera", here.startswith("/chimera"))]),
+        ("Teams", "/teams", [("/teams", "Finder", here.startswith("/teams")),
+                             ("/chimera", "Chimera", here.startswith("/chimera"))]),
         ("Info", "/info", [("/info", "Faction Wars", here == "/info"),
                            ("/empower", "Empower", here.startswith("/empower"))]),
       ] %}

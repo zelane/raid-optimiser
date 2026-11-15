@@ -37,6 +37,9 @@ class StageRow:
 
 @dataclass(frozen=True)
 class CryptView:
+    """A crypt short of its stars: `region` is the game's id (the team finder takes it)."""
+
+    region: str
     name: str
     banner_url: str | None
     stars: int
@@ -92,7 +95,8 @@ def crypt_view(account: Account, enemies: Enemies, region: Region, difficulty: s
             rows.append(row)
 
     faction = faction_name(region.id.removeprefix("Fraction_"))
-    return CryptView(region.name, asset_url("factions", faction), stars, max_stars, tuple(rows))
+    banner = asset_url("factions", faction)
+    return CryptView(region.id, region.name, banner, stars, max_stars, tuple(rows))
 
 
 def stage_row(

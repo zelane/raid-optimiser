@@ -67,6 +67,8 @@ STATUS_LABELS = {
     "IncreaseResistance": "Increase RES",
     "IncreaseCriticalChance": "Increase C.RATE",
     "IncreaseCriticalDamage": "Increase C.DMG",
+    "Mark": "Hex",
+    "TimeBomb": "Bomb",
 }
 
 

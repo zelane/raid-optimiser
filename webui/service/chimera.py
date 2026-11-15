@@ -27,8 +27,8 @@ from optimiser.chimera.trials import ANIMAL_FORMS, LEVELS, PARTS, PLAN_DIFFICULT
 from optimiser.enemies import Enemies, Trial
 from optimiser.teams.cover import Lineup, ObjectiveCover
 from optimiser.teams.tags import Tag
-from webui.forms.chimera import FIRST_SHOWN, GRADES, ChimeraRequest, Fill
-from webui.forms.team import Offers
+from webui.forms.chimera import ChimeraRequest
+from webui.forms.team import FIRST_SHOWN, GRADES, Fill, Offers
 from webui.service.team import (
     NeedView,
     SlotView,
@@ -121,7 +121,7 @@ def chimera_page(
     champion) every way it can; else the slots are shown as they are. `rotation`: the column
     the current raid puts the mythical materials in (`rotation_column`), if known."""
     ask = request.team
-    brief = Brief(request.column, ask.wanted, ask.loadout)
+    brief = Brief(request.column, ask.wanted, ask.loadout, ask.counts)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in ask.picks)
 
     match request.fill:

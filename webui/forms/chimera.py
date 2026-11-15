@@ -3,10 +3,9 @@ chimera.py - the Chimera page's query: `column` (one of `PARTS`), `min_grade`, `
 around the slots) with `listed` and `option`, and the team's fields (`forms.team`: slots,
 wants, gear, assumptions).
 
-- `DEFAULT_COLUMN`, `GRADES`, `FIRST_SHOWN`, `MAX_LISTED`: the page's shape
-- `Fill`, `ChimeraRequest`, `Unknown`: what it asks
+- `DEFAULT_COLUMN`: the page's default column
+- `ChimeraRequest`, `Unknown`: what it asks
 - `parse_chimera`: the boundary
-- `parse_fill`: its step
 """
 
 from collections.abc import Mapping
@@ -15,23 +14,10 @@ from dataclasses import dataclass
 from optimiser.account import Account
 from optimiser.chimera.trials import PARTS, TEAM_SIZE
 from webui.forms.common import FormErrors
-from webui.forms.team import Offers, TeamAsk, parse_team
+from webui.forms.team import GRADES, TRUE, Fill, Offers, TeamAsk, parse_fill, parse_team
 
 # Where the mythical materials are at prize offset 0, if the game doesn't say.
 DEFAULT_COLUMN = "Tail"
-GRADES = (6, 5, 4)
-FIRST_SHOWN = 3  # teams a run lists at first
-MAX_LISTED = 300  # most a page lists
-TRUE = ("true", "1", "on", "yes")
-
-
-@dataclass(frozen=True)
-class Fill:
-    """Search for teams around the slots: list the first `listed`, the trials showing option
-    number `option` (the first, if there's no such option)."""
-
-    listed: int
-    option: int
 
 
 @dataclass(frozen=True)
@@ -81,15 +67,3 @@ def parse_chimera(
         team=team,
         fill=parse_fill(query) if last("run", "").lower() in TRUE else None,
     )
-
-
-def parse_fill(query: Mapping[str, list[str]]) -> Fill:
-    """How many teams to list (`FIRST_SHOWN` to `MAX_LISTED`) and which to show; numbers that
-    aren't fall back to the first."""
-
-    def number(name: str, default: int) -> int:
-        text = (query.get(name) or [""])[-1]
-        return int(text) if text.isdigit() else default
-
-    listed = min(max(number("listed", FIRST_SHOWN), FIRST_SHOWN), MAX_LISTED)
-    return Fill(listed, number("option", 1))

@@ -74,11 +74,12 @@ class Objective:
 @dataclass(frozen=True)
 class Goals:
     """What a team of at most `size` is after: the objectives (in order: one waiting on
-    another comes after it), and `extras`: debuffs, buffs and effects wanted besides, in every
-    team the search offers, met against `extras_target`."""
+    another comes after it), and `extras`: debuffs, buffs and effects wanted besides (one of
+    some, or so many different), in every team the search offers, met against
+    `extras_target`."""
 
     objectives: tuple[Objective, ...]
-    extras: tuple[AnyOf, ...]
+    extras: tuple[AnyOf | Distinct, ...]
     extras_target: Target
     size: int
 

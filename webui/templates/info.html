@@ -32,7 +32,7 @@
           <tbody>
             {% for row in crypt.rows %}
               <tr>
-                <th scope="row">{{ row.number }}</th>
+                <th scope="row"><a href="/teams?base=fw&crypt={{ crypt.region }}&difficulty={{ fw.difficulty }}&stage={{ row.number }}" title="Find a team for its challenge">{{ row.number }}</a></th>
                 <td class="crypt-state">
                   <span class="stars-earned" aria-label="{{ row.state }}">
                     {%- for n in range(3) %}<span class="{{ 'on' if n < row.stars }}">★</span>{% endfor -%}

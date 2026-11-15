@@ -3,8 +3,8 @@ plan.py - the team builder's entry points: what the champions in the slots clear
 (`check_lineup`), and every way to fill the open slots (`fill_lineup`).
 
 - `Brief`, `Plan`: what's asked, and the result
-- `check_lineup`, `fill_lineup`: the workflows
-- `slot_kits`, `column_goals`: what they share
+- `check_lineup`, `fill_lineup`: the workflows (`teams.find` does the finding)
+- `column_goals`: what they share
 """
 
 from dataclasses import dataclass
@@ -13,27 +13,24 @@ from optimiser.account import Account, Champion
 from optimiser.chimera.tags import ANY_FORM, form_target
 from optimiser.chimera.trials import TEAM_SIZE, check_needs, column_trials, trial_needs
 from optimiser.enemies import Enemies, Trial
-from optimiser.teams.cover import Lineup, lineup_of, ranking
-from optimiser.teams.gear import Loadout, equip, with_gear
-from optimiser.teams.kits import Kit, candidates, kit_of
-from optimiser.teams.needs import AnyOf, Goals, Objective
-from optimiser.teams.search import (
-    PARTIAL_OPTIONS,
-    SEARCH_BUDGET,
-    every_team,
-    partial_teams,
-)
+from optimiser.teams.cover import Lineup
+from optimiser.teams.find import check_slots, find_teams
+from optimiser.teams.gear import Loadout, with_gear
+from optimiser.teams.kits import candidates
+from optimiser.teams.needs import AnyOf, Distinct, Goals, Objective
 from optimiser.teams.tags import Tag
 
 
 @dataclass(frozen=True)
 class Brief:
     """What a team is asked for and has: the rotation's column, what it must bring besides the
-    trials (`wantable` tags), and what it can wear or is assumed to have."""
+    trials (`wantable` tags; `counts`: so many different debuffs or buffs), and what it can
+    wear or is assumed to have."""
 
     column: str
     wanted: tuple[Tag, ...]
     loadout: Loadout
+    counts: tuple[Distinct, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -60,7 +57,7 @@ def check_lineup(
     """What the champions in the slots clear on their own, and which of the wanted debuffs,
     buffs and effects they bring."""
     goals, trials, problems = column_goals(enemies, brief)
-    lineup = lineup_of(slot_kits(account, brief, slots), set(), goals)
+    lineup = check_slots(account, brief.loadout, slots, goals)
     return Plan(
         brief.column, trials, lineup, (), 0, complete=True, partial=False, problems=problems
     )
@@ -75,58 +72,23 @@ def fill_lineup(
     shown: int,
 ) -> Plan:
     """The slots' champions kept, the open slots filled with champions at `min_grade`★ or
-    above: every smallest team clearing all the trials and bringing what's wanted (within
-    `SEARCH_BUDGET`), the best scored first (`ranking`); the first `shown` of them as lineups.
-    If none clears them all, a few teams clearing the most."""
-    # 1. The column's nine trials, what each needs (less what the gear brings), and what's
-    #    wanted besides.
+    above (the best copy of each): every smallest team clearing all the trials and bringing
+    what's wanted (`teams.find_teams`), the first `shown` of them as lineups. If none clears
+    them all, a few teams clearing the most."""
     goals, trials, problems = column_goals(enemies, brief)
-
-    # 2. Who's in the slots, and who could join them (the best copy of each champion), each
-    #    with what they could wear or are assumed to bring.
-    chosen = slot_kits(account, brief, slots)
-    pinned = [kit for kit in chosen if kit]
-    taken = {kit.champion.type_id // 10 for kit in pinned}
-    others = [
-        equip(kit_of(account, champion), brief.loadout)
-        for champion in candidates(account, min_grade)
-        if champion.type_id // 10 not in taken
-    ]
-
-    # 3. Every team clearing all the trials, or failing that the few clearing the most.
-    found, complete = every_team(pinned, others, goals, SEARCH_BUDGET)
-    partial = not found
-    if partial:
-        found = partial_teams(pinned, others, goals, PARTIAL_OPTIONS)
-    else:
-        found.sort(key=lambda added: ranking(pinned + added, goals))
-
-    # 4. The first of them as lineups, each one's newcomers in the open slots in order.
-    teams = []
-
-    for added in found[:shown]:
-        newcomers = iter(added)
-        filled = [kit if kit else next(newcomers, None) for kit in chosen]
-        teams.append(lineup_of(filled, {id(kit) for kit in added}, goals))
-
+    pool = candidates(account, min_grade)
+    found = find_teams(account, brief.loadout, slots, goals, pool, shown)
     return Plan(
         column=brief.column,
         trials=trials,
-        lineup=lineup_of(chosen, set(), goals),
-        options=tuple(teams),
-        found=len(found),
-        complete=complete,
-        partial=partial,
+        lineup=found.lineup,
+        options=found.options,
+        found=found.found,
+        complete=found.complete,
+        partial=found.partial,
         problems=problems,
-        candidates=len(others),
+        candidates=found.candidates,
     )
-
-
-def slot_kits(
-    account: Account, brief: Brief, slots: tuple[Champion | None, ...]
-) -> list[Kit | None]:
-    """The slots' champions' kits, with what they could wear or are assumed to bring."""
-    return [equip(kit_of(account, c), brief.loadout) if c else None for c in slots]
 
 
 def column_goals(enemies: Enemies, brief: Brief) -> tuple[Goals, dict[int, Trial], tuple[str, ...]]:
@@ -148,6 +110,6 @@ def column_goals(enemies: Enemies, brief: Brief) -> tuple[Goals, dict[int, Trial
         )
         for trial in trials
     )
-    extras = tuple(AnyOf(frozenset({tag})) for tag in brief.wanted)
+    extras = tuple(AnyOf(frozenset({tag})) for tag in brief.wanted) + brief.counts
     goals = Goals(objectives, extras, ANY_FORM, TEAM_SIZE)
     return goals, {trial.skill: trial for trial in trials}, problems

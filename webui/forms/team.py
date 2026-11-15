@@ -5,12 +5,18 @@ a champion's name typed in, or empty for an open slot; `want` (repeated) a debuf
 effect every team must bring (a `Tag.key`, one of `Offers.tags`); `gear` (repeated) a set or
 relic any champion may wear (a `Gear.key`; `gear_set` present: the list is as sent, else the
 defaults); `assume` (repeated) something assumed: "<tag key>" for the team, "<champion
-id>@<tag key>" for one champion; `assume_what` and `assume_who`: the assume form's new entry.
+id>@<tag key>" for one champion; `assume_what` and `assume_who`: the assume form's new entry;
+`count` (repeated) so many different debuffs or buffs every team must bring ("debuff:3"),
+`count_side` and `count_n`: the count form's new entry.
+A search (`run`) lists `listed` teams, the page showing option number `option`.
 
-- `Offers`, `TeamAsk`: what it can pick from, and what it asks
-- `parse_team`: the boundary
+- `GRADES`, `FIRST_SHOWN`, `MAX_LISTED`, `TRUE`: a search's shape
+- `Offers`, `TeamAsk`, `Fill`: what it can pick from, and what it asks
+- `parse_team`, `parse_fill`: the boundaries
 - `Unmatched`, `SlotPick`, `parse_slots` (`parse_slot`): the team's slots
-- `parse_wanted`, `parse_gear`, `parse_assumed`, `assume_entry`: its steps
+- `COUNT_SIDES`, `MOST_COUNTED`: what a count can ask for
+- `parse_wanted`, `parse_counts`, `parse_gear`, `parse_assumed`, `assume_entry`, `count_entry`:
+  its steps
 """
 
 import re
@@ -19,8 +25,16 @@ from dataclasses import dataclass
 
 from optimiser.account import Account, Champion
 from optimiser.teams.gear import DEFAULT_GEAR, Assumed, Gear, Loadout, assumed_gear
-from optimiser.teams.tags import Tag
+from optimiser.teams.needs import Distinct
+from optimiser.teams.tags import Side, Tag
 from webui.forms.common import FormErrors
+
+GRADES = (6, 5, 4)
+FIRST_SHOWN = 3  # teams a run lists at first
+MAX_LISTED = 300  # most a page lists
+TRUE = ("true", "1", "on", "yes")
+COUNT_SIDES = (Side.DEBUFF, Side.BUFF)
+MOST_COUNTED = 10
 
 
 @dataclass(frozen=True)
@@ -43,13 +57,23 @@ class Offers:
 
 
 @dataclass(frozen=True)
+class Fill:
+    """Search for teams around the slots: list the first `listed`, the trials showing option
+    number `option` (the first, if there's no such option)."""
+
+    listed: int
+    option: int
+
+
+@dataclass(frozen=True)
 class TeamAsk:
-    """The slots as typed, what every team must bring, and what it can wear or is assumed
-    to have."""
+    """The slots as typed, what every team must bring (tags, and so many different debuffs or
+    buffs: `counts`), and what it can wear or is assumed to have."""
 
     picks: tuple[SlotPick, ...]
     wanted: tuple[Tag, ...]
     loadout: Loadout
+    counts: tuple[Distinct, ...] = ()
 
 
 def parse_team(
@@ -58,6 +82,7 @@ def parse_team(
     """The team's fields (each name's values, in order), `size` slots."""
     picks = parse_slots(query.get("slot", []), account, size)
     wanted = parse_wanted(query.get("want", []), offers.tags)
+    counts = parse_counts(query.get("count", []) + count_entry(query))
     allowed = query.get("gear", []) if "gear_set" in query else list(DEFAULT_GEAR)
     gear = parse_gear(allowed, offers.gear)
     entries = query.get("assume", []) + assume_entry(query, account)
@@ -65,14 +90,15 @@ def parse_team(
     if (
         isinstance(picks, FormErrors)
         or isinstance(wanted, FormErrors)
+        or isinstance(counts, FormErrors)
         or isinstance(gear, FormErrors)
         or isinstance(assumed, FormErrors)
     ):
-        parsed = (picks, wanted, gear, assumed)
+        parsed = (picks, wanted, counts, gear, assumed)
         return FormErrors([m for p in parsed if isinstance(p, FormErrors) for m in p.messages])
 
     team_assumed, single = assumed
-    return TeamAsk(picks, wanted, Loadout(gear + team_assumed, single))
+    return TeamAsk(picks, wanted, Loadout(gear + team_assumed, single), counts)
 
 
 def assume_entry(query: Mapping[str, list[str]], account: Account) -> list[str]:
@@ -84,6 +110,30 @@ def assume_entry(query: Mapping[str, list[str]], account: Account) -> list[str]:
 
     who = parse_slot((query.get("assume_who") or [""])[-1].strip(), account)
     return [f"{who.id}@{what}" if isinstance(who, Champion) else what]
+
+
+def count_entry(query: Mapping[str, list[str]]) -> list[str]:
+    """The count form's new entry, if any, as `parse_counts` reads it."""
+    side = (query.get("count_side") or [""])[-1]
+    number = (query.get("count_n") or [""])[-1].strip()
+    return [f"{side}:{number}"] if side and number else []
+
+
+def parse_counts(texts: list[str]) -> tuple[Distinct, ...] | FormErrors:
+    """Each "<side>:<n>" (debuffs or buffs, 1 to `MOST_COUNTED`) as so many different ones,
+    once each, in order; a side counted twice keeps its last."""
+    by_side: dict[Side, Distinct] = {}
+    errors = []
+
+    for text in texts:
+        side, _, number = text.partition(":")
+        if side not in COUNT_SIDES or not number.isdigit() or not 1 <= int(number) <= MOST_COUNTED:
+            errors.append(f"can't count {text!r}")
+        else:
+            by_side.pop(Side(side), None)
+            by_side[Side(side)] = Distinct(Side(side), int(number))
+
+    return FormErrors(errors) if errors else tuple(by_side.values())
 
 
 CHAMPION_ID = re.compile(r"#(\d+)\s*$")
@@ -167,3 +217,15 @@ def parse_assumed(
             single.append(Assumed(tag, champion))
 
     return FormErrors(errors) if errors else (tuple(team), tuple(single))
+
+
+def parse_fill(query: Mapping[str, list[str]]) -> Fill:
+    """How many teams to list (`FIRST_SHOWN` to `MAX_LISTED`) and which to show; numbers that
+    aren't fall back to the first."""
+
+    def number(name: str, default: int) -> int:
+        text = (query.get(name) or [""])[-1]
+        return int(text) if text.isdigit() else default
+
+    listed = min(max(number("listed", FIRST_SHOWN), FIRST_SHOWN), MAX_LISTED)
+    return Fill(listed, number("option", 1))

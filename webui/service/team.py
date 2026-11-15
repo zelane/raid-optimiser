@@ -4,10 +4,10 @@ user's champions and the search's), what every team must bring (wanted tags, gro
 the gear, relics and assumptions it may count on, and each need as the team meets it.
 
 - `ChoiceView`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `WantView`, `WantGroup`,
-  `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
+  `CountView`, `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
 - `Note`, `no_note`: what a page says about a tag on offer
 - `team_view`: the team's panels
-- `slot_view`, `need_view`, `WANT_GROUPS`, `want_groups`, `want_view`, `gear_groups`,
+- `slot_view`, `need_view`, `WANT_GROUPS`, `want_groups`, `want_view`, `count_view`, `gear_groups`,
   `gear_view`, `assumed_views`, `assumed_view`, `percent`: its pieces
 - `ICON_NAMES`, `icon_view`, `icon_url`, `icon_name`: the game's icons for buffs, debuffs and
   effects
@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from optimiser.account import Account
 from optimiser.teams.cover import Member, NeedCover
 from optimiser.teams.gear import Assumed, Gear, Loadout
+from optimiser.teams.needs import Distinct
 from optimiser.teams.tags import Side, Tag, plain_label
 from webui.forms.team import Offers, SlotPick, TeamAsk, Unmatched
 from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
@@ -129,15 +130,27 @@ class AssumedView:
 
 
 @dataclass(frozen=True)
+class CountView:
+    """So many different debuffs or buffs every team must bring: `field` is the query's
+    value ("debuff:3"), `key` what a chip's removal names ("count:debuff:3")."""
+
+    field: str
+    key: str
+    label: str
+
+
+@dataclass(frozen=True)
 class TeamView:
     """The team's panels: its slots, every champion the slot picker lists (by name), what
-    every team must bring (`wants` on offer, `wanted` the chosen ones, in that order), and the
-    gear on offer (`gear`), allowed (`gear_on`) and assumed."""
+    every team must bring (`wants` on offer, `wanted` the chosen ones, in that order; `counts`:
+    so many different debuffs or buffs), and the gear on offer (`gear`), allowed (`gear_on`)
+    and assumed."""
 
     slots: list[SlotView]
     choices: list[ChoiceView]
     wants: list[WantGroup]
     wanted: list[WantView]
+    counts: list[CountView]
     gear: list[GearGroup]
     gear_on: list[GearView]
     assumed: list[AssumedView]
@@ -164,6 +177,7 @@ def team_view(
         choices=[ChoiceView(choice_label(c)) for c in champions],
         wants=want_groups(offers.tags, ask.wanted, enemy, note),
         wanted=[want_view(tag, True, note) for tag in ask.wanted],
+        counts=[count_view(count) for count in ask.counts],
         gear=gear_groups(offers.gear, allowed),
         gear_on=[gear_view(g, True) for g in offers.gear if g.key in allowed],
         assumed=assumed_views(ask.loadout),
@@ -183,6 +197,11 @@ def slot_view(member: Member | None, pick: SlotPick) -> SlotView:
         suggested=not member.chosen,
         needed=member.needed,
     )
+
+
+def count_view(count: Distinct) -> CountView:
+    field = f"{count.side}:{count.count}"
+    return CountView(field, f"count:{field}", f"{count.count} different {count.side}s")
 
 
 def gear_groups(offered: list[Gear], allowed: set[str]) -> list[GearGroup]:

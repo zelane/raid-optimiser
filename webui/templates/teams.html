@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tile %}
+{% from "_team.html" import status_icon, score_pill, need_item, team_slots, wants_panel, gear_panel %}
+
+{# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
+   the wanted tag, count, gear or assumption keyed `without` left out. #}
+{% macro page_url(slots, extra="", without="") -%}
+  {%- set base = page.base -%}
+  /teams?base={{ base.kind }}{% if base.kind %}&crypt={% for c in base.crypts if c.selected %}{{ c.region }}{% endfor %}&difficulty={{ base.difficulty }}&stage={{ base.number }}{% endif %}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}{% endfor %}{{ extra }}
+{%- endmacro %}
+
+{# The page as it is, with the wanted tag, count, gear or assumption keyed `key` left out:
+   what a chip's × links to. #}
+{% macro without(key) -%}
+  {{ page_url(page.team.slots, '&run=true' if page.ran else '', key) }}
+{%- endmacro %}
+
+{% block title %}Team finder: Raid optimiser{% endblock %}
+{% block content %}
+  {% set base = page.base %}
+  {# One GET form for everything the search takes: the page's state is all in its URL. #}
+  <form method="get" action="/teams" class="chimera-page">
+    <header class="chimera-head">
+      <div class="chimera-title">
+        <h1>Team finder</h1>
+        <p class="lede">
+          Teams that bring what's asked: a Faction Wars stage's challenge, and whatever you
+          add (buffs, debuffs, effects, so many different ones). Judged on what their skills
+          bring and how far it can be counted on; how much of it (10+ Stuns) isn't, nor
+          damage, nor turn order.
+        </p>
+      </div>
+      <div class="tally" title="Needs the team shown meets">
+        <strong class="{{ 'cleared-all' if page.needs and page.met == page.needs else 'cleared-some' }}">{{ page.met }}<small>/{{ page.needs }}</small></strong>
+        <span class="caps">needs</span>
+        {{ score_pill(page.score, "Team score: how far it can count on what's asked") }}
+      </div>
+    </header>
+
+    <section class="panel finder-base">
+      <header class="panel-head">
+        <h2>Base needs <small class="muted">what the content asks</small></h2>
+      </header>
+      <div class="finder-base-pick">
+        <fieldset class="segmented" role="radiogroup" aria-label="Base needs">
+          <label><input type="radio" name="base" value="" {% if not base.kind %}checked{% endif %} onchange="this.form.submit()"> None</label>
+          <label><input type="radio" name="base" value="fw" {% if base.kind == 'fw' %}checked{% endif %} onchange="this.form.submit()"> Faction Wars</label>
+        </fieldset>
+        <a href="/chimera" class="caps">Chimera trials →</a>
+      </div>
+      {% if base.kind == "fw" %}
+        <input type="hidden" name="difficulty" value="{{ base.difficulty }}">
+        <div class="finder-fw">
+          <label><span class="caps">Crypt</span>
+            <select name="crypt" onchange="this.form.submit()">
+              {% for crypt in base.crypts %}<option value="{{ crypt.region }}"{% if crypt.selected %} selected{% endif %}>{{ crypt.name }}</option>{% endfor %}
+            </select>
+          </label>
+          <label><span class="caps">{{ base.difficulty }} stage</span>
+            <select name="stage" onchange="this.form.submit()">
+              {% for n in range(1, base.stages + 1) %}<option value="{{ n }}"{% if n == base.number %} selected{% endif %}>{{ n }}</option>{% endfor %}
+            </select>
+          </label>
+          {% if base.faction_url %}<img class="faction small" src="{{ base.faction_url }}" alt="" aria-hidden="true">{% endif %}
+          <span class="muted">Only {{ base.faction }} champions are searched.</span>
+        </div>
+        <p class="finder-challenge">
+          <span class="caps">Challenge</span>
+          {% if base.challenge %}
+            <strong>{{ base.challenge }}</strong>
+            {% if not base.checked %}<span class="badge">not checked</span> <small class="muted">it's about the fight, not what the team brings</small>{% endif %}
+          {% else %}
+            <span class="muted">none</span>
+          {% endif %}
+        </p>
+        {% if base.refused %}<p class="panel-note bad">The crypt doesn't admit {{ base.refused | join(", ") }}.</p>{% endif %}
+      {% endif %}
+    </section>
+
+    {{ team_slots(page.team, page_url([])) }}
+
+    <div class="chimera-bring">
+      {{ wants_panel(page.team, page.ran, without, "every team must, besides the base") }}
+
+      {{ gear_panel(page.team, page.ran, without) }}
+    </div>
+
+    <div class="panel chimera-run">
+      <label>
+        <span class="caps">Search from</span>
+        <select name="min_grade">
+          {% for grade in page.grades %}<option value="{{ grade }}" {% if grade == page.min_grade %}selected{% endif %}>Champions at {{ grade }}★ and up</option>{% endfor %}
+        </select>
+      </label>
+      {% if page.ran and page.asked %}<span class="run-note"><span class="dot" aria-hidden="true">●</span> Searched {{ page.candidates }} champions (the best copy of each)</span>{% endif %}
+      <button type="submit" name="run" value="true" class="cta">Find teams</button>
+    </div>
+
+    {% if page.ran %}
+      <section class="chimera-results">
+        <h2 class="section-title">Teams</h2>
+        {% if not page.asked %}
+          <p class="chimera-found">Nothing is asked yet: pick a challenge to read, or add something every team must bring.</p>
+        {% else %}
+          <p class="chimera-found">
+            {% if page.partial %}
+              No team brings it all: these bring the most.
+            {% elif page.found %}
+              {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }} teams bring it all{% if not page.complete %} (the search stops there, or after a second: put a champion in a slot to narrow it){% endif %}.
+              Each lists only the champions it needs; any champion can fill its other slots. Best scored first.
+            {% endif %}
+          </p>
+          <div class="chimera-options">
+            {% for option in page.options %}
+              <article class="chimera-option {{ 'shown' if option.number == page.shown }}" id="option-{{ option.number }}">
+                <header>
+                  <strong>Option {{ option.number }}</strong>
+                  <span class="option-scores">
+                    {{ score_pill(option.score, "Team score: how far it can count on what's asked") }}
+                    <strong class="{{ 'cleared-all' if option.met == page.needs else 'cleared-some' }}">{{ option.met }} / {{ page.needs }}</strong>
+                  </span>
+                </header>
+                <div class="chimera-option-members">
+                  {% for slot in option.slots %}
+                    {% if not slot.champion %}
+                      <span class="chimera-option-member free" title="Any champion"><span class="free-slot">any</span><span>Any champion</span></span>
+                    {% else %}
+                      <a href="/champions/{{ slot.champion.id }}" class="chimera-option-member {{ 'suggested' if slot.suggested }}" title="{{ slot.champion.name }}{{ ' (suggested)' if slot.suggested }}{{ ', not needed' if not slot.needed }}">
+                        {{ tile(slot.champion, "small") }}
+                        <span>{{ slot.champion.name }}</span>
+                      </a>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+                <footer>
+                  <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number) }}" role="button" class="secondary outline"{% if option.number == page.shown %} aria-current="true"{% endif %}>Show needs</a>
+                  <a href="{{ page_url(option.slots) }}" role="button">Use this team</a>
+                </footer>
+              </article>
+            {% else %}
+              <p>No team found: no champion at {{ page.min_grade }}★ or above adds anything.</p>
+            {% endfor %}
+          </div>
+          {% if page.more %}
+            <p class="chimera-more">
+              <a href="{{ page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1)) }}#option-{{ page.listed + 1 }}" role="button" class="secondary outline">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a>
+            </p>
+          {% endif %}
+        {% endif %}
+      </section>
+    {% endif %}
+  </form>
+
+  {% if page.needs %}
+    <section class="chimera-trials">
+      <h2 class="section-title">
+        Needs{% if page.shown %}: option {{ page.shown }}{% endif %}
+        <span class="badge {{ 'good' if page.met == page.needs else 'bad' }}">{{ page.met }} / {{ page.needs }} met</span>
+      </h2>
+      <div class="team-targets">
+        {% for title, needs in [("The challenge", page.base_needs), ("Also bringing", page.extras)] if needs %}
+          <section class="panel chimera-extras">
+            <header class="chimera-form-head">
+              <span class="form-glyph" aria-hidden="true">{{ "★" if loop.first and page.base_needs else "+" }}</span>
+              <h3>{{ title }}</h3>
+              {% set brought = needs | selectattr("met") | list | length %}
+              <span class="badge {{ 'good' if brought == needs | length else 'bad' }}">{{ brought }} / {{ needs | length }}</span>
+            </header>
+            <ul class="trial-needs extras-list">
+              {% for need in needs %}{{ need_item(need) }}{% endfor %}
+            </ul>
+          </section>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+  {% include "_finder.html" %}
+{% endblock %}
+{% block scripts %}<script src="{{ static_url('picker.js') }}"></script><script src="{{ static_url('finder.js') }}"></script>{% endblock %}

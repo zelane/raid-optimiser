@@ -24,6 +24,15 @@ from optimiser.account import faction_name
 from tools.static_decode import decode, newest
 
 FIXED_ONE = 2**32  # SharedModel Fixed is 32.32 fixed point
+
+# The effect kinds in an effect kind group the static data names by number, as the game's code
+# lists them (`EffectKindGroupExtensions..cctor`, its arrays' data in global-metadata.dat; read
+# for 11.90.1). Only what a block names: 12, BossImmunitiesEffects, the control debuffs, damage
+# over time, Decrease SPD, Heal Reduction and the instant effects bosses shrug off.
+EFFECT_KIND_GROUPS = {
+    12: (3004, 3001, 3003, 3002, 3015, 3019, 3006, 3017, 3025, 3027, 3028, 3032, 3033, 3034)
+    + (5009, 15001, 5004, 4008, 5001, 5007, 3007, 3014, 3103, 3005),
+}
 PRIMITIVES = {
     "int",
     "uint",
@@ -718,7 +727,7 @@ def or3(a, b):
     return None if a is None or b is None else False
 
 
-def build_enemies(data, skills):
+def build_enemies(data, skills, enums):
     """Every stage's enemy teams (types and base stats are in hero_types.json), the restrictions
     on the player's team, the stages' stat modifiers, which types are bosses, the enemies'
     skills (text and effects), the stages' battle quests (the stars: "Beat Stage", a
@@ -772,7 +781,9 @@ def build_enemies(data, skills):
         "areas": areas,
         "stages": stages,
         "bosses": bosses,
-        "skills": {str(i): build_enemy_skill(skills[i]) for i in sorted(skill_ids) if i in skills},
+        "skills": {
+            str(i): build_enemy_skill(skills[i], enums) for i in sorted(skill_ids) if i in skills
+        },
         "shield_caps": data["GameplayData"].get("SpecificShieldCapByArea") or {},
         "quests": {
             str(q["Id"]): q["Description"] for q in data["BattleQuestData"]["BattleQuestTypes"]
@@ -916,17 +927,17 @@ def slot_modifiers(m, wave):
     ]
 
 
-def build_enemy_skill(skill):
+def build_enemy_skill(skill, enums):
     return {
         "name": skill["Name"],
         "group": skill["Group"],
         "cooldown": skill["Cooldown"],
         "description": TAGS.sub("", skill["Description"] or "").replace("\r\n", "\n"),
-        "effects": [build_effect(e) for e in skill["Effects"] or []],
+        "effects": [build_effect(e, enums) for e in skill["Effects"] or []],
     }
 
 
-def build_effect(e):
+def build_effect(e, enums):
     statuses = (e.get("ApplyStatusEffectParams") or {}).get("StatusEffectInfos") or []
     effect = {
         "kind": e["KindId"],
@@ -938,8 +949,33 @@ def build_effect(e):
         "statuses": [{"type": s["TypeId"], "turns": s["Duration"]} for s in statuses] or None,
         "defence_modifier": (e.get("DamageParams") or {}).get("DefenceModifier") or None,
         "fixed": (e.get("DamageParams") or {}).get("IsFixed") or None,
+        "blocks": build_blocks(e.get("BlockEffectParams"), enums),
     }
     return {k: v for k, v in effect.items() if v is not None}
+
+
+def build_blocks(params, enums):
+    """What a block effect (`PassiveBlockEffect`) stops: effect kinds by name (its groups'
+    members, `EFFECT_KIND_GROUPS`, and those it names, less those it excludes), status effect
+    types by name, `all_but`: it stops everything but those; `unread_groups`: groups this
+    doesn't know the members of."""
+    if not params:
+        return None
+
+    groups = params.get("EffectKindGroups") or []
+    kinds = {k for g in groups for k in EFFECT_KIND_GROUPS.get(g, ())}
+    kinds |= set(params.get("EffectKindIds") or [])
+    kinds -= set(params.get("ExcludeEffectKinds") or [])
+    kind_names, status_names = enums["EffectKindId"], enums["StatusEffectTypeId"]
+    blocks = {
+        "kinds": sorted(kind_names.get(str(k), str(k)) for k in kinds),
+        "statuses": sorted(
+            status_names.get(str(t), str(t)) for t in params.get("EffectTypeIds") or []
+        ),
+        "all_but": bool(params.get("BlockAllExcludeSelected")),
+        "unread_groups": [g for g in groups if g not in EFFECT_KIND_GROUPS],
+    }
+    return {k: v for k, v in blocks.items() if v}
 
 
 def build_trial(challenge, skill, trial_ids):
@@ -1047,7 +1083,7 @@ def main(static_data: Path, schema_path: str, out_dir: str, full: bool) -> None:
     json.dump(gear, open(out / "gear.json", "w"), indent=1, ensure_ascii=False)
     glyphs = build_glyphs(data["BlackMarketData"])
     json.dump(glyphs, open(out / "glyphs.json", "w"), indent=1, ensure_ascii=False)
-    enemies = build_enemies(data, skills)
+    enemies = build_enemies(data, skills, schema["enums"])
     json.dump(enemies, open(out / "enemies.json", "w"), ensure_ascii=False)
     if full:
         json.dump(data, open(out / "static.json", "w"), ensure_ascii=False)

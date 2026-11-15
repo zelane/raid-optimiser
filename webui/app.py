@@ -6,7 +6,7 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `index`, `champion_list`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_weight`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `targets`, `finder`, `info`, `sync`: the routes
+  `chimera`, `teams`, `targets`, `finder`, `info`, `sync`: the routes
 - `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `optimiser_url`: the nav's Optimiser link: the champion last solved for, else the list
@@ -25,6 +25,7 @@ from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.chimera.tags import NEVER_LANDS
+from optimiser.factionwars import crypts
 from optimiser.reserve import reservations
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
@@ -51,6 +52,7 @@ from webui.forms.settings import (
 )
 from webui.forms.targets import TargetQuery, parse_target_query
 from webui.forms.team import Offers
+from webui.forms.teams import parse_teams
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
@@ -61,6 +63,7 @@ from webui.service import empower as empower_pages
 from webui.service import finder as finder_pages
 from webui.service import info as info_pages
 from webui.service import targets as target_pages
+from webui.service import teams as teams_pages
 
 HERE = Path(__file__).resolve().parent
 
@@ -274,6 +277,26 @@ def chimera(request: Request):
             page = chimera_pages.chimera_page(account, enemies, asked, offers, rotation)
 
     return templates.TemplateResponse(request, "chimera.html", {"page": page})
+
+
+@app.get("/teams", response_class=HTMLResponse)
+def teams(request: Request):
+    """The team finder: a Faction Wars stage's challenge (or nothing) and what's asked besides."""
+    account = current.current_account()
+    enemies = current.current_enemies()
+    sets, relics = current.current_effect_sources()
+    anywhere = frozenset()  # what's fought here isn't immune to any debuff in particular
+    offers = Offers(wantable(account, anywhere), gear_options(account, sets, relics, anywhere))
+    query = {name: request.query_params.getlist(name) for name in request.query_params}
+    known = crypts(enemies)
+
+    match parse_teams(query, account, offers, known):
+        case FormErrors(messages=messages):
+            raise HTTPException(400, "; ".join(messages))
+        case asked:
+            page = teams_pages.teams_page(account, enemies, known, asked, offers)
+
+    return templates.TemplateResponse(request, "teams.html", {"page": page})
 
 
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)

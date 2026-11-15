@@ -85,7 +85,8 @@
 {% endmacro %}
 
 {# What every team must bring: the chosen ones as removable chips (kept as hidden fields), a
-   searchable picker adding one (picker.js). `subtitle`: what it's besides. #}
+   searchable picker adding one (picker.js), and a count (so many different debuffs or buffs)
+   to add. `subtitle`: what it's besides. #}
 {% macro wants_panel(team, ran, without, subtitle) %}
       <section class="panel">
         <header class="panel-head">
@@ -95,13 +96,18 @@
               <a class="chip on" href="{{ without(want.key) }}" title="Stop asking for {{ want.label }}">
                 {{ status_icon(want.icon_url, want.label, "small") }}{{ want.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
-            {% else %}
-              <small class="muted">Nothing extra yet</small>
             {% endfor %}
+            {% for count in team.counts %}
+              <a class="chip on counted" href="{{ without(count.key) }}" title="Stop asking for {{ count.label }}">
+                <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}<span class="chip-remove" aria-hidden="true">×</span>
+              </a>
+            {% endfor %}
+            {% if not team.wanted and not team.counts %}<small class="muted">Nothing extra yet</small>{% endif %}
           </div>
         </header>
         {% if ran %}<input type="hidden" name="run" value="true">{% endif %}
         {% for want in team.wanted %}<input type="hidden" name="want" value="{{ want.key }}">{% endfor %}
+        {% for count in team.counts %}<input type="hidden" name="count" value="{{ count.field }}">{% endfor %}
         <div class="picker" data-picker="want">
           <input type="search" class="picker-search" role="combobox" aria-expanded="false" aria-controls="want-options" aria-autocomplete="list"
                  placeholder="Add a buff, debuff or effect…" aria-label="Add something to bring" autocomplete="off">
@@ -122,6 +128,15 @@
             {% endfor %}
             <p class="picker-empty muted" hidden>Nothing matches</p>
           </div>
+        </div>
+        <div class="count-form">
+          <span class="caps">Or so many different</span>
+          <select name="count_side" aria-label="Debuffs or buffs">
+            <option value="debuff">debuffs</option>
+            <option value="buff">buffs</option>
+          </select>
+          <input type="number" name="count_n" min="1" max="10" placeholder="3" aria-label="How many">
+          <button type="submit" name="run" value="{{ 'true' if ran else 'false' }}" class="secondary outline">Add</button>
         </div>
       </section>
 {% endmacro %}

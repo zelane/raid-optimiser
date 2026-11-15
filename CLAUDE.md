@@ -55,6 +55,11 @@ the game itself.
   whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
   `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
   `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
+  Enemy skills' block effects (`PassiveBlockEffect`) carry `blocks`: the effect kinds they stop,
+  their groups resolved through `static_export.EFFECT_KIND_GROUPS` (12, BossImmunitiesEffects,
+  read from the game's code: `EffectKindGroupExtensions..cctor`'s arrays in global-metadata.dat;
+  recheck after a game update). Not read yet: it's every boss's immunities (the Chimera's agree
+  with `chimera.tags` but for Rage, which that list lacks).
 - `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
   `tools/check_levels.py` checks its table is still in the game's metadata (`just static`)
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
@@ -74,8 +79,10 @@ the game itself.
 - Teams (`optimiser/teams/`): finding a team by what its champions bring, against `Goals`:
   objectives (each its needs, a `Target` they're met against: a name for labels and the
   debuffs it's immune to, and `requires`: an objective met first), extras every team brings
-  (against `extras_target`) and a team `size`. Judged on what champions can place and do, not
-  damage, nor turn order, nor ACC against RES. The Chimera page is its one user so far.
+  (one of some tags, or so many different debuffs or buffs; against `extras_target`) and a
+  team `size`. Judged on what champions can place and do, not damage, nor turn order, nor ACC
+  against RES. `find` is the entry point: `check_slots`, `find_teams` (from a pool of
+  champions: `kits.candidates`, filtered by the page) → `Found`.
   - `tags`: `Tag` (debuff/buff status kind with strengths merged by `status_kind`, a skill
     effect from the curated `EFFECT_LABELS`, or a `Mechanic`), `Target`; `tag_label(tag,
     enemy)` ("Decrease DEF on the Chimera").
@@ -110,6 +117,15 @@ the game itself.
     within `SEARCH_BUDGET` (20,000 teams or 1 s: for the Chimera with nothing pinned there are
     hundreds of thousands, mostly from the "N different" trials); if none meets them all,
     `partial_teams` (HiGHS) gives the best partial ones.
+- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `teams.html`): base needs
+  (none, or a Faction Wars stage's challenge: `base=fw&crypt=<region>&stage=<n>`, linked from
+  the Info page's stages; the Chimera's trials are the Chimera page) plus what's asked besides
+  (tags, counts), every team of five meeting them all. `optimiser/factionwars.py`: crypts
+  (`crypts`, the faction each admits: only its champions are searched) and a stage's challenge
+  (its last quest) as needs, from its text (`QUEST_NEEDS`: "Place 10+ Stun" asks for a Stun;
+  counts aren't modelled, reliability is), against `ENEMIES` (no immunities). Fight quests
+  (turns, losses, weak hits, damage) and make-up ones (3 Epic champions) aren't checked: the
+  page says so. Hex is the `Mark` status, Perfect Veil `Invisible2`, Bomb `TimeBomb`.
 - Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
   column (Wing/Tail/Paw: where this raid's mythical materials are; the game doesn't name its
   columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
@@ -122,8 +138,8 @@ the game itself.
     checked against the trial's own status list (`check_needs`; the page warns on a
     mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
     count instances (`Distinct.instances`).
-  - `plan`: `check_lineup` (the slots alone) and `fill_lineup`, from a `Brief` (column,
-    wanted, loadout); `column_goals` makes the column's trials objectives (keyed by the
+  - `plan`: `check_lineup` (the slots alone) and `fill_lineup` (`teams.find`), from a `Brief`
+    (column, wanted, loadout, counts); `column_goals` makes the column's trials objectives (keyed by the
     trial's skill, waiting on the one above), and `Plan.trials` maps them back for the board.
   - `rotation`: which trial gives what this raid, read from the game's code
     (`ChimeraExtensions.GetChimeraChallengeRewardWithOffset`, `GetPrizeOffset`): a tier's 9
@@ -140,9 +156,11 @@ the game itself.
     the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
     State is all in the URL. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
     `tools/extract_assets.py`.
-- Team finder parts, shared by pages that find teams (the Chimera page so far): the slots,
-  "Also bring" and gear, relics & assumptions panels and each need's row. `forms/team.py`
-  (`parse_team` → `TeamAsk`: picks, wanted, loadout; `Offers`), `service/team.py` (`TeamView`,
+- Team finder parts, shared by pages that find teams (the team finder and the Chimera page):
+  the slots, "Also bring" (with counts: `count=debuff:3`, so many different) and gear, relics
+  & assumptions panels and each need's row. `forms/team.py` (`parse_team` → `TeamAsk`: picks,
+  wanted, loadout, counts; `Offers`; a search's shape: `Fill`, `parse_fill`, `GRADES`),
+  `service/team.py` (`TeamView`,
   `team_view(…, enemy, note)`: the want groups name the enemy, `note` says where a tag only
   lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `wants_panel`,
   `gear_panel`, `need_item`, `status_icon`, `score_pill`; a chip's × links to the page's
@@ -207,9 +225,10 @@ the game itself.
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
-- Nav (`base.html` `sections`): Optimiser, Accessories, Chimera, Info; a section with several pages
+- Nav (`base.html` `sections`): Optimiser, Accessories, Teams, Info; a section with several pages
   shows them as tabs under the bar. Optimiser: the champion list, the champion last solved for
-  (`store.latest_champion`), Config. Info: Faction Wars (`/info`), Empower (`/empower`).
+  (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera. Info: Faction Wars
+  (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
