@@ -121,7 +121,7 @@ function removeRule(rule: string) {
       </p>
       <div class="stack">
         <div v-if="page.reserve.rules.length" class="table-well">
-          <table>
+          <table class="reserve-rules">
             <thead>
               <tr>
                 <th>Reserves</th>
@@ -176,8 +176,12 @@ function removeRule(rule: string) {
 </template>
 
 <style scoped>
-/* A glyph assumed is outlined in brass. */
+/* A glyph assumed is outlined in brass. The reserve rules' table is only as wide as it needs. */
 table.glyphs select.is-planned {
   border-color: var(--primary);
+}
+
+table.reserve-rules {
+  width: auto;
 }
 </style>

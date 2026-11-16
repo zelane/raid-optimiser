@@ -305,6 +305,7 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
                 Priority
                 <input
                   v-model="fields.rank_DAMAGE"
+                  class="rank"
                   type="number"
                   min="1"
                   max="9"
@@ -598,7 +599,7 @@ table.limits {
   input {
     width: 4.75rem;
 
-    &[name="rank_DAMAGE"] {
+    &.rank {
       width: 3rem;
     }
   }
