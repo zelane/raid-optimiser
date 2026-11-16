@@ -15,20 +15,22 @@
   <link rel="preload" as="image" href="/static/assets/frames/{{ rarity }}.png">
   {%- endfor %}
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js"></script>
+  {% block head %}{% endblock %}
 </head>
 <body>
   {%- set here = request.url.path %}
   {#- The menu's sections: (label, link, its tabs as (link, label, open now)). A section
       with tabs shows them in the bar's second row on its pages. Optimiser: the champion
       list, the champion last solved for (their optimiser), the settings solves use; Info:
-      the account's progress; Teams: the team finder, and the Chimera's trials. #}
+      the account's progress; Teams: the team finder, the Chimera's trials, a team's gear. #}
   {%- set sections = [
         ("Optimiser", "/", [("/", "Champions", here == "/"),
                             (optimiser_url(), "Optimiser", here.startswith("/champions/")),
                             ("/config", "Config", here == "/config")]),
         ("Accessories", "/accessories", [("/accessories", "Accessories", here.startswith("/accessories"))]),
         ("Teams", "/teams", [("/teams", "Finder", here.startswith("/teams")),
-                             ("/chimera", "Chimera", here.startswith("/chimera"))]),
+                             ("/chimera", "Chimera", here.startswith("/chimera")),
+                             ("/team-gear", "Gear", here.startswith("/team-gear"))]),
         ("Info", "/info", [("/info", "Faction Wars", here == "/info"),
                            ("/empower", "Empower", here.startswith("/empower"))]),
       ] %}

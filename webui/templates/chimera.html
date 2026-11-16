@@ -1,32 +1,19 @@
 {% extends "base.html" %}
+{% from "_macros.html" import page_head, tally %}
 {% from "_team.html" import score_pill, need_item, team_slots, bring_panels, run_bar, option_card, more_link, needs_panel %}
 
-{# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
-   the wanted tag, gear or assumption keyed `without` left out. #}
-{% macro page_url(slots, extra="", without="") -%}
-  /chimera?column={{ page.column }}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}&relic={{ slot.relic | urlencode }}{% endfor %}{{ extra }}
-{%- endmacro %}
-
-{# The page as it is, with the wanted tag, gear or assumption keyed `key` left out: what a
-   chip's × links to. #}
-{% macro without(key) -%}
-  {{ page_url(page.team.slots, '&run=true' if page.ran else '', key) }}
-{%- endmacro %}
-
 {% block title %}Chimera trials: Raid optimiser{% endblock %}
+{% block head %}<script src="{{ static_url('keep.js') }}" data-keep="chimera" data-swap="#page"></script>{% endblock %}
 {% block content %}
-  {# One GET form for everything the search takes: the page's state is all in its URL. The
+  {# One GET form for everything the search takes: the page's state rides in its query (kept in the browser by keep.js). The
      trial board, under it, only shows. #}
+  <div id="page" class="page-swap" style="display: contents">
   <form method="get" action="/chimera" class="stack" style="--space: var(--space-2xl)">
-    <header class="page-head">
-      <div>
-        <h1>Chimera trials</h1>
-        <p class="lede">
-          Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the
-          buffs, debuffs and effects their skills bring against each trial's rules and each form's
-          immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
-        </p>
-      </div>
+    {% call(part) page_head("Chimera trials") %}{% if part == "lede" %}
+      Teams that clear a whole column of Ultra Nightmare trials in one fight, judged on the
+      buffs, debuffs and effects their skills bring against each trial's rules and each form's
+      immunities. Damage, skill chances, turn order and gear (bar the Toxic set) aren't checked.
+    {% else %}
       <div class="stack" style="--space: var(--space-xs); --align: flex-start">
         <span class="caps">Mythical materials in</span>
         <fieldset class="segmented" role="radiogroup" aria-label="Rotation">
@@ -39,12 +26,10 @@
         </fieldset>
         <small class="note">{% for column in page.columns if column.part == page.column %}Easy Ram: {{ column.hint }}{% endfor %}</small>
       </div>
-      <div class="tally" title="Trials the team shown clears">
-        <strong class="{{ 'up' if page.cleared == 9 else 'down' }}">{{ page.cleared }}<small>/9</small></strong>
-        <span class="caps">trials</span>
+      {% call tally(page.cleared, 9, "trials", "up" if page.cleared == 9 else "down", "Trials the team shown clears") %}
         {{ score_pill(page.score, "Team score: how far it can count on what the trials need") }}
-      </div>
-    </header>
+      {% endcall %}
+    {% endif %}{% endcall %}
 
     {% if page.problems %}
       <article class="alert">
@@ -53,8 +38,8 @@
       </article>
     {% endif %}
 
-    {{ team_slots(page.team, page_url([])) }}
-    {{ bring_panels(page.team, page.ran, without, "every team must, besides the trials") }}
+    {{ team_slots(page.team, page.links.empty) }}
+    {{ bring_panels(page.team, page.ran, page.links, "every team must, besides the trials") }}
     {{ run_bar(page, page.ran) }}
 
     {% if page.ran %}
@@ -71,9 +56,7 @@
         <div class="grid" style="--min: 19rem; --space: var(--space-l); --repeat: auto-fill">
           {% for option in page.options %}
             {% call option_card(option, option.number == page.shown, option.cleared, 9,
-                                "Team score: how far it can count on what the trials need", "Show trials",
-                                page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number),
-                                page_url(option.slots)) %}
+                                "Team score: how far it can count on what the trials need", "Show trials") %}
               <table class="glance" aria-label="Trials cleared">
                 {% for form, met in option.glance %}
                   <tr><th scope="row">{{ form }}</th>{% for hit in met %}<td class="{{ 'up' if hit else 'down' }}" title="{{ ['Easy', 'Normal', 'Hard'][loop.index0] }}">{{ '✓' if hit else '✗' }}</td>{% endfor %}</tr>
@@ -84,7 +67,7 @@
             <p>No team found: no champion at {{ page.min_grade }}★ or above adds anything.</p>
           {% endfor %}
         </div>
-        {{ more_link(page, page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1))) }}
+        {{ more_link(page) }}
       </section>
     {% endif %}
   </form>
@@ -122,6 +105,7 @@
       {% if page.extras %}{{ needs_panel("Also bringing", page.extras) }}{% endif %}
     </div>
   </section>
+  </div>
   {% include "_finder.html" %}
 {% endblock %}
 {% block scripts %}<script src="{{ static_url('picker.js') }}"></script><script src="{{ static_url('finder.js') }}"></script>{% endblock %}

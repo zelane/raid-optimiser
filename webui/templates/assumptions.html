@@ -1,12 +1,8 @@
 {% extends "base.html" %}
+{% from "_macros.html" import page_head %}
 {% block title %}Config: Raid optimiser{% endblock %}
 {% block content %}
-  <header class="page-head">
-    <div>
-      <h1>Config</h1>
-      <p class="lede">What every solve assumes and leaves out, for all champions.</p>
-    </div>
-  </header>
+  {% call(part) page_head("Config") %}{% if part == "lede" %}What every solve assumes and leaves out, for all champions.{% endif %}{% endcall %}
   {# Three panels: what's assumed done, the glyphs assumed, the gear kept back. #}
   <div class="grid" style="--min: 22rem; --align: start">
     <section class="panel stack" style="--space: var(--space-m)">

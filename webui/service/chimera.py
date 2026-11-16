@@ -31,8 +31,11 @@ from webui.forms.chimera import ChimeraRequest
 from webui.forms.team import FIRST_SHOWN, GRADES, Fill, Offers
 from webui.service.team import (
     NeedView,
+    PageUrl,
     SlotView,
+    TeamLinks,
     TeamView,
+    listing,
     need_view,
     percent,
     slot_view,
@@ -86,6 +89,8 @@ class OptionView:
     cleared: int
     score: int  # % (`chimera.team_score`)
     glance: list[tuple[str, list[bool]]]  # form -> met, by level
+    show_url: str  # the page showing its trials
+    use_url: str  # the page with it in the slots
 
 
 @dataclass(frozen=True)
@@ -109,6 +114,7 @@ class ChimeraPage:
     score: int  # % of what the trials show (`chimera.team_score`)
     rows: list[FormRow]
     problems: list[str]  # where the trial needs disagree with the game's data
+    links: TeamLinks
 
 
 def chimera_page(
@@ -135,29 +141,36 @@ def chimera_page(
 
     shown = option if 1 <= option <= len(plan.options) else (1 if plan.options else None)
     lineup = plan.options[shown - 1] if shown else plan.lineup
+    team = team_view(account, plan.lineup.slots, ask, offers, CHIMERA, form_note)
+    base = (("column", request.column), ("min_grade", str(request.min_grade)))
+    url = PageUrl("/chimera", base, team)
+    shown_listed = len(plan.options)
+    more = min(listed + MORE, plan.found) if plan.found > listed else 0
 
     return ChimeraPage(
         column=request.column,
         columns=column_views(enemies, rotation),
         min_grade=request.min_grade,
         grades=GRADES,
-        team=team_view(account, plan.lineup.slots, ask, offers, CHIMERA, form_note),
+        team=team,
         extras=[need_view(need) for need in lineup.extras],
         ran=request.fill is not None,
         candidates=plan.candidates,
         options=[
-            option_view(number, team, plan.trials) for number, team in enumerate(plan.options, 1)
+            option_view(number, option_team, plan.trials, url, shown_listed)
+            for number, option_team in enumerate(plan.options, 1)
         ],
         found=plan.found,
         complete=plan.complete,
         partial=plan.partial,
-        listed=len(plan.options),
-        more=min(listed + MORE, plan.found) if plan.found > listed else 0,
+        listed=shown_listed,
+        more=more,
         shown=shown,
         cleared=lineup.cleared,
         score=percent(lineup.score),
         rows=form_rows(lineup, plan.trials),
         problems=list(plan.problems),
+        links=url.links(request.fill is not None, listing(more, shown or 1) if more else None),
     )
 
 
@@ -189,14 +202,20 @@ def form_note(tag: Tag) -> str | None:
     return f"{' or '.join(forms)} form only" if forms else None
 
 
-def option_view(number: int, team: Lineup, trials: dict[int, Trial]) -> OptionView:
+def option_view(
+    number: int, team: Lineup, trials: dict[int, Trial], url: PageUrl, listed: int
+) -> OptionView:
+    """`url`: the page's, `listed` the options it lists (kept when it shows this one)."""
     rows = form_rows(team, trials)
+    slots = [slot_view(member, None) for member in team.slots]
     return OptionView(
         number=number,
-        slots=[slot_view(member, None) for member in team.slots],
+        slots=slots,
         cleared=team.cleared,
         score=percent(team.score),
         glance=[(row.form, [trial.met for trial in row.trials]) for row in rows],
+        show_url=url.to(url.team.slots, listing(listed, number)),
+        use_url=url.to(slots),
     )
 
 

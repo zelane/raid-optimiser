@@ -69,8 +69,11 @@ the game itself.
   and, given a raider oracle table, compares results. `tools/oracle_request.py` /
   `tools/oracle_import.py` drive the oracle (below), now for checking only.
 - `optimiser/enemies.py`: the enemy store (`data/game/enemies.json`, types' base stats from
-  `hero_types.json`): every stage's formations, team restrictions (every champion must match;
-  `MinCount`/`MaxCount` are the team size), stat modifiers (stage-wide and per slot: a relative
+  `hero_types.json`): every stage's formations, team restrictions (`team_restriction`: one
+  condition holds every champion, as `HeroesSquadContext.ConditionForSlot` reads it; several
+  are Cursed City's, one active per stage by the account's `ActiveConditionByStageId`, not
+  read: `Rotating`; a condition's `grade` is the fewest stars, its `race` unchecked; Faction
+  Wars stages list none, their crypt's faction is the restriction, from the region id), stat modifiers (stage-wide and per slot: a relative
   `value` multiplies base by 1 + value, checked against the Chimera's listed HP; slot modifiers
   give UNM clan boss its 190 SPD / 225 RES / 225 ACC; a stage modifier reaches a wave's bosses
   if `boss_only`, else its other enemies, never both: `BossOnly == heroType.IsBoss`, the type
@@ -167,8 +170,28 @@ the game itself.
     finder, or part of a name in the URL), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
     assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
     the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
-    State is all in the URL. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
+    State rides in the URL, kept in the browser (`static/keep.js`). Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
     `tools/extract_assets.py`.
+- Team gear (`/team-gear`, `webui/service/team_gear.py`, `forms/team_gear.py`,
+  `team_gear.html`): up to five champions (the team slots) geared at once against the target
+  picker's enemy, each a compact row: up to two sets, SPD/ACC/C.RATE minimums and one goal
+  (a stat, or a skill's damage against the target's DEF). A minimum left out of the URL takes
+  its default: ACC `accuracy.accuracy_for_floor` (RES + 64: resisted within 0.1 points of the
+  3 % floor) for a champion who places debuffs (`kits`), C.RATE 100 % for one ranking damage;
+  `res` carries the RES those came from, so ACC still at its default follows a new target.
+  RES has no default (near the cap is the enemy's ACC + 247, `resistance_for_cap`: shown as
+  the field's placeholder). Each ACC/RES field and build shows its resist chances. State rides in the URL, kept in the browser by `static/keep.js` (not `run`); solved only on `run`; a build per champion with the
+  champion page's Equip/Preview (`_build.html`'s `build_detail`). `solve.find_team_builds`:
+  slot order is priority, each champion's best build alone from what the earlier ones left,
+  kept if the rest still meet their limits together (one model, minimums only), else the
+  next best, `LEAVING_TRIES` in all, then that step solved with the rest in one model. One
+  model ranking every goal in turn gave the same builds within 0.5 % but took minutes (the
+  optimality proofs); this takes ~15-20 s for five with damage. A team's own gear counts as
+  each member's; pieces teammates wear stay wearable. No team: `Unmet` (who can't alone,
+  `Shortfall`s) or `Clash`. The target stage's restriction holds the champion finder to what
+  it admits (`finder_only`: `service.finder.OnlyView`, the dialog's `only_*` fields) and
+  flags slotted champions it doesn't. Linking a found team in from `/teams` or `/chimera` is
+  still to do.
 - Team finder parts, shared by pages that find teams (the team finder and the Chimera page):
   the slots (each a `relic` field: empty for what the champion wears now, "none", or a relic
   id; the dropdown lists each owned relic type's best copy; a new champion starts from what's
@@ -182,9 +205,18 @@ the game itself.
   lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `bring_panels`
   (`wants_panel`, `gear_panel`), `run_bar`, `option_card` (a `call` block adds the Chimera's
   glance), `more_link`, `needs_panel` (an accent panel of needs; a `call` block for the
-  Chimera's trial rows), `need_item`, `status_icon`, `score_pill`; a chip's × links to the
-  page's `without(key)` macro, passed in) and `static/picker.js` (a search over what isn't
+  Chimera's trial rows), `need_item`, `status_icon`, `score_pill`; a chip's × links to
+  `links.without[key]`) and `static/picker.js` (a search over what isn't
   chosen, grouped by kind; a pick adds a field and reloads, showing it as a removable chip).
+  Their state rides in the query (the server reads only that), and `static/keep.js` keeps
+  it in localStorage per page: a query is saved (less `data-drop` fields) and cleared from
+  the address bar, a bare visit goes to the saved one, a `data-forget` link forgets it. Its
+  forms and same-page links inside `data-swap` (`#page`, a `page-swap`: all but the finder
+  dialog) are fetched with htmx and only that part swapped, no page load; scripts set up on
+  its content use `htmx.onLoad` (`picker.js`) and send forms with `requestSubmit()`.
+  Their URLs are built in Python, not the templates: `service.team.PageUrl` (the page's path,
+  its own fields and the team's) gives each option's `show_url`/`use_url` and the page's
+  `TeamLinks` (`empty`, `without` per chip, `more`).
   Both pages are those macros on the layout primitives; their CSS is the parts' own look
   (`team-slot`, `team-option`, `accent-panel` with `--accent`, `trial`). Icons:
   `statuses/` (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g.
@@ -261,7 +293,7 @@ the game itself.
 - Nav (`base.html` `sections`): Optimiser, Accessories, Teams, Info; a section with several pages
   shows them as tabs in a band under the bar (`subbar`), unless the page fills it itself (its
   `subnav` block: Accessories' steps). Optimiser: the champion list, the champion last solved for
-  (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera. Info: Faction Wars
+  (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera, Gear (`/team-gear`). Info: Faction Wars
   (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
@@ -282,8 +314,9 @@ the game itself.
   `static/target.js`, route `/targets`): a reusable component, top of the champion page. Zone
   (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
   Grim Forest, Cursed City, co-op Demon Lord, Campaign) → group (region; shared names get what
-  tells their ids apart) → difficulty → stage, then one enemy of the last wave (boss, else most
-  HP). htmx re-renders it on change (`HX-Trigger-Name`: lower levels reset); a user's pick fires
+  tells their ids apart) → difficulty → stage → wave (the last by default; its select at the
+  right of the enemy's name), then one of its enemies (boss, else most HP). htmx re-renders it on change (`HX-Trigger-Name`: lower levels reset; `for_form`, the
+  form its `target` field belongs to, rides along so a re-render keeps it); a user's pick fires
   `target:picked` (the champion page sets `enemy_def`); its hidden `target`
   ("stage:wave:slot", `form="request"`) is saved with runs and restored quietly. The panel dims
   when `enemy_def` no longer matches it.
@@ -331,8 +364,15 @@ the game itself.
   `danger` (selling), `champion` (`_macros.champion(c, size, name, banner, card, href,
   extra, attrs)`: every listed champion, tile and name as one link, a `call` block's extras
   under it; `card`, `small`, `suggested`; its `tile` carries the rarity's crest, scaled by
-  `--tile-width`) in a `champion-grid`, `gear-pair` (`gear-card` `candidate`/`worn` over
-  the optimiser's `piece` card), `meter`; in tables, `num` cells. Heads' own margins are
+  `--tile-width`, and draws any view with a name, rarity and portrait: the target picker's
+  enemies have no level or stars) in a `champion-grid`, `portrait` (round, rimmed in the
+  rarity: who brings a need, who wears a piece), `stars` (one macro: the game's star art,
+  plain ★, or so many out of a total), `page_head` (a `call(part)` block gives its "lede"
+  and "aside") and `tally`, `gear-pair` (`gear-card` `candidate`/`worn` over
+  the optimiser's `piece` card). A piece is one view everywhere, `service.results.PieceView`
+  (`piece_view(artifact, account, champion=None)`: through a champion's eyes, or nobody's);
+  an accessory's `AccessoryRow` is that plus its scores. Drawn as a card (`piece`) or a list
+  row's cells (`piece_cells`), both with `piece_art`, `meter`; in tables, `num` cells. Heads' own margins are
   zero-specificity (`:where`), so a primitive's gap wins. Build pages from those, the
   primitives and the tokens; `/palette` shows them all.
 
@@ -427,6 +467,16 @@ Anaxia's in-game stats matched exactly.
   state (`TRG_HP`, counts) isn't supported.
 - `DamageModifierFromStats` applies dealt-damage substats (PvP/boss/dungeon), not modelled yet.
 
+## Resist (read from `EffectManager.IsResisted` / `TryResist`)
+
+- `optimiser/accuracy.py`. d = target RES − caster ACC (`ApplyContext.get_Accuracy/
+  get_Resistance`: stat + per-application modifier, at least 0; RES × (1 − the skill's
+  `IgnoreResistanceModifier`) first). Resist chance: d < 30: 0.03 + 0.27 e^(6 (d/100 − 0.3));
+  d ≥ 30: 0.30 + 0.67 (1 − e^(−3 (d/100 − 0.3))); resisted when a random Fixed ≤ it. So 3 %
+  floor, 97 % cap, 7.5 % at ACC = RES; no breakpoint, the floor is only approached. Rolled
+  apart from the skill's own chance. Within 0.1 points: ACC ≥ RES + 64 (floor), RES ≥ ACC +
+  247 (cap).
+
 ## Solver
 
 MILP in HiGHS (`highspy`). A binary per wearable piece (faction, open slot: `slot_unlocked`, the game's
@@ -474,8 +524,10 @@ data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.c
 
 Portraits are named by type id with ascension 0 (`9990`); enemies' (bosses, Hydra heads, from
 `HeroAvatars_Bosses`/`HeroAvatarsHydra`) by full type id, via their type's `avatar`. Piece art `<set id>_<slot>`, set
-icons by set id. Affinity icons by lower-case affinity, faction banners by display name
-(`account.FACTION_NAMES`: Samurai → Shadowkin, Olympians → Argonites), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
+icons by set id. Affinity icons by lower-case affinity, faction banners by faction key (`account.faction_name`: the game's internal name, but
+Samurai → Shadowkin, Olympians → Argonites, which the game's tables, stage conditions and
+crypts still use; champions, pieces and relics carry the key; `faction_label`, the
+`faction_label` Jinja filter, is what's shown: "Dark Elves", "Lizardmen"), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
 portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only
 set-less accessories use `<faction>_<slot>`. Old sprite names mapped by the user: Berserker = Crit
 Damage, Healing = Regeneration, Rage = Killstroke, Stalwart2 = Defiant, Taunting = Provoke,

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import page_head %}
 {% block title %}Accessories: Raid optimiser{% endblock %}
 {% block subnav %}
     <nav class="container tabs" aria-label="Steps">
@@ -23,9 +24,7 @@
     </nav>
 {% endblock %}
 {% block content %}
-  <header class="page-head">
-    <h1>Accessories</h1>
-  </header>
+  {{ page_head("Accessories") }}
 
   {% if page.tab == "swaps" %}
     {% from "_accessory.html" import gear_card %}
@@ -50,9 +49,9 @@
             <div class="stack">
               {% for swap in group.swaps %}
                 <div class="gear-pair">
-                  {{ gear_card(swap.better, swap.better_piece, group.champion, "candidate", "Equip · " ~ ("in mailbox" if swap.better.where == "mailbox" else "loose"), swap.gain, "up") }}
+                  {{ gear_card(swap.better, group.champion, "candidate", "Equip · " ~ ("in mailbox" if swap.better.where == "mailbox" else "loose"), swap.gain, "up") }}
                   <span class="gear-pair-arrow" aria-hidden="true">›</span>
-                  {{ gear_card(swap.worn, swap.worn_piece, group.champion, "worn", "In place of", "then sell" if swap.then_sell else "", "down") }}
+                  {{ gear_card(swap.worn, group.champion, "worn", "In place of", "then sell" if swap.then_sell else "", "down") }}
                 </div>
               {% endfor %}
             </div>

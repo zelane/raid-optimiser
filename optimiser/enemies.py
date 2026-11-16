@@ -12,9 +12,11 @@ trials, reward lists and raid timing, and the areas' shield caps.
   boss modes' tables
 - `Enemies`: all of it
 - `CHIMERA_FORMS`: the Chimera's forms, in its type's order
+- `FACTION_WARS`, `CRYPT`: Faction Wars' area, and its crypts' region ids
 - `load_enemies`: the loader
 - `enemy_stats`: an enemy's stats in a stage
 - `modifier_applies`, `is_boss`: what the stats depend on
+- `Rotating`, `team_restriction`: what a stage holds every champion to
 - `quest_text`: a battle quest's text with its parameter
 - `parse_stage`, `parse_placement`, `parse_modifier`, `parse_restriction`, `parse_type`,
   `parse_skill`, `parse_area`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's
@@ -24,8 +26,11 @@ trials, reward lists and raid timing, and the areas' shield caps.
 from dataclasses import dataclass
 from pathlib import Path
 
-from optimiser.account import STAT_NAMES, Stat, Stats, read_json
+from optimiser.account import STAT_NAMES, Champion, Stat, Stats, faction_name, read_json
 from optimiser.levels import base_stats
+
+FACTION_WARS = "Fractions"  # the area, whose regions are crypts
+CRYPT = "Fraction_"  # a crypt's region id, before its faction
 
 # By their skills (Almighty Chimera, Ram, Lion, Viper); the trials and sequence name them so.
 CHIMERA_FORMS = ("Ultimate", "Ram", "Lion", "Snake")
@@ -45,13 +50,35 @@ class Modifier:
 
 @dataclass(frozen=True)
 class Restriction:
-    """Which champions a stage admits: every one on the team must match each listed field
-    (an empty tuple admits any)."""
+    """Which champions a stage's condition admits: each listed field must match (an empty
+    tuple admits any; factions by key, `account.faction_name`). A stage with one condition
+    holds every champion to it; several are alternatives, one active at a time
+    (`team_restriction`). `race` (Telarians…) isn't on the account's champions, so `admits`
+    can't check it."""
 
     factions: tuple[str, ...]
     roles: tuple[str, ...]
     rarities: tuple[str, ...]
     affinities: tuple[str, ...]
+    grade: int | None = None  # the fewest stars
+    race: str | None = None
+
+    def admits(self, champion: Champion) -> bool:
+        return (
+            (not self.factions or champion.faction in self.factions)
+            and (not self.roles or champion.role in self.roles)
+            and (not self.rarities or champion.rarity in self.rarities)
+            and (not self.affinities or champion.element in self.affinities)
+            and champion.grade >= (self.grade or 0)
+        )
+
+
+@dataclass(frozen=True)
+class Rotating:
+    """Several conditions, one active at a time: the game picks it per stage from the
+    account's state (`ActiveConditionByStageId`, Cursed City), which the snapshot lacks."""
+
+    choices: tuple[Restriction, ...]
 
 
 @dataclass(frozen=True)
@@ -330,12 +357,33 @@ def parse_modifier(raw: dict) -> Modifier:
 
 
 def parse_restriction(raw: dict) -> Restriction:
+    grade = raw.get("grade") or ""
     return Restriction(
-        factions=tuple(raw["factions"] or ()),
+        factions=tuple(faction_name(f) for f in raw["factions"] or ()),
         roles=tuple(raw["roles"] or ()),
         rarities=tuple(raw["rarities"] or ()),
         affinities=tuple(raw["affinities"] or ()),
+        grade=int(grade.removeprefix("Stars")) if grade.removeprefix("Stars").isdigit() else None,
+        race=raw.get("race"),
     )
+
+
+def team_restriction(stage: Stage) -> Restriction | Rotating | None:
+    """What the stage holds every champion to (read from the game's team screens: one
+    condition covers every slot; Cursed City keeps the one active). A Faction Wars stage has
+    none of its own: its crypt (region `Fraction_<faction>`) admits that faction alone."""
+    if stage.area == FACTION_WARS and stage.region and stage.region.startswith(CRYPT):
+        return Restriction((faction_name(stage.region.removeprefix(CRYPT)),), (), (), ())
+
+    match stage.restrictions:
+        case ():
+            return None
+
+        case (only,):
+            return only
+
+        case several:
+            return Rotating(several)
 
 
 def parse_type(raw: dict, boss: dict | None) -> EnemyType:

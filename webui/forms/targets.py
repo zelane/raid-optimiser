@@ -1,9 +1,9 @@
 """
 targets.py - the target picker's query into a `TargetQuery`.
 
-Fields: `zone`, `group`, `difficulty`, `stage` (a stage id), `enemy` ("<wave>-<slot>"): each
-level's pick, any of them absent; `changed`: the field the user just changed (htmx's
-`HX-Trigger-Name`), whose lower levels go back to their defaults; `target`
+Fields: `zone`, `group`, `difficulty`, `stage` (a stage id), `wave` (1 first), `enemy`
+("<wave>-<slot>"): each level's pick, any of them absent; `changed`: the field the user just
+changed (htmx's `HX-Trigger-Name`), whose lower levels go back to their defaults; `target`
 ("<stage>:<wave>:<slot>"), a saved pick that overrides the rest. Anything unknown falls back
 to a default rather than failing: the picker always shows something.
 
@@ -16,7 +16,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-LEVELS = ("zone", "group", "difficulty", "stage", "enemy")
+LEVELS = ("zone", "group", "difficulty", "stage", "wave", "enemy")
 SAVED = re.compile(r"(\d+):(\d+):(\d+)")
 
 
@@ -25,6 +25,10 @@ class SavedTarget:
     stage: int
     enemy: str  # "<wave>-<slot>"
 
+    @property
+    def wave(self) -> int:
+        return int(self.enemy.split("-")[0])
+
 
 @dataclass(frozen=True)
 class TargetQuery:
@@ -32,13 +36,14 @@ class TargetQuery:
     group: str | None = None
     difficulty: str | None = None
     stage: str | None = None
+    wave: int | None = None
     enemy: str | None = None
     target: SavedTarget | None = None
 
 
 def parse_target_query(query: Mapping[str, str], changed: str | None) -> TargetQuery:
     if (saved := parse_saved(query.get("target", ""))) is not None:
-        return TargetQuery(enemy=saved.enemy, target=saved)
+        return TargetQuery(wave=saved.wave, enemy=saved.enemy, target=saved)
 
     kept = LEVELS[: LEVELS.index(changed) + 1] if changed in LEVELS else LEVELS
 
@@ -50,6 +55,7 @@ def parse_target_query(query: Mapping[str, str], changed: str | None) -> TargetQ
         group=pick("group"),
         difficulty=pick("difficulty"),
         stage=pick("stage"),
+        wave=int(text) if (text := pick("wave") or "").isdigit() else None,
         enemy=pick("enemy"),
     )
 

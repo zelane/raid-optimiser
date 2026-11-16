@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import champion as listed %}
+{% from "_macros.html" import champion as listed, page_head %}
 
 {# A champion card; `note` (HTML) under the name. #}
 {% macro card(champion, note="") %}
@@ -14,14 +14,13 @@
 
 {% block title %}Empower: Raid optimiser{% endblock %}
 {% block content %}
-  <header class="page-head">
-    <h1>Empower</h1>
+  {% call(part) page_head("Empower") %}{% if part == "aside" %}
     <nav class="page-tabs" aria-label="Rarity">
       {% for rarity in page.rarities %}
         <a href="/empower?rarity={{ rarity }}"{% if page.rarity == rarity %} aria-current="page"{% endif %}>{{ rarity }}</a>
       {% endfor %}
     </nav>
-  </header>
+  {% endif %}{% endcall %}
 
   <h2>Safe to feed ({{ page.spare | sum(attribute="count") }})</h2>
   <p class="lede">

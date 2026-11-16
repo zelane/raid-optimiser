@@ -82,6 +82,7 @@ class PieceView:
     planned_level: int | None = None  # assumed levelled to this
     planned_ascend_level: int | None = None  # assumed ascended to this
     reserved_by: list[str] = field(default_factory=list)  # reserve rules keeping it elsewhere
+    faction_icon_url: str | None = None  # an accessory's faction lock, as its banner
 
 
 @dataclass(frozen=True)
@@ -226,12 +227,17 @@ def build_view(
 
 
 def piece_view(
-    artifact: Artifact, account: Account, champion: Champion, reserved: Reservations
+    artifact: Artifact,
+    account: Account,
+    champion: Champion | None = None,
+    reserved: Reservations | None = None,
 ) -> PieceView:
-    """Reasons through the champion themselves (their own tag, their team) aren't noted."""
+    """Through `champion`'s eyes (a piece they wear is `equipped`; reasons through the
+    champion themselves, their own tag or team, aren't noted), or nobody's: who wears it."""
     owner_id = account.owners.get(artifact.id)
     wearer = account.champions.get(owner_id) if owner_id is not None else None
-    owner = None if owner_id == champion.id else wearer
+    mine = champion is not None and owner_id == champion.id
+    owner = None if mine else wearer
 
     return PieceView(
         id=artifact.id,
@@ -250,13 +256,14 @@ def piece_view(
         planned_level=artifact.planned_level,
         planned_ascend_level=artifact.planned_ascend_level,
         faction=artifact.faction,
+        faction_icon_url=asset_url("factions", artifact.faction) if artifact.faction else None,
         worn_by=owner.name if owner else None,
         worn_by_portrait=champion_row(wearer).portrait_url if wearer else None,
-        equipped=owner_id == champion.id,
+        equipped=mine,
         reserved_by=[
             reason_label(reason, account)
-            for reason in reserved.get(artifact.id, ())
-            if not (isinstance(reason, Worn) and reason.champion_id == champion.id)
+            for reason in (reserved or {}).get(artifact.id, ())
+            if not (isinstance(reason, Worn) and champion and reason.champion_id == champion.id)
         ],
     )
 

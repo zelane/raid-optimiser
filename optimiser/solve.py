@@ -1,10 +1,13 @@
 """
-solve.py - the best builds for a champion: stat limits and set minimums met, then stats
-maximised in the order asked, each held within a slack of its best before the next.
+solve.py - the best builds for a champion, or a build each for a team: stat limits and set
+minimums met, then stats maximised in the order asked, each held within a slack of its best
+before the next. A team's champions go in order: each gets its best of what the earlier ones
+left, as long as the later ones can still meet their limits.
 
-A build is one artifact per armour slot and at most one per accessory slot. Every stat is
-a per-champion constant plus a sum over the pieces chosen; set bonuses are exact through
-piece-count variables. So each step is a MILP, solved with HiGHS.
+A build is one artifact per armour slot and at most one per accessory slot; in a team, no
+piece goes to two champions. Every stat is a per-champion constant plus a sum over the
+pieces chosen; set bonuses are exact through piece-count variables. So each step is a MILP,
+solved with HiGHS (a team's limits checked in one model).
 
 A ranked goal is a stat, or a skill's damage (`DamageGoal`). Damage is a product, so it's
 ranked by its log: log(formula) + log(1 + C.DMG) + log(1 + sets' damage bonus) + log(DEF
@@ -12,13 +15,15 @@ multiplier). The first three are concave, held under tangent lines (the bonus's 
 it can reach, so exact); the last depends only on the DEF the sets ignore, which comes in 5 %
 steps, so it's exact with a binary per step.
 
-- `GearFilter`, `Goal`, `Request`: what's asked
-- `Build`, `SetsRuleOut`, `Shortfall`: the outcomes
-- `find_builds`: the workflow
-- `frame` (`wearable`, `prune`, `directions`), `check_sets`, `best_build`,
-  `explain_shortfall` (`best_alone`): its steps, in the order it calls them
-- `Problem`, `Milp`, `Expression`, `SetTerms`, `formulate`, `set_terms`, `add_limits`,
-  `Ranked`, `ranked`, `hold`, `maximise`: the model the steps share
+- `GearFilter`, `Goal`, `Request`, `Member`: what's asked
+- `Build`, `SetsRuleOut`, `Shortfall`, `Unmet`, `Clash`: the outcomes
+- `find_builds` (one champion), `find_team_builds` (several): the workflows
+- `frame` (`wearable`, `prune`, `directions`), `check_sets`, `best_build`
+  (`maximise_ranking`, `solved_build`), `explain_shortfall` (`best_alone`): one champion's
+  steps, in the order they're called
+- `feasible`, `best_leaving` (`best_together`), `why_unmet`: a team's
+- `Problem`, `Milp`, `Expression`, `SetTerms`, `formulate`, `add_member`, `set_terms`,
+  `add_limits`, `Ranked`, `ranked`, `hold`, `maximise`: the model the steps share
 - `log_damage`, `reach`, `geometric_points`, `even_points`, `log_under_tangents`,
   `log_damage_bonus`, `log_defence_multiplier` (`most_ignore`, `ignore_total`): the damage goal
 """
@@ -71,6 +76,7 @@ IGNORE_STEP = 0.05  # every set's ignore DEF is a multiple of this
 # reported damage is always recomputed exactly.
 TANGENTS = 20
 SET_HEADROOM = 1.5  # sets can add to what the best piece per slot gives
+LEAVING_TRIES = 3  # a team member's builds tried alone before solving with the rest
 
 
 @dataclass(frozen=True)
@@ -125,6 +131,15 @@ class Request:
 
 
 @dataclass(frozen=True)
+class Member:
+    """A team's champion: their request, against the account as assumed for it (glyphs go
+    only on what the request wants)."""
+
+    account: Account
+    request: Request
+
+
+@dataclass(frozen=True)
 class Build:
     artifacts: tuple[Artifact, ...]
     stats: Stats
@@ -147,6 +162,18 @@ class Shortfall:
 
 
 @dataclass(frozen=True)
+class Clash:
+    """Each champion can be geared alone, but not all of them together."""
+
+
+@dataclass(frozen=True)
+class Unmet:
+    """No team build: per member, why they can't be geared even alone (None: they can)."""
+
+    members: tuple[SetsRuleOut | Shortfall | None, ...]
+
+
+@dataclass(frozen=True)
 class Problem:
     """What the model is built from: the pieces the champion can wear and what each adds."""
 
@@ -163,7 +190,7 @@ class Problem:
 def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut | Shortfall:
     """Up to `request.builds` builds, best first, no two alike."""
     # 1. What the champion can wear, and what each piece adds.
-    problem = frame(account, request)
+    problem = frame(account, request, frozenset({request.champion.id}), request.builds)
 
     # 2. Too few pieces of a required set: no need to solve.
     if reason := check_sets(problem, request):
@@ -181,13 +208,119 @@ def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut
     return builds
 
 
-def frame(account: Account, request: Request) -> Problem:
+def find_team_builds(members: Sequence[Member]) -> tuple[Build, ...] | Unmet | Clash:
+    """A build per member, in order, no piece in two: each member's best of what the earlier
+    ones left that still leaves the later ones their limits. (Solving the team as one model,
+    each goal held before the next, gave much the same and took minutes: proving each step
+    optimal over every champion's pieces at once.)"""
+    team = frozenset(member.request.champion.id for member in members)
+
+    # 1. Can they all meet their limits at once? If not, who can't even alone.
+    if not feasible(members, team, frozenset()):
+        return why_unmet(members, team)
+
+    # 2. In order, each member's best build leaving the rest feasible.
+    taken: frozenset[int] = frozenset()
+    builds: list[Build] = []
+
+    for index, member in enumerate(members):
+        build = best_leaving(member, members[index + 1 :], team, taken)
+        builds.append(build)
+        taken |= {a.id for a in build.artifacts}
+
+    return tuple(builds)
+
+
+def feasible(members: Sequence[Member], team: frozenset[int], taken: frozenset[int]) -> bool:
+    """Whether the members meet their limits together, from what isn't `taken`."""
+    problems = [frame(m.account, m.request, team, len(members), taken) for m in members]
+
+    if any(check_sets(p, m.request) for p, m in zip(problems, members, strict=True)):
+        return False
+
+    milps = formulate(problems, [m.request.set_minimums for m in members])
+
+    for milp, member in zip(milps, members, strict=True):
+        add_limits(milp, member.request)
+
+    milps[0].highs.run()
+    return milps[0].highs.getModelStatus() == highspy.HighsModelStatus.kOptimal
+
+
+def best_leaving(
+    member: Member, rest: Sequence[Member], team: frozenset[int], taken: frozenset[int]
+) -> Build:
+    """The member's best build from what isn't `taken` that leaves `rest` feasible: their best
+    alone, else their next best, `LEAVING_TRIES` in all, else the best with the rest solved
+    alongside (slow, but exact). The rest was feasible with the member, so one exists."""
+    problem = frame(member.account, member.request, team, LEAVING_TRIES, taken)
+    tried: list[Build] = []
+
+    while len(tried) < LEAVING_TRIES:
+        build = best_build(problem, member.request, tried)
+        if build is None:
+            break
+
+        worn = taken | {a.id for a in build.artifacts}
+        if not rest or feasible(rest, team, worn):
+            return build
+
+        tried.append(build)
+
+    return best_together(member, rest, team, taken)
+
+
+def best_together(
+    member: Member, rest: Sequence[Member], team: frozenset[int], taken: frozenset[int]
+) -> Build:
+    """The member's best build with the rest meeting their limits, all in one model."""
+    together = [member, *rest]
+    problems = [frame(m.account, m.request, team, len(together), taken) for m in together]
+    milps = formulate(problems, [m.request.set_minimums for m in together])
+
+    for milp, other in zip(milps, together, strict=True):
+        add_limits(milp, other.request)
+
+    if (build := maximise_ranking(milps[0], problems[0], member.request)) is None:
+        raise AssertionError("the rest was feasible with the member before")
+
+    return build
+
+
+def why_unmet(members: Sequence[Member], team: frozenset[int]) -> Unmet | Clash:
+    """Who can't meet their limits even alone, and how close they get; none: a clash."""
+    reasons: list[SetsRuleOut | Shortfall | None] = []
+
+    for member in members:
+        problem = frame(member.account, member.request, team, 1)
+
+        if reason := check_sets(problem, member.request):
+            reasons.append(SetsRuleOut(reason))
+        elif best_build(problem, member.request, []) is None:
+            reasons.append(explain_shortfall(problem, member.request))
+        else:
+            reasons.append(None)
+
+    return Unmet(tuple(reasons)) if any(reasons) else Clash()
+
+
+def frame(
+    account: Account,
+    request: Request,
+    team: frozenset[int],
+    keep: int,
+    taken: frozenset[int] = frozenset(),
+) -> Problem:
+    """`team`: champions whose gear counts as the champion's own; `keep`: see `prune`;
+    `taken`: pieces gone to someone else."""
     champion = request.champion
     tables = account.tables
     base = base_stats(champion, tables)
-    wearing = [a for a in account.artifacts if wearable(a, account, request)]
+    wearing = [
+        a for a in account.artifacts if a.id not in taken and wearable(a, account, request, team)
+    ]
     piece_stats = {a.id: artifact_stats(a, base) for a in wearing}
-    pieces = prune(wearing, piece_stats, request)
+    pieces = prune(wearing, piece_stats, request, keep)
 
     return Problem(
         champion=champion,
@@ -201,7 +334,7 @@ def frame(account: Account, request: Request) -> Problem:
     )
 
 
-def wearable(artifact: Artifact, account: Account, request: Request) -> bool:
+def wearable(artifact: Artifact, account: Account, request: Request, team: frozenset[int]) -> bool:
     if artifact.faction not in (None, request.champion.faction):
         return False
 
@@ -211,18 +344,19 @@ def wearable(artifact: Artifact, account: Account, request: Request) -> bool:
     if artifact.level <= request.above_level:
         return False
 
-    if (owner := account.owners.get(artifact.id)) == request.champion.id:
+    if (owner := account.owners.get(artifact.id)) in team:
         return True
 
     return request.gear.allows(artifact.id, owner)
 
 
 def prune(
-    pieces: list[Artifact], piece_stats: dict[int, Stats], request: Request
+    pieces: list[Artifact], piece_stats: dict[int, Stats], request: Request, keep: int
 ) -> tuple[Artifact, ...]:
-    """Drop pieces that at least `request.builds` others in the same slot, set and faction
-    lock match or beat on every stat the request uses: swapping one of those in never makes
-    a build worse, so the best builds never need it."""
+    """Drop pieces that at least `keep` others in the same slot, set and faction lock match
+    or beat on every stat the request uses: swapping a free one of those in never makes a
+    build worse, so the best builds never need it. With b builds and n champions, b + n - 1
+    leaves one free: teammates wear at most n - 1 of them, earlier builds rule out b - 1."""
     wanted = directions(request)
     groups: dict[tuple, list[Artifact]] = {}
 
@@ -249,7 +383,7 @@ def prune(
                 and (other_index < index or not at_least_as_good(artifact, other))
             )
 
-            if beaten_by < request.builds:
+            if beaten_by < keep:
                 kept.append(artifact)
 
     return tuple(kept)
@@ -287,9 +421,20 @@ def check_sets(problem: Problem, request: Request) -> str | None:
 
 def best_build(problem: Problem, request: Request, excluded: list[Build]) -> Build | None:
     """The best build unlike any in `excluded`, or None if no other meets the limits."""
-    milp = formulate(problem, request.set_minimums, excluded)
+    (milp,) = formulate([problem], [request.set_minimums])
     add_limits(milp, request)
 
+    for build in excluded:
+        milp.highs.addConstr(
+            milp.highs.qsum(milp.chosen[a.id] for a in build.artifacts) <= len(build.artifacts) - 1
+        )
+
+    return maximise_ranking(milp, problem, request)
+
+
+def maximise_ranking(milp: "Milp", problem: Problem, request: Request) -> Build | None:
+    """The request's goals maximised in order, each held within the slack of its best; None
+    if the model has no solution."""
     for goal in request.ranking:
         objective = ranked(milp, goal, problem)
 
@@ -298,6 +443,11 @@ def best_build(problem: Problem, request: Request, excluded: list[Build]) -> Bui
 
         hold(milp, objective, best, request.slack)
 
+    return solved_build(milp, problem)
+
+
+def solved_build(milp: "Milp", problem: Problem) -> Build:
+    """The member's pieces in the model's solution."""
     picked = tuple(a for a in problem.pieces if milp.highs.val(milp.chosen[a.id]) > 0.5)
     return Build(picked, build_stats(problem.champion, picked, problem.tables))
 
@@ -325,7 +475,7 @@ def explain_shortfall(problem: Problem, request: Request) -> SetsRuleOut | Short
 def best_alone(problem: Problem, request: Request, stat: Stat, way: int) -> float | None:
     """The highest (`way` 1) or lowest (-1) the stat reaches with only the set minimums asked;
     None if they can't be met."""
-    milp = formulate(problem, request.set_minimums, [])
+    (milp,) = formulate([problem], [request.set_minimums])
     best = maximise(milp, way * milp.stats[stat])
     return None if best is None else way * best
 
@@ -335,8 +485,8 @@ type Expression = highspy.highs_linear_expression | highspy.highs_var
 
 @dataclass(frozen=True)
 class Milp:
-    """A HiGHS model of one champion's builds: a binary per piece, and each stat as an
-    expression of them."""
+    """A champion in a HiGHS model (shared by a team's members): a binary per piece, and each
+    stat as an expression of them."""
 
     highs: highspy.Highs
     chosen: dict[int, highspy.highs_var]  # artifact id -> 1 if worn
@@ -355,9 +505,29 @@ class SetTerms:
     damage: Sequence[ActiveBonus[Expression]]
 
 
-def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Build]) -> Milp:
+def formulate(problems: Sequence[Problem], set_minimums: Sequence[dict[int, int]]) -> list[Milp]:
+    """One model, a member per problem; no piece worn twice."""
     highs = highspy.Highs()
     highs.silent()
+    milps = [
+        add_member(highs, problem, minimums)
+        for problem, minimums in zip(problems, set_minimums, strict=True)
+    ]
+    wearers: dict[int, list[highspy.highs_var]] = {}
+
+    for milp in milps:
+        for artifact_id, chosen in milp.chosen.items():
+            wearers.setdefault(artifact_id, []).append(chosen)
+
+    for shared in wearers.values():
+        if len(shared) > 1:
+            highs.addConstr(highs.qsum(shared) <= 1)
+
+    return milps
+
+
+def add_member(highs: highspy.Highs, problem: Problem, set_minimums: dict[int, int]) -> Milp:
+    """A champion's pieces, sets and stats, added to the model."""
     chosen = {a.id: highs.addBinary() for a in problem.pieces}
     terms: dict[Stat, list] = {stat: [] for stat in Stat}
     ignore: list[ActiveIgnore[Expression]] = []
@@ -385,11 +555,6 @@ def formulate(problem: Problem, set_minimums: dict[int, int], excluded: list[Bui
 
         for stat, term in added.stats:
             terms[stat].append(term)
-
-    for build in excluded:
-        highs.addConstr(
-            highs.qsum(chosen[a.id] for a in build.artifacts) <= len(build.artifacts) - 1
-        )
 
     stats = {stat: highs.qsum(terms[stat]) + problem.constant[stat] for stat in Stat}
     return Milp(highs, chosen, stats, ignore, damage)
@@ -607,7 +772,7 @@ def log_defence_multiplier(milp: Milp, goal: DamageGoal, problem: Problem):
 
 def most_ignore(problem: Problem, goal: DamageGoal) -> float:
     """The most DEF the sets of any one build ignore for the goal's skill."""
-    milp = formulate(problem, {}, [])
+    (milp,) = formulate([problem], [{}])
 
     if not any(applies(goal, passive.source) for passive in milp.ignore):
         return 0.0

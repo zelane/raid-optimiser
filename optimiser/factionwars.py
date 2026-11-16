@@ -6,7 +6,7 @@ is what counts, not how much: "Place 10+ Stun debuffs" asks for a Stun, scored o
 team can count on it. Quests about how the fight goes (turns, losses, weak hits, damage) or
 the team's make-up aren't checked.
 
-- `FACTION_WARS`, `DIFFICULTIES`, `ENEMIES`, `QUEST_NEEDS`, `PLACED`: what's read (`PLACED`:
+- `DIFFICULTIES`, `ENEMIES`, `QUEST_NEEDS`, `PLACED`: what's read (`PLACED`:
   a "Place N+ … debuffs" quest's debuff)
 - `Crypt`, `Challenge`: the crypts, and a stage's challenge
 - `effects`, `COUNTER`: tags the table builds on
@@ -18,11 +18,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from optimiser.account import Champion, faction_name
-from optimiser.enemies import Enemies, Stage
+from optimiser.enemies import CRYPT, FACTION_WARS, Enemies, Stage
 from optimiser.teams.needs import AnyOf, Distinct, Need
 from optimiser.teams.tags import Mechanic, Side, Tag, Target, buff, debuff
 
-FACTION_WARS = "Fractions"  # the area
 DIFFICULTIES = ("Normal", "Hard")
 
 # What a challenge's needs are met against: the stage's enemies, waves and boss alike.
@@ -115,7 +114,7 @@ def crypts(enemies: Enemies) -> tuple[Crypt, ...]:
         Crypt(
             region.id,
             region.name,
-            faction_name(region.id.removeprefix("Fraction_")),
+            faction_name(region.id.removeprefix(CRYPT)),
             {d: region.stages[d] for d in DIFFICULTIES if d in region.stages},
         )
         for region in area.regions

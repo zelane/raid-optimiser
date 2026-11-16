@@ -24,7 +24,15 @@ Poison may place another) makes the champion's own count of it go up by its chan
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from optimiser.account import Account, Champion, Relic, Skill, faction_name, read_json
+from optimiser.account import (
+    Account,
+    Champion,
+    Relic,
+    Skill,
+    faction_label,
+    faction_name,
+    read_json,
+)
 from optimiser.teams.kits import Kit, Rating, best_ratings, most_counts, skill_counts, skill_ratings
 from optimiser.teams.needs import AnyOf, Distinct, Given, Need, stacking_tags
 from optimiser.teams.tags import Side, Tag, plain_label, status_kind
@@ -216,7 +224,7 @@ def relic_sources(relic: RelicSource, level: int) -> list[GearSource]:
     return [general] + [
         GearSource(
             f"relic:{relic.id}:{faction}",
-            f"{relic.name} ({faction})",
+            f"{relic.name} ({faction_label(faction)})",
             "relic",
             faction,
             ids,

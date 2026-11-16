@@ -7,13 +7,14 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
   `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `teams`, `targets`, `finder`, `info`, `sync`: the routes
+  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `sync`: the routes
 - `read_form`, `find_champion`, `find_run`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `optimiser_url`: the nav's Optimiser link: the champion last solved for, else the list
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
 
+import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -24,8 +25,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
 
-from optimiser.account import LOCK_LEVELS, Account, Champion
+from optimiser.account import LOCK_LEVELS, Account, Champion, faction_label
 from optimiser.chimera.tags import NEVER_LANDS
+from optimiser.enemies import Restriction, team_restriction
 from optimiser.factionwars import crypts
 from optimiser.reserve import reservations
 from optimiser.teams.gear import gear_options
@@ -56,6 +58,7 @@ from webui.forms.settings import (
 )
 from webui.forms.targets import TargetQuery, parse_target_query
 from webui.forms.team import Offers
+from webui.forms.team_gear import parse_gear_ask
 from webui.forms.teams import parse_teams
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
@@ -67,6 +70,7 @@ from webui.service import empower as empower_pages
 from webui.service import finder as finder_pages
 from webui.service import info as info_pages
 from webui.service import targets as target_pages
+from webui.service import team_gear as team_gear_pages
 from webui.service import teams as teams_pages
 
 HERE = Path(__file__).resolve().parent
@@ -106,6 +110,7 @@ templates.env.globals["finder_factions"] = lambda: finder_pages.account_factions
     current.current_account()
 )
 templates.env.globals["optimiser_url"] = lambda: optimiser_url()
+templates.env.filters["faction_label"] = faction_label  # a faction's key as the game shows it
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -381,6 +386,32 @@ def teams(request: Request):
     return templates.TemplateResponse(request, "teams.html", {"page": page})
 
 
+@app.get("/team-gear", response_class=HTMLResponse)
+def team_gear(request: Request):
+    """A team's gear against one target: solved when the query says `run`."""
+    account = current.current_account()
+    rules = current.current_reserve_rules()
+    query = {name: request.query_params.getlist(name) for name in request.query_params}
+
+    match parse_gear_ask(query, account, rules, current.current_locks()):
+        case FormErrors(messages=messages):
+            raise HTTPException(400, "; ".join(messages))
+        case asked:
+            pass
+
+    enemies = current.current_enemies()
+    target = parse_target_query({"target": (query.get("target") or [""])[-1]}, None)
+    picker = target_pages.target_picker(enemies, target)
+    stage = enemies.stages[int(picker.target.split(":")[0])]
+    restriction = team_restriction(stage)
+    page = team_gear_pages.gear_page(
+        account, asked, rules, picker.picked, picker.title, restriction
+    )
+    only = finder_pages.only_view(restriction) if isinstance(restriction, Restriction) else None
+    context = {"page": page, "picker": picker, "fill": False, "finder_only": only}
+    return templates.TemplateResponse(request, "team_gear.html", context)
+
+
 @app.get("/champions/{champion_id}", response_class=HTMLResponse)
 def champion(request: Request, champion_id: int):
     account = current.current_account()
@@ -404,7 +435,12 @@ def targets(request: Request):
     (`target=`) is shown without filling the page's fields in again."""
     query = parse_target_query(request.query_params, request.headers.get("HX-Trigger-Name"))
     picker = target_pages.target_picker(current.current_enemies(), query)
-    context = {"picker": picker, "fill": query.target is None}
+    for_form = request.query_params.get("for_form", "")
+    context = {
+        "picker": picker,
+        "fill": query.target is None,
+        "for_form": for_form if re.fullmatch(r"[\w-]+", for_form) else "request",
+    }
     return templates.TemplateResponse(request, "_target_picker.html", context)
 
 
@@ -413,7 +449,12 @@ def finder(request: Request):
     """The champions the filters match, as the list or the finder dialog asks while the user
     types (`_champion_filters.html`); `pick=1`: the dialog's, picks rather than locks."""
     view = finder_pages.find_champions(
-        current.current_account(), current.current_locks(), parse_finder_query(request.query_params)
+        current.current_account(),
+        current.current_locks(),
+        parse_finder_query(
+            request.query_params,
+            {name: request.query_params.getlist(name) for name in request.query_params},
+        ),
     )
     context = {"finder": view, "picking": request.query_params.get("pick") == "1"}
     return templates.TemplateResponse(request, "_finder_results.html", context)

@@ -1,22 +1,18 @@
 {% extends "base.html" %}
+{% from "_macros.html" import stars, page_head, tally %}
 {% block title %}Faction Wars: Raid optimiser{% endblock %}
 {% block content %}
   {% set fw = page.faction_wars %}
   <section aria-labelledby="fw-heading">
-    <header class="page-head">
-      <div>
-        <h1 id="fw-heading">Faction Wars {{ fw.difficulty }}</h1>
-        <p class="lede">
-          As the game held it at the last sync. The game counts each stage's stars but not which
-          challenges earned them, so a stage one star short shows both it could be missing: almost
-          always its challenge, the last.
-        </p>
-      </div>
-      <div class="tally" title="Stars earned">
-        <strong>{{ fw.stars }}<small>/{{ fw.max_stars }}</small></strong>
-        <span class="caps">stars · {{ fw.open_stages }} stage{{ "s" if fw.open_stages != 1 }} short</span>
-      </div>
-    </header>
+    {% call(part) page_head("Faction Wars " ~ fw.difficulty, id="fw-heading") %}
+      {% if part == "lede" %}
+        As the game held it at the last sync. The game counts each stage's stars but not which
+        challenges earned them, so a stage one star short shows both it could be missing: almost
+        always its challenge, the last.
+      {% else %}
+        {{ tally(fw.stars, fw.max_stars, "stars · " ~ fw.open_stages ~ " stage" ~ ("s" if fw.open_stages != 1 else "") ~ " short", title="Stars earned") }}
+      {% endif %}
+    {% endcall %}
 
     <div class="crypt-grid">
     {% for crypt in fw.crypts %}
@@ -34,9 +30,7 @@
               <tr>
                 <th scope="row"><a href="/teams?base=fw&crypt={{ crypt.region }}&difficulty={{ fw.difficulty }}&stage={{ row.number }}" title="Find a team for its challenge">{{ row.number }}</a></th>
                 <td class="crypt-state">
-                  <span class="stars-earned" aria-label="{{ row.state }}">
-                    {%- for n in range(3) %}<span class="{{ 'on' if n < row.stars }}">★</span>{% endfor -%}
-                  </span>
+                  {{ stars(row.stars, of=3, title=row.state) }}
                   {% if row.state.startswith("not") %}<small class="muted">{{ row.state }}</small>{% endif %}
                 </td>
                 <td>

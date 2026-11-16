@@ -51,7 +51,7 @@
       <tbody>
         {% for drop in plan.to_sell %}
           <tr>
-            <td><input type="checkbox" name="artifact_id" value="{{ drop.row.id }}" checked aria-label="Sell {{ drop.row.set_name }} {{ drop.row.slot }}"></td>
+            <td><input type="checkbox" name="artifact_id" value="{{ drop.row.piece.id }}" checked aria-label="Sell {{ drop.row.piece.set_name }} {{ drop.row.piece.slot }}"></td>
             {{ accessory_cells(drop.row) }}
             {{ score_cells(drop.row) }}
             <td class="nowrap"><small class="{{ 'down' if drop.surplus }}">{{ drop.group }}</small></td>

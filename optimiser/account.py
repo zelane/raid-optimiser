@@ -18,8 +18,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
   the Chimera's current raid, and progress on a stage
 - `Account`: everything a solve needs, and the account's saved teams (`preset`: one by id)
-- `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `NO_FACTION`,
-  `faction_name`: what the game's words mean
+- `DEFAULT_LEAGUE`, `AFFINITIES`, `GLYPH_RARITIES`, `FACTION_NAMES`, `FACTION_LABELS`,
+  `NO_FACTION`, `faction_name`, `faction_label`: what the game's words mean
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
 - `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets` (`parse_ignore`),
@@ -499,12 +499,34 @@ DEFAULT_LEAGUE = "GoldV"  # if the game doesn't say
 AFFINITIES = ("Magic", "Force", "Spirit", "Void")
 GLYPH_RARITIES = ("Uncommon", "Rare", "Epic", "Legendary")
 # The factions the game shows under another name than its own (the art is named by these)
+# A faction's key: the game's internal name, but for the renamed (the game's tables, stage
+# conditions and Faction Wars crypts still say Samurai and Olympians). Champions, pieces,
+# relics and asset files go by the key; `faction_label` is what's shown.
 FACTION_NAMES = {"Samurai": "Shadowkin", "Olympians": "Argonites"}
+FACTION_LABELS = {
+    "BannerLords": "Banner Lords",
+    "CovenOfMagi": "Coven of Magi",
+    "DarkElves": "Dark Elves",
+    "HighElves": "High Elves",
+    "KnightsRevenant": "Knights Revenant",
+    "LizardMen": "Lizardmen",
+    "OgrynTribes": "Ogryn Tribes",
+    "SacredOrder": "Sacred Order",
+    "SylvanWatchers": "Sylvan Watchers",
+    "UndeadHordes": "Undead Hordes",
+}
 NO_FACTION = "Unknown"  # a piece any faction can wear
 
 
 def faction_name(game_name: str) -> str:
+    """The faction's key, from any of the game's names for it."""
     return FACTION_NAMES.get(game_name, game_name)
+
+
+def faction_label(name: str) -> str:
+    """The faction as the game shows it: "Dark Elves"."""
+    key = faction_name(name)
+    return FACTION_LABELS.get(key, key)
 
 
 def load_account(snapshot: Path, static: Path, schema: Path) -> Account:

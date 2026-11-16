@@ -1,7 +1,7 @@
 {#- A team finder's shared parts (`service.team` views), for the pages that find teams. Each
-   lives in the page's one GET form. `without(key)`: the page's URL with that wanted tag, gear
-   or assumption left out (a macro the page passes in); `ran`: a search ran (kept on submit). -#}
-{% from "_macros.html" import champion %}
+   lives in the page's one GET form. `links`: the page's own (`service.team.TeamLinks`: a chip's
+   × goes to `links.without[key]`); `ran`: a search ran (kept on submit). -#}
+{% from "_macros.html" import champion, portrait %}
 
 {# A buff, debuff or effect: the game's icon, or a glyph where it has none. #}
 {% macro status_icon(url, label, size="") -%}
@@ -29,9 +29,8 @@
       <div class="cluster" style="--space: var(--space-2xs)">
         {% for contributor in need.contributors %}
           {% set champion = contributor.champion %}
-          <a href="/champions/{{ champion.id }}" class="mini-portrait rarity-{{ champion.rarity | lower }}" title="{{ champion.name }}: {{ contributor.score }}% ({{ contributor.detail }})">
-            {% if champion.portrait_url %}<img src="{{ champion.portrait_url }}" alt="{{ champion.name }}" loading="lazy">{% else %}<span>{{ champion.name[:2] }}</span>{% endif %}
-          </a>
+          {{ portrait(champion.portrait_url, champion.name, champion.rarity, "/champions/" ~ champion.id,
+                      title=champion.name ~ ": " ~ contributor.score ~ "% (" ~ contributor.detail ~ ")") }}
         {% endfor %}
         {% if need.brought %}<span class="icons need-brought" title="What the team brings toward it">{% for icon in need.brought %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>{% endif %}
         {% for note in need.notes %}<span class="badge quiet">{{ note }}</span>{% endfor %}
@@ -52,7 +51,7 @@
       <header class="panel-head">
         {% set placed = team.slots | selectattr("champion") | list | length %}
         <h2>Your champions <span class="badge">{{ placed }} placed · {{ team.slots | length - placed }} open</span></h2>
-        <a href="{{ empty_url }}" class="caps">Empty all</a>
+        <a href="{{ empty_url }}" class="caps" data-forget>Empty all</a>
       </header>
       <datalist id="team-champions">
         {% for choice in team.choices %}<option value="{{ choice.label }}"></option>{% endfor %}
@@ -93,18 +92,18 @@
 {# What every team must bring: the chosen ones as removable chips (kept as hidden fields), a
    searchable picker adding one (picker.js), and a count (so many different debuffs or buffs)
    to add. `subtitle`: what it's besides. #}
-{% macro wants_panel(team, ran, without, subtitle) %}
+{% macro wants_panel(team, ran, links, subtitle) %}
       <section class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head">
           <h2>Also bring <small class="muted">{{ subtitle }}</small></h2>
           <div class="cluster" style="--space: var(--space-xs)">
             {% for want in team.wanted %}
-              <a class="chip on" href="{{ without(want.key) }}" title="Stop asking for {{ want.label }}">
+              <a class="chip on" href="{{ links.without[want.key] }}" title="Stop asking for {{ want.label }}">
                 {{ status_icon(want.icon_url, want.label, "small") }}{{ want.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
             {% for count in team.counts %}
-              <a class="chip on" href="{{ without(count.key) }}" title="Stop asking for {{ count.label }}">
+              <a class="chip on" href="{{ links.without[count.key] }}" title="Stop asking for {{ count.label }}">
                 <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
@@ -149,18 +148,18 @@
 
 {# How the team brings it besides skills: gear and assumptions as removable chips, a picker
    adding gear, and the assume form (who, what). #}
-{% macro gear_panel(team, ran, without) %}
+{% macro gear_panel(team, ran, links) %}
       <section class="panel stack" style="--space: var(--space-m)">
         <header class="panel-head">
           <h2>Gear, relics &amp; assumptions <small class="muted">how the team brings it, besides skills</small></h2>
           <div class="cluster" style="--space: var(--space-xs)">
             {% for gear in team.gear_on %}
-              <a class="chip on" href="{{ without(gear.key) }}" title="Stop allowing {{ gear.name }}">
+              <a class="chip on" href="{{ links.without[gear.key] }}" title="Stop allowing {{ gear.name }}">
                 {% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}{{ gear.name }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
             {% for assumed in team.assumed %}
-              <a class="chip on assumed" href="{{ without(assumed.key) }}" title="Stop assuming it">
+              <a class="chip on assumed" href="{{ links.without[assumed.key] }}" title="Stop assuming it">
                 {{ status_icon(assumed.icon.url, assumed.icon.label, "small") }}{{ assumed.champion or "Team" }}: {{ assumed.label }}<span class="chip-remove" aria-hidden="true">×</span>
               </a>
             {% endfor %}
@@ -182,7 +181,7 @@
                   {% for gear in left %}
                     <button type="button" class="picker-option" role="option" data-value="{{ gear.key }}" title="{{ gear.name }}: {{ gear.brings | map(attribute='label') | join(', ') }}">
                       <span class="icons">{% for icon in gear.brings[:3] %}{{ status_icon(icon.url, icon.label, "small") }}{% endfor %}</span>
-                      <span>{{ gear.name }}{% if gear.faction %} <small class="muted">{{ gear.faction }} only</small>{% endif %}</span>
+                      <span>{{ gear.name }}{% if gear.faction %} <small class="muted">{{ gear.faction | faction_label }} only</small>{% endif %}</span>
                     </button>
                   {% endfor %}
                 </div>
@@ -211,10 +210,10 @@
 
 {# What the team needs besides the content, and how it brings it: two panels side by side
    where they fit. #}
-{% macro bring_panels(team, ran, without, subtitle) %}
+{% macro bring_panels(team, ran, links, subtitle) %}
     <div class="grid" style="--min: 34rem; --align: start">
-      {{ wants_panel(team, ran, without, subtitle) }}
-      {{ gear_panel(team, ran, without) }}
+      {{ wants_panel(team, ran, links, subtitle) }}
+      {{ gear_panel(team, ran, links) }}
     </div>
 {% endmacro %}
 
@@ -235,7 +234,7 @@
 {# A team found: its score and how much it meets (`met` of `total`), its members (any
    champion where it needs none), then a link showing its needs below and one using it.
    `caller`, if any, adds a glance under the members. #}
-{% macro option_card(option, shown, met, total, score_title, show_label, show_url, use_url) %}
+{% macro option_card(option, shown, met, total, score_title, show_label) %}
   <article class="stack team-option{{ ' shown' if shown }}" style="--space: var(--space-m)" id="option-{{ option.number }}">
     <div class="cluster" style="--justify: space-between">
       <strong>Option {{ option.number }}</strong>
@@ -256,16 +255,16 @@
     </div>
     {% if caller %}{{ caller() }}{% endif %}
     <div class="cluster push">
-      <a href="{{ show_url }}" role="button" class="quiet small grow"{% if shown %} aria-current="true"{% endif %}>{{ show_label }}</a>
-      <a href="{{ use_url }}" role="button" class="small grow">Use this team</a>
+      <a href="{{ option.show_url }}" role="button" class="quiet small grow"{% if shown %} aria-current="true"{% endif %}>{{ show_label }}</a>
+      <a href="{{ option.use_url }}" role="button" class="small grow">Use this team</a>
     </div>
   </article>
 {% endmacro %}
 
 {# The link listing more options (`page.more` of them). #}
-{% macro more_link(page, url) %}
-  {% if page.more %}
-    <p><a href="{{ url }}#option-{{ page.listed + 1 }}" role="button" class="quiet">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a></p>
+{% macro more_link(page) %}
+  {% if page.links.more %}
+    <p><a href="{{ page.links.more }}#option-{{ page.listed + 1 }}" role="button" class="quiet">Show more ({{ page.listed }} of {{ "{:,}".format(page.found) }}{{ "+" if not page.complete }})</a></p>
   {% endif %}
 {% endmacro %}
 

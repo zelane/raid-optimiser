@@ -6,6 +6,8 @@ the gear, relics and assumptions it may count on, and each need as the team meet
 - `ChoiceView`, `RelicOption`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `WantView`,
   `WantGroup`, `CountView`, `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
 - `Note`, `no_note`: what a page says about a tag on offer
+- `Query`, `PageUrl`, `TeamLinks`, `listing`: a team page's URLs from its state (the state is
+  all in the URL)
 - `team_view`: the team's panels
 - `slot_worn`, `worn_now`, `relic_value`, `relic_options`, `best_copies`, `relic_label`: each
   slot's relics, and what it can pick from
@@ -17,6 +19,7 @@ the gear, relics and assumptions it may count on, and each need as the team meet
 
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from urllib.parse import urlencode
 
 from optimiser.account import Account, Champion, Relic
 from optimiser.teams.cover import Member, NeedCover
@@ -28,6 +31,7 @@ from webui.forms.team import Offers, RelicChoice, SlotPick, TeamAsk, Unmatched
 from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
 
 type Note = Callable[[Tag], str | None]
+type Query = tuple[tuple[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -170,6 +174,58 @@ class TeamView:
     gear: list[GearGroup]
     gear_on: list[GearView]
     assumed: list[AssumedView]
+
+
+@dataclass(frozen=True)
+class TeamLinks:
+    """A team page's own links: every slot open (`empty`), without each chip (`without`, by
+    the chip's key: a wanted tag, a count, gear, an assumption), and listing more options
+    (`more`; None when there are no more)."""
+
+    empty: str
+    without: dict[str, str]
+    more: str | None
+
+
+@dataclass(frozen=True)
+class PageUrl:
+    """A team page's URL: its `path`, its own fields (`base`: the column, the base needs, the
+    grade searched from) and the team's (gear, assumptions, wants, counts, slots)."""
+
+    path: str
+    base: Query
+    team: TeamView
+
+    def to(self, slots: list[SlotView], extra: Query = (), without: str = "") -> str:
+        """The page with these slots, `extra` added and the chip keyed `without` left out."""
+        team = self.team
+        pairs = [*self.base, ("gear_set", "true")]
+        pairs += [("gear", g.key) for g in team.gear_on if g.key != without]
+        pairs += [("assume", a.key) for a in team.assumed if a.key != without]
+        pairs += [("want", w.key) for w in team.wanted if w.key != without]
+        pairs += [("count", c.field) for c in team.counts if c.key != without]
+
+        for slot in slots:
+            pairs += [("slot", slot.choice), ("relic", slot.relic)]
+
+        return f"{self.path}?{urlencode(pairs + list(extra))}"
+
+    def links(self, ran: bool, more: Query | None) -> TeamLinks:
+        """`ran`: a search ran (a chip's removal runs it again); `more`: what lists more."""
+        team = self.team
+        keep: Query = (("run", "true"),) if ran else ()
+        keys = [w.key for w in team.wanted] + [c.key for c in team.counts]
+        keys += [g.key for g in team.gear_on] + [a.key for a in team.assumed]
+        return TeamLinks(
+            empty=self.to([]),
+            without={key: self.to(team.slots, keep, key) for key in keys},
+            more=self.to(team.slots, more) if more else None,
+        )
+
+
+def listing(listed: int, option: int) -> Query:
+    """A search's run listing `listed` options, `option` the one shown."""
+    return (("run", "true"), ("listed", str(listed)), ("option", str(option)))
 
 
 def no_note(tag: Tag) -> None:

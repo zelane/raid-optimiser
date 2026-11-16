@@ -15,7 +15,16 @@ enemy_report.py - the enemy store (`enemies`) in the terminal: an area's stages 
 import argparse
 
 from optimiser.account import Stat
-from optimiser.enemies import CHIMERA_FORMS, Enemies, Restriction, Stage, enemy_stats, load_enemies
+from optimiser.enemies import (
+    CHIMERA_FORMS,
+    Enemies,
+    Restriction,
+    Rotating,
+    Stage,
+    enemy_stats,
+    load_enemies,
+    team_restriction,
+)
 from optimiser.paths import GAME
 
 SHOWN_STATS = (Stat.HP, Stat.ATK, Stat.DEF, Stat.SPD, Stat.RES, Stat.ACC, Stat.CR, Stat.CD)
@@ -63,8 +72,16 @@ def print_stage(enemies: Enemies, stage: Stage, with_skills: bool) -> None:
 
     print()
 
-    for restriction in stage.restrictions:
-        print(f"   every champion: {describe_restriction(restriction)}")
+    match team_restriction(stage):
+        case Restriction() as restriction:
+            print(f"   every champion: {describe_restriction(restriction)}")
+
+        case Rotating(choices=choices):
+            for restriction in choices:
+                print(f"   every champion, when active: {describe_restriction(restriction)}")
+
+        case None:
+            pass
 
     for number, line in enumerate(stage.formations, 1):
         if len(stage.formations) > 1:
@@ -117,6 +134,8 @@ def describe_restriction(restriction: Restriction) -> str:
         ("role", restriction.roles),
         ("rarity", restriction.rarities),
         ("affinity", restriction.affinities),
+        ("stars at least", (str(restriction.grade),) if restriction.grade else ()),
+        ("race", (restriction.race,) if restriction.race else ()),
     ]
     return "; ".join(f"{name} {' / '.join(values)}" for name, values in parts if values) or "any"
 

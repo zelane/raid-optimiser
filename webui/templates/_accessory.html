@@ -1,22 +1,7 @@
-{% from "_macros.html" import stars, piece %}
-{# An accessory's cells in the lists: its art, what it is, its main stat and substats. #}
+{% from "_macros.html" import piece, piece_cells %}
+{# An accessory's cells in the lists: the piece's, marked if it's been reworked. #}
 {% macro accessory_cells(row) %}
-  <td>
-    <div class="piece-art small rarity-{{ row.rarity | lower }}" title="{{ row.set_name }}, {{ row.rarity }}">
-      {% if row.image_url %}<img src="{{ row.image_url }}" alt="">{% endif %}
-      <span class="piece-level">+{{ row.level }}</span>
-    </div>
-  </td>
-  <td>
-    <strong>{{ row.slot }}</strong> {{ stars(row.rank) }}
-    {% if row.reworked %}<small class="badge quiet" title="reworked already: it can't be again">reworked</small>{% endif %}<br>
-    <small>{{ row.set_name }}</small>
-    {% if row.faction_icon_url %}<img class="faction small" src="{{ row.faction_icon_url }}" alt="{{ row.faction }}" title="{{ row.faction }}">
-    {% elif row.faction %}<small>· {{ row.faction }}</small>{% endif %}
-    {% if row.worn_by %}<br><small class="muted">on {{ row.worn_by }}</small>{% endif %}
-  </td>
-  <td><strong>{{ row.main }}</strong></td>
-  <td><small>{% for sub in row.substats %}<span class="nowrap">{{ sub }}</span>{{ " · " if not loop.last }}{% endfor %}</small></td>
+  {% call piece_cells(row.piece) %}{% if row.reworked %}<small class="badge quiet" title="reworked already: it can't be again">reworked</small>{% endif %}{% endcall %}
 {% endmacro %}
 
 {# A piece's scores: now, at +16, after a rework, then its value (shortage counted). #}
@@ -39,7 +24,7 @@
 {% macro protect_toggle(row) %}
   <label class="inline" title="Never drop this piece">
     <input type="checkbox" name="on" {% if row.protected %}checked{% endif %}
-           hx-post="/accessories/{{ row.id }}/protect" hx-trigger="change" hx-target="#cleanup" hx-swap="innerHTML">
+           hx-post="/accessories/{{ row.piece.id }}/protect" hx-trigger="change" hx-target="#cleanup" hx-swap="innerHTML">
     Keep
   </label>
 {% endmacro %}
@@ -47,12 +32,12 @@
 {# One side of a swap (`gear-pair`): `label` and the piece's score as it stands, then `note`
    (the gain, or "then sell"), over the optimiser's piece card (`piece`, as `champion` sees
    it: the worn one is theirs and steps back). The one to equip is rimmed in gold. #}
-{% macro gear_card(row, view, champion, kind, label, note="", note_class="") %}
+{% macro gear_card(row, champion, kind, label, note="", note_class="") %}
   <div class="gear-card stack {{ kind }}" style="--space: var(--space-xs)">
     <div class="cluster" style="--justify: space-between; --align: baseline">
       <span class="caps">{{ label }}</span>
       <span class="note">Score <strong>{{ row.now }}</strong>{% if note %} <small class="{{ note_class }}">{{ note }}</small>{% endif %}</span>
     </div>
-    {{ piece(view, champion) }}
+    {{ piece(row.piece, champion) }}
   </div>
 {% endmacro %}

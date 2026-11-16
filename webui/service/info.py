@@ -7,7 +7,7 @@ The game keeps a count of each stage's stars, not which battle quests earned the
 ("Beat Stage") comes with beating it, so a stage one star short is missing one of the other
 two (almost always its challenge, the last), and the page says so.
 
-- `FACTION_WARS`, `FW_DIFFICULTY`: the area and the difficulty the section covers
+- `FW_DIFFICULTY`: the difficulty the section covers (the area is `enemies.FACTION_WARS`)
 - `StageRow`, `CryptView`, `FactionWarsSection`, `InfoPage`: the views
 - `info_page`: what the page shows
 - `faction_wars_section`, `crypt_view`, `stage_row`: its pieces
@@ -16,10 +16,9 @@ two (almost always its challenge, the last), and the page says so.
 from dataclasses import dataclass
 
 from optimiser.account import Account, StageProgress, faction_name
-from optimiser.enemies import Enemies, Region
+from optimiser.enemies import CRYPT, FACTION_WARS, Enemies, Region
 from webui.service.views import asset_url
 
-FACTION_WARS = "Fractions"
 FW_DIFFICULTY = "Hard"
 
 
@@ -94,7 +93,7 @@ def crypt_view(account: Account, enemies: Enemies, region: Region, difficulty: s
         if (row := stage_row(number, quests, progress)) is not None:
             rows.append(row)
 
-    faction = faction_name(region.id.removeprefix("Fraction_"))
+    faction = faction_name(region.id.removeprefix(CRYPT))
     banner = asset_url("factions", faction)
     return CryptView(region.id, region.name, banner, stars, max_stars, tuple(rows))
 

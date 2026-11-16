@@ -1,7 +1,7 @@
 {#- A test page: the theme's colours and the shared components (app.css) side by side, with
     made-up content, so the palette can be judged in place. Not in the nav: /palette. -#}
 {% extends "base.html" %}
-{% from "_macros.html" import champion as listed, piece %}
+{% from "_macros.html" import champion as listed, piece, page_head, tally %}
 {% from "_team.html" import status_icon, score_pill %}
 {% block title %}Palette{% endblock %}
 {% block content %}
@@ -15,13 +15,7 @@
 </style>
 
 <div class="stack" style="--space: var(--space-3xl)">
-  <div class="page-head">
-    <div>
-      <h1>Palette</h1>
-      <p class="lede">Every colour in the Vault theme and every shared component, filled with made-up content. The theme lives in <code>static/theme.css</code>, the components in <code>static/app.css</code>.</p>
-    </div>
-    <div class="tally"><strong>42<small>/50</small></strong><span class="caps">tally</span><span class="muted">a big figure</span></div>
-  </div>
+  {% call(part) page_head("Palette") %}{% if part == "lede" %}Every colour in the Vault theme and every shared component, filled with made-up content. The theme lives in <code>static/theme.css</code>, the components in <code>static/app.css</code>.{% else %}{% call tally(42, 50, "tally") %}<span class="muted">a big figure</span>{% endcall %}{% endif %}{% endcall %}
 
   {# --- Colours -------------------------------------------------------------- #}
   <section class="page-section stack" style="--space: var(--space-m)">

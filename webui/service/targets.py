@@ -1,9 +1,9 @@
 """
 targets.py - the target picker: an enemy to aim damage at, picked by zone (Dungeons, Clan
 Boss, Faction Wars…), group (a dungeon, a crypt), difficulty and stage, then one enemy of the
-stage's last wave, shown with its portrait and stats as the battle starts. A component: any
-page can show it, and the page decides what the pick fills in (the champion page: the DEF
-damage is ranked against).
+stage's waves (the last unless picked), shown with its portrait and stats as the battle
+starts. A component: any page can show it, and the page decides what the pick fills in (the
+champion page: the DEF damage is ranked against).
 
 - `ZONES`, `ZONE_NAMES`, `REGION_NAMES`, `LEFT_OUT_REGIONS`, `PLACEHOLDER_NAME`,
   `SHOWN_STATS`: what the picker offers and what it calls things
@@ -92,15 +92,21 @@ class StatText:
 
 @dataclass(frozen=True)
 class EnemyCard:
+    """An enemy of the wave shown, drawn as a champion's tile (no level or stars)."""
+
     key: str  # "<wave>-<slot>"
     name: str
     portrait_url: str | None
     affinity: str
-    affinity_url: str | None
+    affinity_icon_url: str | None
     boss: bool
     picked: bool
     stats: tuple[StatText, ...]
     defence: int
+    resistance: int = 0
+    speed: int = 0
+    accuracy: int = 0
+    rarity: str = "Common"  # the tile's frame
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,7 @@ class TargetPicker:
     groups: tuple[Option, ...]
     difficulties: tuple[Option, ...]
     stages: tuple[Option, ...]
+    waves: tuple[Option, ...]  # one: nothing to pick
     title: str
     enemies: tuple[EnemyCard, ...]
     picked: EnemyCard
@@ -125,8 +132,10 @@ def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
     zone, group, difficulty, stage_choice = locate(zones, query)
     stage = enemies.stages[stage_choice.id]
 
-    # 2. The stage's last wave, and which of its enemies is picked.
-    cards = enemy_cards(enemies, stage, query.enemy)
+    # 2. The wave (the last unless asked), and which of its enemies is picked.
+    waves = sorted({p.wave for p in stage.formations[0]})
+    wave = query.wave if query.wave in waves else waves[-1]
+    cards = enemy_cards(enemies, stage, wave, query.enemy)
     picked = next(card for card in cards if card.picked)
 
     return TargetPicker(
@@ -134,6 +143,7 @@ def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
         groups=options(zone.groups, group),
         difficulties=options(group.difficulties, difficulty),
         stages=tuple(Option(str(s.id), s.label, s is stage_choice) for s in difficulty.stages),
+        waves=tuple(Option(str(w), f"Wave {w}", w == wave) for w in waves),
         title=f"{group.label} · {difficulty.label} · {stage_choice.label}",
         enemies=cards,
         picked=picked,
@@ -285,12 +295,13 @@ def options(
     return tuple(Option(item.key, item.label, item is picked) for item in items)
 
 
-def enemy_cards(enemies: Enemies, stage: Stage, asked: str | None) -> tuple[EnemyCard, ...]:
-    """The stage's last wave, bosses first; the one asked for is picked, else the main one."""
+def enemy_cards(
+    enemies: Enemies, stage: Stage, wave_number: int, asked: str | None
+) -> tuple[EnemyCard, ...]:
+    """The wave's enemies, bosses first; the one asked for is picked, else the main one."""
     formation = stage.formations[0]
-    last_wave = max(p.wave for p in formation)
     wave = sorted(
-        (p for p in formation if p.wave == last_wave),
+        (p for p in formation if p.wave == wave_number),
         key=lambda p: (not is_boss(p, enemies.types[p.type_id]), p.slot),
     )
     keys = [target_key(p) for p in wave]
@@ -308,13 +319,16 @@ def enemy_card(enemies: Enemies, stage: Stage, placement: Placement, picked: str
         portrait_url=asset_url("portraits", str(enemy.id))
         or asset_url("portraits", str(enemy.id // 10 * 10)),
         affinity=affinity,
-        affinity_url=asset_url("affinities", affinity.lower()),
+        affinity_icon_url=asset_url("affinities", affinity.lower()),
         boss=is_boss(placement, enemy),
         picked=target_key(placement) == picked,
         stats=tuple(
             StatText(STAT_LABELS[stat], format_stat(stat, stats[stat])) for stat in SHOWN_STATS
         ),
         defence=round(stats[Stat.DEF]),
+        resistance=round(stats[Stat.RES]),
+        speed=round(stats[Stat.SPD]),
+        accuracy=round(stats[Stat.ACC]),
     )
 
 

@@ -1,40 +1,24 @@
 {% extends "base.html" %}
+{% from "_macros.html" import page_head, tally %}
 {% from "_team.html" import score_pill, team_slots, bring_panels, run_bar, option_card, more_link, needs_panel %}
 
-{# The page's URL for these slots (texts as the picker holds them), with `extra` appended and
-   the wanted tag, count, gear or assumption keyed `without` left out. #}
-{% macro page_url(slots, extra="", without="") -%}
-  {%- set base = page.base -%}
-  /teams?base={{ base.kind }}{% if base.kind %}&crypt={% for c in base.crypts if c.selected %}{{ c.region }}{% endfor %}&difficulty={{ base.difficulty }}&stage={{ base.number }}{% endif %}&min_grade={{ page.min_grade }}&gear_set=true{% for gear in page.team.gear_on if gear.key != without %}&gear={{ gear.key | urlencode }}{% endfor %}{% for assumed in page.team.assumed if assumed.key != without %}&assume={{ assumed.key | urlencode }}{% endfor %}{% for want in page.team.wanted if want.key != without %}&want={{ want.key | urlencode }}{% endfor %}{% for count in page.team.counts if count.key != without %}&count={{ count.field | urlencode }}{% endfor %}{% for slot in slots %}&slot={{ slot.choice | urlencode }}&relic={{ slot.relic | urlencode }}{% endfor %}{{ extra }}
-{%- endmacro %}
-
-{# The page as it is, with the wanted tag, count, gear or assumption keyed `key` left out:
-   what a chip's × links to. #}
-{% macro without(key) -%}
-  {{ page_url(page.team.slots, '&run=true' if page.ran else '', key) }}
-{%- endmacro %}
-
 {% block title %}Team finder: Raid optimiser{% endblock %}
+{% block head %}<script src="{{ static_url('keep.js') }}" data-keep="teams" data-swap="#page"></script>{% endblock %}
 {% block content %}
   {% set base = page.base %}
-  {# One GET form for everything the search takes: the page's state is all in its URL. #}
+  {# One GET form for everything the search takes: the page's state rides in its query (kept in the browser by keep.js). #}
+  <div id="page" class="page-swap" style="display: contents">
   <form method="get" action="/teams" class="stack" style="--space: var(--space-2xl)">
-    <header class="page-head">
-      <div>
-        <h1>Team finder</h1>
-        <p class="lede">
-          Teams that bring what's asked: a Faction Wars stage's challenge, and whatever you
-          add (buffs, debuffs, effects, so many different ones). Judged on what their skills
-          bring and how far it can be counted on; how much of it (10+ Stuns) isn't, nor
-          damage, nor turn order.
-        </p>
-      </div>
-      <div class="tally" title="Needs the team shown meets">
-        <strong class="{{ 'up' if page.needs and page.met == page.needs else 'down' }}">{{ page.met }}<small>/{{ page.needs }}</small></strong>
-        <span class="caps">needs</span>
+    {% call(part) page_head("Team finder") %}{% if part == "lede" %}
+      Teams that bring what's asked: a Faction Wars stage's challenge, and whatever you
+      add (buffs, debuffs, effects, so many different ones). Judged on what their skills
+      bring and how far it can be counted on; how much of it (10+ Stuns) isn't, nor
+      damage, nor turn order.
+    {% else %}
+      {% call tally(page.met, page.needs, "needs", "up" if page.needs and page.met == page.needs else "down", "Needs the team shown meets") %}
         {{ score_pill(page.score, "Team score: how far it can count on what's asked") }}
-      </div>
-    </header>
+      {% endcall %}
+    {% endif %}{% endcall %}
 
     <section class="panel stack" style="--space: var(--space-m)">
       <header class="panel-head">
@@ -59,7 +43,7 @@
             </select>
           </label>
           {% if base.faction_url %}<img class="faction small" src="{{ base.faction_url }}" alt="" aria-hidden="true">{% endif %}
-          <span class="note">Only {{ base.faction }} champions are searched.</span>
+          <span class="note">Only {{ base.faction | faction_label }} champions are searched.</span>
         </div>
         <p class="cluster" style="--space: var(--space-xs) var(--space-m); --align: baseline">
           <span class="caps">Challenge</span>
@@ -74,8 +58,8 @@
       {% endif %}
     </section>
 
-    {{ team_slots(page.team, page_url([])) }}
-    {{ bring_panels(page.team, page.ran, without, "every team must, besides the base") }}
+    {{ team_slots(page.team, page.links.empty) }}
+    {{ bring_panels(page.team, page.ran, page.links, "every team must, besides the base") }}
     {{ run_bar(page, page.ran and page.asked) }}
 
     {% if page.ran %}
@@ -95,14 +79,12 @@
           <div class="grid" style="--min: 19rem; --space: var(--space-l); --repeat: auto-fill">
             {% for option in page.options %}
               {{ option_card(option, option.number == page.shown, option.met, page.needs,
-                             "Team score: how far it can count on what's asked", "Show needs",
-                             page_url(page.team.slots, '&run=true&listed=' ~ page.listed ~ '&option=' ~ option.number),
-                             page_url(option.slots)) }}
+                             "Team score: how far it can count on what's asked", "Show needs") }}
             {% else %}
               <p>No team found: no champion at {{ page.min_grade }}★ or above adds anything.</p>
             {% endfor %}
           </div>
-          {{ more_link(page, page_url(page.team.slots, '&run=true&listed=' ~ page.more ~ '&option=' ~ (page.shown or 1))) }}
+          {{ more_link(page) }}
         {% endif %}
       </section>
     {% endif %}
@@ -120,6 +102,7 @@
       </div>
     </section>
   {% endif %}
+  </div>
   {% include "_finder.html" %}
 {% endblock %}
 {% block scripts %}<script src="{{ static_url('picker.js') }}"></script><script src="{{ static_url('finder.js') }}"></script>{% endblock %}

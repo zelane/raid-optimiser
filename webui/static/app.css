@@ -52,6 +52,10 @@
 .stars {
   color: var(--rarity-legendary);
   letter-spacing: -0.1em;
+
+  .off {
+    color: var(--outline-variant);
+  }
 }
 
 .star-yellow {
@@ -627,7 +631,6 @@ fieldset.panel {
 
   strong {
     grid-row: span 2;
-    font-family: var(--font-display);
     font-size: var(--text-3xl);
     line-height: 1;
 
@@ -707,6 +710,17 @@ fieldset.panel {
   &:hover {
     background: color-mix(in srgb, var(--stat-down) 14%, transparent);
     box-shadow: 0 0 10px color-mix(in srgb, var(--stat-down) 30%, transparent);
+  }
+}
+
+/* The part of a page keep.js re-renders: dimmed and still while its request runs. */
+.page-swap.htmx-request {
+  cursor: progress;
+
+  & > * {
+    pointer-events: none;
+    opacity: 0.6;
+    transition: opacity var(--transition);
   }
 }
 
@@ -1030,6 +1044,44 @@ img.faction {
   color: var(--on-surface);
   text-align: center;
   text-decoration: none;
+}
+
+/* A champion as a round portrait (`_macros.portrait`), rimmed in their rarity (muted when it
+   isn't known); a linked one grows when pointed at. */
+.portrait {
+  overflow: hidden;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 2px solid var(--outline-variant);
+  border-radius: 50%;
+  font-size: var(--text-2xs);
+  text-decoration: none;
+  background: var(--outline-variant);
+  transition: transform var(--transition);
+
+  &[class*="rarity-"] {
+    border-color: var(--rarity);
+  }
+
+  &.small {
+    width: 1.6rem;
+    height: 1.6rem;
+    border-width: 1px;
+  }
+
+  &:is(a):hover {
+    transform: scale(1.15);
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+  }
 }
 
 .champion-name {
@@ -1402,19 +1454,17 @@ table.limits {
 }
 
 .target-enemy {
-  --tile-width: 3.6rem;
-
   cursor: pointer;
   flex: none;
-  width: var(--tile-width);
   padding: 0;
   border: 0;
-  font-size: calc(var(--tile-width) / 4.5);
   opacity: 0.55;
   background: none;
-  transition:
-    opacity var(--transition),
-    transform var(--transition);
+  transition: opacity var(--transition);
+
+  .tile {
+    --tile-width: 3.6rem;
+  }
 
   &:hover,
   &:focus-visible {
@@ -1427,19 +1477,38 @@ table.limits {
   }
 
   &.picked {
-    --tile-width: 4.6rem;
-
     opacity: 1;
-  }
 
-  .tile-frame {
-    display: block;
+    .tile {
+      --tile-width: 4.6rem;
+    }
   }
 }
 
 .target-facts {
   flex: 1 1 18rem;
   min-width: 0;
+}
+
+/* The enemy's name, and the wave select at the line's far end. */
+.target-head {
+  display: flex;
+  gap: var(--space-xs) var(--space-m);
+  align-items: center;
+  justify-content: space-between;
+
+  .target-name {
+    min-width: 0;
+  }
+}
+
+.target-wave {
+  flex: none;
+  margin-block: 0;
+
+  select {
+    font-weight: 600;
+  }
 }
 
 .target-name strong {
@@ -1690,15 +1759,6 @@ button.build-pick {
       min-width: 0;
       margin-top: auto;
       font-size: var(--text-xs);
-
-      img {
-        width: 1.6rem;
-        height: 1.6rem;
-        border: 1px solid var(--outline-variant);
-        border-radius: 50%;
-        object-fit: cover;
-        object-position: top;
-      }
 
       &.equipped {
         color: var(--primary);
@@ -2377,30 +2437,6 @@ table.glance {
   background: color-mix(in srgb, var(--outline-variant) 30%, transparent);
 }
 
-.mini-portrait {
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
-  border: 2px solid var(--rarity);
-  border-radius: 50%;
-  font-size: var(--text-2xs);
-  text-decoration: none;
-  background: var(--outline-variant);
-  transition: transform var(--transition);
-
-  &:hover {
-    transform: scale(1.15);
-  }
-
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-}
-
 /* The info page. Faction Wars: a panel per crypt short of its stars, in masonry columns of
    32rem at least, each crypt whole in one (down a column, then across); a row per stage with
    the stars earned. */
@@ -2430,12 +2466,4 @@ table.glance {
 .crypt-state {
   width: 7rem;
   white-space: nowrap;
-}
-
-.stars-earned span {
-  color: var(--outline-variant);
-
-  &.on {
-    color: var(--rarity-legendary);
-  }
 }

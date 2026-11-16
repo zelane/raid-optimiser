@@ -37,8 +37,8 @@ from optimiser.accessories.roles import (
     Kind,
     SetTable,
 )
-from optimiser.account import Account, Champion, faction_name
-from optimiser.labels import STAT_LABELS, format_line, line_label
+from optimiser.account import Account, Champion, faction_label
+from optimiser.labels import STAT_LABELS
 from optimiser.paths import POTENTIALS, STORE
 from optimiser.reserve import Reservations, reservations
 from optimiser.settings import (
@@ -62,9 +62,7 @@ from webui.service.results import PieceView, piece_view
 from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
-    asset_url,
     champion_row,
-    piece_image_url,
     set_name,
     slot_label,
 )
@@ -154,22 +152,11 @@ class WeightTable:
 
 @dataclass(frozen=True)
 class AccessoryRow:
-    """An accessory as the lists show it. Scores are quantile scores in average rolls;
-    `rework` is None where a rework isn't open to it."""
+    """An accessory (the optimiser's `PieceView`) and its scores. Scores are quantile scores in
+    average rolls; `rework` is None where a rework isn't open to it."""
 
-    id: int
-    slot: str
-    set_name: str
-    image_url: str | None
-    faction: str | None
-    faction_icon_url: str | None
-    rank: int
-    rarity: str
-    level: int
-    main: str
-    substats: list[str]
+    piece: PieceView
     where: str  # "inventory", "mailbox", "worn"
-    worn_by: str | None
     reworked: bool
     fit: str | None  # the champion type it's best for
     now: str
@@ -197,13 +184,10 @@ class CandidateRow:
 
 @dataclass(frozen=True)
 class SwapRow:
-    """Each piece twice: as the lists show it (scores) and as the optimiser's piece card
-    draws it (`PieceView`, through the champion's eyes: the worn one is theirs)."""
+    """The two pieces, through the champion's eyes (the worn one is theirs)."""
 
     better: AccessoryRow  # to equip
     worn: AccessoryRow  # coming off
-    better_piece: PieceView
-    worn_piece: PieceView
     gain: str
     then_sell: bool
 
@@ -515,7 +499,7 @@ def weight_table(account: Account) -> WeightTable:
         ],
         kinds=[Choice(kind.value, kind.value.capitalize()) for kind in Kind],
         factions=sorted(
-            (Choice(faction, faction_name(faction)) for faction in type_factions(account)),
+            (Choice(faction, faction_label(faction)) for faction in type_factions(account)),
             key=lambda choice: choice.label,
         ),
         sets=set_grid(account, types, sets),
@@ -537,7 +521,7 @@ def set_grid(account: Account, types: tuple[ChampionType, ...], sets: SetTable) 
         return TargetRow(
             champion_type.key,
             champion_type.label,
-            faction_name(champion_type.faction) if champion_type.faction else None,
+            faction_label(champion_type.faction) if champion_type.faction else None,
             [sets.targets(column.set_id, champion_type) for column in columns],
         )
 
@@ -609,13 +593,9 @@ def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
 def swap_row(
     context: RowContext, swap: Swap, champion: Champion, reserved: Reservations
 ) -> SwapRow:
-    better, worn = swap.pairing.better.artifact, swap.pairing.worn.artifact
-    account = context.account
     return SwapRow(
-        better=accessory_row(context, swap.pairing.better),
-        worn=accessory_row(context, swap.pairing.worn),
-        better_piece=piece_view(better, account, champion, reserved),
-        worn_piece=piece_view(worn, account, champion, reserved),
+        better=accessory_row(context, swap.pairing.better, champion, reserved),
+        worn=accessory_row(context, swap.pairing.worn, champion, reserved),
         gain=f"+{swap.pairing.gain():.1f}",
         then_sell=swap.then_sell,
     )
@@ -630,25 +610,18 @@ def row_context(account: Account) -> RowContext:
     return RowContext(account, read_protected(STORE), type_labels(account))
 
 
-def accessory_row(context: RowContext, piece: Assessed) -> AccessoryRow:
-    account = context.account
+def accessory_row(
+    context: RowContext,
+    piece: Assessed,
+    champion: Champion | None = None,
+    reserved: Reservations | None = None,
+) -> AccessoryRow:
+    """The piece through `champion`'s eyes (a swap's), or nobody's (the lists')."""
     artifact, potential = piece.artifact, piece.potential
-    wearer = account.champions.get(account.owners.get(artifact.id, -1))
 
     return AccessoryRow(
-        id=artifact.id,
-        slot=slot_label(artifact.slot),
-        set_name=set_name(account, artifact.set_id),
-        image_url=piece_image_url(artifact),
-        faction=artifact.faction,
-        faction_icon_url=asset_url("factions", artifact.faction) if artifact.faction else None,
-        rank=artifact.rank,
-        rarity=artifact.rarity,
-        level=artifact.level,
-        main=line_label(artifact.primary),
-        substats=[format_line(line) for line in artifact.substats],
+        piece=piece_view(artifact, context.account, champion, reserved),
         where=piece.where.value,
-        worn_by=wearer.name if wearer else None,
         reworked=artifact.reworked,
         fit=context.type_labels.get(potential.natural.fit or "", None),
         now=f"{potential.now.best:.1f}",
@@ -663,7 +636,7 @@ def accessory_row(context: RowContext, piece: Assessed) -> AccessoryRow:
 def type_labels(account: Account) -> dict[str, str]:
     """Type key -> its label; a faction's own types name the faction."""
     return {
-        t.key: f"{t.label} ({faction_name(t.faction)})" if t.faction else t.label
+        t.key: f"{t.label} ({faction_label(t.faction)})" if t.faction else t.label
         for t in current_types(account)
     }
 

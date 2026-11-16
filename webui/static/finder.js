@@ -89,7 +89,7 @@
       field.value = pick.dataset.choice;
       const reset = opener.dataset.finderReset && document.getElementById(opener.dataset.finderReset);
       if (reset) reset.value = "";
-      field.form.submit();
+      field.form.requestSubmit();
       return;
     }
 

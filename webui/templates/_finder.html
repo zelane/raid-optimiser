@@ -1,7 +1,8 @@
 {# The champion finder (`finder.js`): a dialog any button marked `data-finder` opens. Its list
    comes from `/finder` as the filters change (the champion list's: `_champion_filters.html`). A pick is a link to the champion's optimiser;
    an opener marked `data-finder="slot"` instead puts the champion in the field named by
-   `data-finder-target` (as the Chimera slots name them) and submits its form. #}
+   `data-finder-target` (as the Chimera slots name them) and submits its form. A page can
+   hold the list to what its target admits: `finder_only` (`service.finder.OnlyView`). #}
 {% from "_champion_filters.html" import champion_filters %}
 <dialog id="finder" class="finder" aria-labelledby="finder-title">
   <article class="stack" style="--space: var(--space-m)">
@@ -9,7 +10,7 @@
       <h2 id="finder-title">Find a champion</h2>
       <button type="button" class="icon" data-finder-close aria-label="Close">×</button>
     </div>
-    {{ champion_filters("#finder-results", picking=true) }}
+    {{ champion_filters("#finder-results", picking=true, only=finder_only | default(none)) }}
     <div id="finder-results" class="finder-results stack" style="--space: var(--space-s)" aria-live="polite"></div>
   </article>
 </dialog>

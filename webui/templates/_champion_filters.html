@@ -1,11 +1,13 @@
 {# The champion filters (name, rarity, faction, fewest stars), on the champion list and in the
    finder dialog: as they change, `/finder` lists the matches into `target`. `picking`: the
    dialog's, whose list picks rather than locks. finder.js remembers the filters (not the
-   name) in this browser, the same for both. #}
-{% macro champion_filters(target, picking=false) %}
+   name) in this browser, the same for both. `only`: a page's fixed hold on the list
+   (`service.finder.OnlyView`: what its stage admits), sent with every search and shown. #}
+{% macro champion_filters(target, picking=false, only=none) %}
   <form class="filter-bar grow" data-champion-filters hx-get="/finder" hx-target="{{ target }}"
         hx-trigger="input changed delay:200ms, change, filters:apply" onsubmit="return false">
     {% if picking %}<input type="hidden" name="pick" value="1">{% endif %}
+    {% for name, value in (only.fields if only else []) %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
     <input type="search" name="q" placeholder="{{ 'Name (Enter takes the first)' if picking else 'Find a champion by name' }}"
            aria-label="Champion name" autocomplete="off"{% if not picking %} autofocus{% endif %}>
     <select name="rarity" aria-label="Rarity">
@@ -14,11 +16,12 @@
     </select>
     <select name="faction" aria-label="Faction">
       <option value="">Any faction</option>
-      {% for faction in finder_factions() %}<option value="{{ faction }}">{{ faction }}</option>{% endfor %}
+      {% for faction in finder_factions() %}<option value="{{ faction }}">{{ faction | faction_label }}</option>{% endfor %}
     </select>
     <select name="grade" aria-label="Fewest stars">
       <option value="">Any stars</option>
       {% for grade in finder_grades %}<option value="{{ grade }}">{{ grade }}★{% if grade < 6 %} and up{% endif %}</option>{% endfor %}
     </select>
   </form>
+  {% if only %}<p class="note info">The target admits only {{ only.label }}: only they are listed.</p>{% endif %}
 {% endmacro %}

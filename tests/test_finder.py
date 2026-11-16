@@ -3,8 +3,10 @@ test_finder.py - the champion finder's query (`parse_finder_query`).
 
 - `test_query_reads_its_fields`: name, rarity and fewest stars as given
 - `test_unknown_values_fall_back_to_any`: a rarity or star count the game doesn't have means any
+- `test_only_reads_a_stage_restriction`: the `only_` fields as a `Restriction`, none: no hold
 """
 
+from optimiser.enemies import Restriction
 from webui.forms.finder import FinderQuery, parse_finder_query
 
 
@@ -21,3 +23,11 @@ def test_unknown_values_fall_back_to_any() -> None:
 
     assert query == FinderQuery()
     assert parse_finder_query({"grade": "-1"}) == FinderQuery()
+
+
+def test_only_reads_a_stage_restriction() -> None:
+    lists = {"only_affinity": ["Magic"], "only_role": ["Attack", "Support"], "only_grade": ["6"]}
+    query = parse_finder_query({}, lists)
+
+    assert query.only == Restriction((), ("Attack", "Support"), (), ("Magic",), grade=6)
+    assert parse_finder_query({}, {"only_faction": [""]}).only is None

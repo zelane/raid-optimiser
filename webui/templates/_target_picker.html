@@ -1,7 +1,9 @@
 {# The target picker (`service.targets`): zone, group, difficulty and stage, then one enemy of
-   the stage's last wave, with its stats. A component: changes re-render it (`/targets`); its
-   `target` field belongs to the page's form (`for_form`, default "request"). `fill`: the
-   pick is the user's, so target.js tells the page to take its stats. #}
+   a wave (the last unless picked: its select at the end of the enemy's name line), with its stats. A component: changes re-render it (`/targets`); its
+   `target` field belongs to the page's form (`for_form`, default "request"; sent with each
+   re-render so it stays the page's). `fill`: the pick is the user's, so target.js tells the
+   page to take its stats. #}
+{% from "_macros.html" import tile %}
 {% set for_form = for_form | default("request") %}
 {% set picked = picker.picked %}
 <form class="panel target-picker" id="target-picker"
@@ -10,6 +12,7 @@
       data-defence="{{ picked.defence }}"
       data-title="{{ picked.name }}, {{ picker.title }}">
   <input type="hidden" name="target" value="{{ picker.target }}" form="{{ for_form }}">
+  <input type="hidden" name="for_form" value="{{ for_form }}">
   <div class="target-levels">
     {% for name, label, choices in [("zone", "Zone", picker.zones), ("group", "Group", picker.groups),
                                     ("difficulty", "Difficulty", picker.difficulties), ("stage", "Stage", picker.stages)] %}
@@ -27,17 +30,24 @@
                 aria-checked="{{ 'true' if enemy.picked else 'false' }}"
                 class="target-enemy{{ ' picked' if enemy.picked }}{{ ' boss' if enemy.boss }}"
                 title="{{ enemy.name }}{{ ' (boss)' if enemy.boss }}">
-          <span class="tile-frame frame-common">
-            {% if enemy.portrait_url %}<img class="tile-art" src="{{ enemy.portrait_url }}" alt="{{ enemy.name }}">
-            {% else %}<span class="tile-missing">{{ enemy.name }}</span>{% endif %}
-            {% if enemy.affinity_url %}<img class="tile-affinity" src="{{ enemy.affinity_url }}" alt="{{ enemy.affinity }}">{% endif %}
-          </span>
+          {{ tile(enemy) }}
         </button>
       {% endfor %}
     </div>
     <div class="target-facts stack" style="--space: var(--space-s)">
-      <p class="target-name cluster" style="--space: var(--space-2xs) var(--space-s)"><strong>{{ picked.name }}</strong>{% if picked.boss %} <small class="badge">Boss</small>{% endif %}
-        <small class="muted">{{ picker.title }} · {{ picked.affinity }}</small></p>
+      <div class="target-head">
+        <p class="target-name cluster" style="--space: var(--space-2xs) var(--space-s)"><strong>{{ picked.name }}</strong>{% if picked.boss %} <small class="badge">Boss</small>{% endif %}
+          <small class="muted">{{ picker.title }} · {{ picked.affinity }}</small></p>
+        {% if picker.waves | length > 1 %}
+          <label class="target-wave inline"><span class="caps">Wave</span>
+            <select name="wave" class="small">
+              {% for option in picker.waves %}<option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>{{ option.label }}</option>{% endfor %}
+            </select>
+          </label>
+        {% else %}
+          <input type="hidden" name="wave" value="{{ picker.waves[0].value }}">
+        {% endif %}
+      </div>
       <dl class="stat-tiles target-stats">
         {% for stat in picked.stats %}<div><dt>{{ stat.label }}</dt><dd>{{ stat.text }}</dd></div>{% endfor %}
       </dl>

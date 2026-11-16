@@ -7,7 +7,7 @@ a few at a time) and, for the team shown, who brings what.
 - `MORE`: how many more teams "show more" lists
 - `CryptOption`, `BaseView`, `OptionView`, `TeamsPage`: the views
 - `teams_page`: what the page asks for
-- `finder_goals`, `base_view`, `option_view`: its pieces
+- `finder_goals`, `base_view`, `base_query`, `option_view`: its pieces
 """
 
 from dataclasses import dataclass
@@ -25,8 +25,12 @@ from webui.forms.team import GRADES, Fill, Offers
 from webui.forms.teams import TEAM_SIZE, FactionWarsBase, TeamsRequest
 from webui.service.team import (
     NeedView,
+    PageUrl,
+    Query,
     SlotView,
+    TeamLinks,
     TeamView,
+    listing,
     need_view,
     percent,
     slot_view,
@@ -72,6 +76,8 @@ class OptionView:
     slots: list[SlotView]
     met: int
     score: int
+    show_url: str  # the page showing its needs
+    use_url: str  # the page with it in the slots
 
 
 @dataclass(frozen=True)
@@ -95,6 +101,7 @@ class TeamsPage:
     score: int  # % of what's shown
     base_needs: list[NeedView]  # the challenge's, for the team shown
     extras: list[NeedView]  # what's asked besides, for the team shown
+    links: TeamLinks
 
 
 def teams_page(
@@ -133,26 +140,31 @@ def teams_page(
     base_needs = [need_view(n) for cover in team.objectives for n in cover.needs]
     extras = [need_view(n) for n in team.extras]
     total = found.found if found else 0
+    based = base_view(base, picked, crypts, slots)
+    team_shown = team_view(account, lineup.slots, ask, offers, "the enemies")
+    url = PageUrl("/teams", base_query(based, request.min_grade), team_shown)
+    more = min(listed + MORE, total) if total > listed else 0
     return TeamsPage(
-        base=base_view(base, picked, crypts, slots),
+        base=based,
         min_grade=request.min_grade,
         grades=GRADES,
-        team=team_view(account, lineup.slots, ask, offers, "the enemies"),
+        team=team_shown,
         ran=request.fill is not None,
         asked=asked,
         candidates=found.candidates if found else 0,
-        options=[option_view(number, o) for number, o in enumerate(options, 1)],
+        options=[option_view(number, o, url, len(options)) for number, o in enumerate(options, 1)],
         found=total,
         complete=found.complete if found else True,
         partial=found.partial if found else False,
         listed=len(options),
-        more=min(listed + MORE, total) if total > listed else 0,
+        more=more,
         shown=shown,
         met=sum(n.met for n in base_needs + extras),
         needs=len(base_needs) + len(extras),
         score=percent(team.score),
         base_needs=base_needs,
         extras=extras,
+        links=url.links(request.fill is not None, listing(more, shown or 1) if more else None),
     )
 
 
@@ -195,11 +207,30 @@ def base_view(
     )
 
 
-def option_view(number: int, team: Lineup) -> OptionView:
+def base_query(base: BaseView, min_grade: int) -> Query:
+    """The page's own fields: the base needs picked, and the grade searched from."""
+    picked: Query = ()
+
+    if base.kind:
+        region = next(c.region for c in base.crypts if c.selected)
+        picked = (
+            ("crypt", region),
+            ("difficulty", base.difficulty),
+            ("stage", str(base.number)),
+        )
+
+    return (("base", base.kind), *picked, ("min_grade", str(min_grade)))
+
+
+def option_view(number: int, team: Lineup, url: PageUrl, listed: int) -> OptionView:
+    """`url`: the page's, `listed` the options it lists (kept when it shows this one)."""
     covers = [n for cover in team.objectives for n in cover.needs] + list(team.extras)
+    slots = [slot_view(member, None) for member in team.slots]
     return OptionView(
         number=number,
-        slots=[slot_view(member, None) for member in team.slots],
+        slots=slots,
         met=sum(n.met for n in covers),
         score=percent(team.score),
+        show_url=url.to(url.team.slots, listing(listed, number)),
+        use_url=url.to(slots),
     )

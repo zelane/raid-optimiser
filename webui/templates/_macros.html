@@ -1,4 +1,12 @@
-{% macro stars(count) %}<span class="stars" title="{{ count }} stars">{{ "★" * count }}</span>{% endmacro %}
+{# Stars: the game's art when there is some (`art`: StarViews, coloured by ascension and
+   awakening), else `count` plain ★, out of `of` if given (the rest dimmed). `kind`: the
+   row's own class (`champion-stars`, `piece-stars`). #}
+{% macro stars(count=0, art=none, of=none, title="", kind="") -%}
+  <span class="stars {{ kind }}" title="{{ title or (count ~ ' stars') }}">
+    {%- if art %}{% for star in art %}{% if star.image_url %}<img src="{{ star.image_url }}" alt="">{% else %}<span class="star-{{ star.colour }}">★</span>{% endif %}{% endfor %}
+    {%- else %}{% for n in range(of or count) %}<span{% if n >= count %} class="off"{% endif %}>★</span>{% endfor %}{% endif -%}
+  </span>
+{%- endmacro %}
 
 {# A champion as the game's collection shows them: the portrait in its rarity frame, with
    affinity, level and empower on it, the rarity's crest over its lower edge (and a
@@ -12,9 +20,9 @@
       {% else %}<span class="tile-missing">{{ champion.name }}</span>{% endif %}
       {% if champion.affinity_icon_url %}<img class="tile-affinity" src="{{ champion.affinity_icon_url }}" alt="{{ champion.affinity }}" title="{{ champion.affinity }}">{% endif %}
       {% if champion.empower %}<span class="tile-empower" title="empowered">+{{ champion.empower }}</span>{% endif %}
-      <span class="tile-level" title="level">{{ champion.level }}</span>
+      {% if champion.level is defined %}<span class="tile-level" title="level">{{ champion.level }}</span>{% endif %}
     </div>
-    {{ champion_stars(champion) }}
+    {% if champion.stars is defined %}{{ champion_stars(champion) }}{% endif %}
   </figure>
 {% endmacro %}
 
@@ -41,24 +49,49 @@
   {%- endif -%}
 {% endmacro %}
 
-{% macro faction(champion) %}
-  {%- if champion.faction_icon_url %}<img class="faction" src="{{ champion.faction_icon_url }}" alt="{{ champion.faction }}" title="{{ champion.faction }}">
-  {%- else %}<small>{{ champion.faction }}</small>{% endif -%}
+{# A champion as a round portrait (`url`), rimmed in their `rarity`'s colour (none: muted);
+   `name` is its alt and, without art, its first letters; `href`: a link; `size`: "small". #}
+{% macro portrait(url, name, rarity="", href="", size="", title="") -%}
+  {%- set tag = "a" if href else "span" -%}
+  <{{ tag }}{% if href %} href="{{ href }}"{% endif %} class="portrait {{ size }}{{ ' rarity-' ~ rarity | lower if rarity }}"{% if title %} title="{{ title }}"{% endif %}>
+    {%- if url %}<img src="{{ url }}" alt="{{ name }}" loading="lazy">{% else %}<span>{{ name[:2] }}</span>{% endif -%}
+  </{{ tag }}>
+{%- endmacro %}
+
+{# A page's head: its `title` (`id` for a section to name itself by), then what a
+   `call(part)` block gives: the lede (`part` "lede") and what goes at the other end (tabs,
+   a tally: "aside"). #}
+{% macro page_head(title, id="") %}
+  <header class="page-head">
+    <div>
+      <h1{% if id %} id="{{ id }}"{% endif %}>{{ title }}</h1>
+      {%- if caller %}{% set lede = caller("lede") | trim %}{% if lede %}
+      <p class="lede">{{ lede }}</p>{% endif %}{% endif %}
+    </div>
+    {% if caller %}{{ caller("aside") }}{% endif %}
+  </header>
 {% endmacro %}
 
-{% macro star_row(stars, title, kind) %}
-  <span class="{{ kind }}" title="{{ title }}">
-    {%- for star in stars -%}
-      {% if star.image_url %}<img src="{{ star.image_url }}" alt="">{% else %}<span class="star-{{ star.colour }}">★</span>{% endif %}
-    {%- endfor -%}
-  </span>
+{# A tally: `count` of `total` as a big figure in its `tone`, a caps `label`, and what a
+   `call` block adds (a score). #}
+{% macro tally(count, total, label, tone="", title="") %}
+  <div class="tally"{% if title %} title="{{ title }}"{% endif %}>
+    <strong class="figure {{ tone }}">{{ count }}<small>/{{ total }}</small></strong>
+    <span class="caps">{{ label }}</span>
+    {%- if caller %}{{ caller() }}{% endif %}
+  </div>
+{% endmacro %}
+
+{% macro faction(champion) %}
+  {%- if champion.faction_icon_url %}<img class="faction" src="{{ champion.faction_icon_url }}" alt="{{ champion.faction | faction_label }}" title="{{ champion.faction | faction_label }}">
+  {%- else %}<small>{{ champion.faction | faction_label }}</small>{% endif -%}
 {% endmacro %}
 
 {% macro champion_stars(champion) %}
   {%- set title = champion.grade ~ " stars"
       ~ (", ascended " ~ champion.ascension if champion.ascension else "")
       ~ (", awakened " ~ champion.awakening if champion.awakening else "") -%}
-  {{ star_row(champion.stars, title, "champion-stars") }}
+  {{ stars(champion.grade, champion.stars, title=title, kind="champion-stars") }}
 {% endmacro %}
 
 
@@ -79,20 +112,41 @@
 {# `champion`: whose build it is; older runs didn't save their portrait on their own pieces.
    The piece (art, slot, stars, main stat; who wears it at the bottom) and its substats side by
    side. #}
+{# A piece's art: its picture in its rarity's rim, its level on it (the assumed one if it's to
+   be levelled). `size`: "small". #}
+{% macro piece_art(p, size="") %}
+  <div class="piece-art {{ size }} rarity-{{ p.rarity | lower }}" title="{{ p.set_name }}, {{ p.rarity }}">
+    {% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.set_name }} {{ p.slot }}">{% endif %}
+    {% if p.planned_level %}<span class="piece-level planned" title="to level (now +{{ p.level }})">+{{ p.planned_level }}</span>
+    {%- else %}<span class="piece-level" title="level">+{{ p.level }}</span>{% endif %}
+  </div>
+{% endmacro %}
+
+{# A piece as a list's row, in cells: its art; slot and stars (and what a `call` block adds
+   beside them), set and faction, who wears it; its main stat; its substats. #}
+{% macro piece_cells(p) %}
+  <td>{{ piece_art(p, "small") }}</td>
+  <td>
+    <strong>{{ p.slot }}</strong> {{ stars(p.rank, p.stars, kind="piece-stars") }}{% if caller %} {{ caller() }}{% endif %}<br>
+    <small>{{ p.set_name }}</small>
+    {% if p.faction_icon_url %}<img class="faction small" src="{{ p.faction_icon_url }}" alt="{{ p.faction | faction_label }}" title="{{ p.faction | faction_label }}">
+    {% elif p.faction %}<small>· {{ p.faction | faction_label }}</small>{% endif %}
+    {% if p.worn_by %}<br><small class="muted">on {{ p.worn_by }}</small>{% endif %}
+  </td>
+  <td><strong>{{ p.primary.label }}</strong></td>
+  <td><small>{% for sub in p.substats %}<span class="nowrap">{{ sub.label }} {{ sub.amount }}{% if sub.glyph %} ({{ sub.glyph }}){% endif %}</span>{{ " · " if not loop.last }}{% endfor %}</small></td>
+{% endmacro %}
+
+{# A piece as the optimiser's card, through `champion`'s eyes. #}
 {% macro piece(p, champion) %}
   <article class="piece{{ ' is-equipped' if p.equipped }}">
     <div class="piece-body">
       <header>
         <div class="piece-id">
-          <div class="piece-art rarity-{{ p.rarity | lower }}" title="{{ p.set_name }}, {{ p.rarity }}">
-            {% if p.image_url %}<img src="{{ p.image_url }}" alt="{{ p.set_name }} {{ p.slot }}">{% endif %}
-            {% if p.planned_level %}<span class="piece-level planned" title="to level (now +{{ p.level }})">+{{ p.planned_level }}</span>
-            {%- else %}<span class="piece-level" title="level">+{{ p.level }}</span>{% endif %}
-          </div>
+          {{ piece_art(p) }}
           <div class="piece-title">
             <strong>{{ p.slot }}</strong>
-            {% if p.stars %}{{ star_row(p.stars, p.rank ~ " stars" ~ (", ascended " ~ p.ascend_level if p.ascend_level else ""), "piece-stars") }}
-            {%- else %}{{ stars(p.rank) }}{% endif %}
+            {{ stars(p.rank, p.stars, title=p.rank ~ " stars" ~ (", ascended " ~ p.ascend_level if p.ascend_level else ""), kind="piece-stars") }}
             {{ main_stat(p) }}
           </div>
         </div>
@@ -100,7 +154,7 @@
           {% set wearer = p.worn_by or champion.name %}
           {% set wearer_portrait = p.worn_by_portrait or (champion.portrait_url if p.equipped) %}
           <span class="owner{{ ' equipped' if p.equipped }}" title="on {{ wearer }}">
-            {% if wearer_portrait %}<img src="{{ wearer_portrait }}" alt="">{% endif %}on {{ wearer }}
+            {% if wearer_portrait %}{{ portrait(wearer_portrait, wearer, size="small") }}{% endif %}on {{ wearer }}
           </span>
         {% else %}
           <span class="owner muted">Unequipped</span>
