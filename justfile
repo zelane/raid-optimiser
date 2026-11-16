@@ -10,6 +10,9 @@ set dotenv-load
 # The game's Proton prefix and the HH extractor inside it (override in .env: RAID_PREFIX, HH_DIR)
 RAID_PREFIX := env("RAID_PREFIX", env("HOME") / ".local/share/Steam/steamapps/compatdata/2441943673/pfx")
 HH_DIR := env("HH_DIR", RAID_PREFIX / "drive_c/hh")
+# The Proton the game runs under (override in .env: RAID_PROTON); `just read` runs the reader
+# with it inside the game's own umu container, unless a `plarium-umu` wrapper is on the PATH
+RAID_PROTON := env("RAID_PROTON", env("HOME") / ".local/share/Steam/compatibilitytools.d/GE-Proton11-11-x86_64")
 appdata := RAID_PREFIX / "drive_c/users/steamuser/AppData"
 # The game's install (bundles under it), its build (code, metadata) and its static-data cache
 game_install := appdata / "Local/PlariumPlay/StandAloneApps/raid-shadow-legends"
@@ -108,9 +111,22 @@ reader-layout:
 
 # Read the account out of the running game's memory (read-only) into data/captures/snapshot.json
 read: reader
-    @[ -f data/cache/reader-layout.json ] || just reader-layout
-    plarium-umu "$PWD/reader/target/x86_64-pc-windows-gnu/release/raid-reader.exe" \
-        "Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f data/cache/reader-layout.json ] || just reader-layout
+    exe="$PWD/reader/target/x86_64-pc-windows-gnu/release/raid-reader.exe"
+    args=("Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json")
+    if command -v plarium-umu >/dev/null; then exec plarium-umu "$exe" "${args[@]}"; fi
+    # Inside the running game's umu container, sharing its wineserver (as ~/scripts/hh.sh
+    # does): umu names the container's service after the md5 of the resolved prefix path.
+    client="$HOME/.local/share/umu/steamrt4/pressure-vessel/bin/steam-runtime-launch-client"
+    bus="com.steampowered.App$(printf %s "$(readlink -f "{{RAID_PREFIX}}")" | md5sum | cut -d' ' -f1)"
+    if ! "$client" --list 2>/dev/null | grep -qxF -- "--bus-name=$bus"; then
+        echo "Raid isn't running in {{RAID_PREFIX}} (no umu container for it)" >&2
+        exit 1
+    fi
+    exec "$client" --bus-name="$bus" --directory="$PWD" -- \
+        "{{RAID_PROTON}}/proton" runinprefix "$exe" "${args[@]}"
 
 # Start the web UI on http://127.0.0.1:<port> (WEB_PORT or 8000), auto-reloading (--no-reload)
 web port=web_port *args:
