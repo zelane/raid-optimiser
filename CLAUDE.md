@@ -183,7 +183,8 @@ the game itself.
   the field's placeholder). Each ACC/RES field and build shows its resist chances. State rides
   in the URL, kept in the browser (`keptQuery`, not `run`); the rows are edited in the page and
   sent with the next change (a slot, a rank, a target picked) or Find gear (`run`, the only
-  thing that solves); a build per champion with the champion page's Equip/Preview
+  thing that solves), by field names the parser defines and the views carry (`RowFields`,
+  `minimum_field`, `PageFields`, `exclude_field`), so the page spells none itself; a build per champion with the champion page's Equip/Preview
   (`BuildDetail`). `solve.find_team_builds`:
   slot order is priority, each champion's best build alone from what the earlier ones left,
   kept if the rest still meet their limits together (one model, minimums only), else the

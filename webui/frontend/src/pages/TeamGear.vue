@@ -12,13 +12,14 @@ import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
 import type { OnlyView } from "../types/generated/webui.service.finder";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
+import type { RowFields } from "../types/generated/webui.forms.team_gear";
 import type { GearPage, RowView } from "../types/generated/webui.service.team_gear";
 
 const props = defineProps<{ page: GearPage; picker: Picker; only: OnlyView | null }>();
 useKeptQuery("team-gear", ["run"]);
 
 interface RowEdit {
-  number: number;
+  fields: RowFields;
   sets: { set: string; pieces: string }[];
   minimums: Record<string, string>;
   rank: string;
@@ -27,7 +28,7 @@ interface RowEdit {
 
 function rowEdit(row: RowView): RowEdit {
   return {
-    number: row.number,
+    fields: row.fields,
     sets: row.sets.map((pick) => ({
       set: pick.set_id === null ? "" : String(pick.set_id),
       pieces: pick.pieces === null ? "" : String(pick.pieces),
@@ -39,42 +40,45 @@ function rowEdit(row: RowView): RowEdit {
 }
 
 const rows = ref<RowEdit[]>([]);
-const excluded = ref<Record<string, boolean>>({});
+const excluded = ref<Record<string, boolean>>({}); // by the rule's switch's field
 const unwornOnly = ref(false);
 
 function reset() {
   rows.value = props.page.rows.map(rowEdit);
-  excluded.value = Object.fromEntries(props.page.rules.map((rule) => [rule.key, rule.on]));
+  excluded.value = Object.fromEntries(props.page.rules.map((rule) => [rule.field, rule.on]));
   unwornOnly.value = props.page.unworn_only;
 }
 
 reset();
 watch(() => props.page, reset);
 
-// The page's query as its form sent it: the target and the RES its ACC defaults came from,
-// the slots, each row's fields (by slot number), the gear filters.
+// The page's query as its form sent it, by the names the page is given (`forms.team_gear`): the
+// target and the RES its ACC defaults came from, the slots, each row's fields, the gear filters.
 function query(slots: string[], target: string, run: boolean): URLSearchParams {
-  const fields = new URLSearchParams({ target, res: String(props.page.resistance) });
-  for (const choice of slots) fields.append("slot", choice);
+  const names = props.page.fields;
+  const fields = new URLSearchParams([
+    [names.target, target],
+    [names.res, String(props.page.resistance)],
+  ]);
+  for (const choice of slots) fields.append(names.slot, choice);
 
   for (const row of rows.value) {
     for (const pick of row.sets) {
-      fields.append(`set_${row.number}`, pick.set);
-      fields.append(`pieces_${row.number}`, pick.pieces);
+      fields.append(row.fields.sets, pick.set);
+      fields.append(row.fields.pieces, pick.pieces);
     }
     for (const [name, value] of Object.entries(row.minimums)) fields.append(name, value);
-    fields.append(`rank_${row.number}`, row.rank);
-    if (row.rank === "DAMAGE") fields.append(`skill_${row.number}`, row.skill);
+    fields.append(row.fields.rank, row.rank);
+    if (row.rank === props.page.damage_rank) fields.append(row.fields.skill, row.skill);
   }
 
   if (rows.value.length) {
-    fields.append("filters", "1");
-    for (const [key, on] of Object.entries(excluded.value))
-      if (on) fields.append(`exclude_${key}`, "on");
-    if (unwornOnly.value) fields.append("unworn_only", "on");
+    fields.append(names.filters, "1");
+    for (const [field, on] of Object.entries(excluded.value)) if (on) fields.append(field, "on");
+    if (unwornOnly.value) fields.append(names.unworn_only, "on");
   }
 
-  if (run) fields.append("run", "true");
+  if (run) fields.append(names.run, "true");
   return fields;
 }
 
@@ -227,13 +231,16 @@ function minimumTitle(placeholder: string) {
                       @change="send()"
                     >
                       <template v-for="[value, label] in page.ranks" :key="value">
-                        <option v-if="value !== 'DAMAGE' || row.skills.length" :value="value">
+                        <option
+                          v-if="value !== page.damage_rank || row.skills.length"
+                          :value="value"
+                        >
                           {{ label }}
                         </option>
                       </template>
                     </select>
                     <select
-                      v-if="row.rank === 'DAMAGE'"
+                      v-if="row.rank === page.damage_rank"
                       v-model="rows[n].skill"
                       class="small"
                       :aria-label="`Skill whose damage ${row.champion.name} ranks`"
@@ -264,7 +271,7 @@ function minimumTitle(placeholder: string) {
           title="Gear the solve may not take; the team's own is always allowed"
         >
           <label v-for="rule in page.rules" :key="rule.key">
-            <input v-model="excluded[rule.key]" type="checkbox" role="switch" />
+            <input v-model="excluded[rule.field]" type="checkbox" role="switch" />
             <span class="row-name">{{ rule.label }}</span>
           </label>
           <label>

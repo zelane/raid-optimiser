@@ -38,16 +38,21 @@ from optimiser.solve import (
 from optimiser.stats import build_stats
 from optimiser.teams.kits import kit_of
 from optimiser.teams.tags import Side
-from webui.forms.request import DEFAULT_ABOVE_LEVEL
+from webui.forms.request import DEFAULT_ABOVE_LEVEL, exclude_field
 from webui.forms.team import Unmatched
 from webui.forms.team_gear import (
     DAMAGE,
+    PAGE_FIELDS,
     ROW_MINIMUMS,
     SETS_PER_ROW,
     Default,
     GearAsk,
     Minimum,
+    PageFields,
     RowAsk,
+    RowFields,
+    minimum_field,
+    row_fields,
 )
 from webui.service.finder import restriction_label
 from webui.service.results import BuildView, StatCell, build_view, damage_cell, stat_cells
@@ -79,9 +84,10 @@ class MinimumView:
 
 @dataclass(frozen=True)
 class RowView:
-    """A placed champion's row: `number` is its slot (1 first)."""
+    """A placed champion's row: `number` is its slot (1 first); `fields`, its fields' names."""
 
     number: int
+    fields: RowFields
     champion: ChampionRow
     sets: list[SetPickView]
     minimums: list[MinimumView]
@@ -93,7 +99,10 @@ class RowView:
 
 @dataclass(frozen=True)
 class RuleView:
+    """A reserve rule the solve can keep out: `field` is its switch's name."""
+
     key: str
+    field: str
     label: str
     on: bool
 
@@ -136,6 +145,8 @@ class GearPage:
     rules: list[RuleView]
     unworn_only: bool
     resistance: int  # the target's, which the ACC defaults follow (`res`)
+    fields: PageFields  # the query's own names
+    damage_rank: str  # the rank that ranks a skill's damage (with its skill field)
     target_note: str
     admits: str | None  # what the target's stage admits, in words ("Magic champions")
     rotating: bool  # the stage's restriction rotates, unknown which is active
@@ -176,11 +187,18 @@ def gear_page(
         sets=sorted(((s.id, s.name) for s in account.tables.sets.values()), key=lambda s: s[1]),
         ranks=[(stat.name, STAT_LABELS[stat]) for stat in RANK_CHOICES] + [(DAMAGE, "Damage")],
         rules=[
-            RuleView(rule_key(rule), rule_label(rule, account), rule in ask.gear.rules)
+            RuleView(
+                rule_key(rule),
+                exclude_field(rule),
+                rule_label(rule, account),
+                rule in ask.gear.rules,
+            )
             for rule in rules
         ],
         unworn_only=ask.gear.unworn_only,
         resistance=target.resistance,
+        fields=PAGE_FIELDS,
+        damage_rank=DAMAGE,
         target_note=f"{title if title.startswith(target.name) else f'{target.name}, {title}'}: "
         f"{target.resistance} RES, {target.accuracy} ACC, {target.speed} SPD, {target.defence} DEF",
         admits=restriction_label(restriction) if isinstance(restriction, Restriction) else None,
@@ -207,6 +225,7 @@ def row_view(
     skills = damage_skills(account, champion, target.defence)
     return RowView(
         number=slot,
+        fields=row_fields(slot),
         champion=champion_row(champion),
         sets=(picks + [SetPickView(None, None)] * SETS_PER_ROW)[:SETS_PER_ROW],
         minimums=[
@@ -239,7 +258,7 @@ def minimum_view(
 
     shown = "" if value is None else f"{value * 100 if stat == Stat.CR else value:g}"
     placeholder = str(resistance_for_cap(target.accuracy)) if stat == Stat.RES else ""
-    return MinimumView(f"min_{stat.name}_{slot}", STAT_LABELS[stat], shown, note, placeholder)
+    return MinimumView(minimum_field(stat, slot), STAT_LABELS[stat], shown, note, placeholder)
 
 
 def minimum_value(

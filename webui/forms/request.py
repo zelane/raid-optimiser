@@ -9,7 +9,7 @@ reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; abse
 The equip and preview buttons post `artifact_ids`, comma-separated.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
-- `parse_request` (`parse_gear_filter`): the boundary
+- `parse_request` (`parse_gear_filter`, `exclude_field`): the boundary
 - `parse_form`, `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`: its steps
 - `parse_equip`: the build buttons' pieces
 """
@@ -70,6 +70,11 @@ def parse_request(
     )
 
 
+def exclude_field(rule: Rule) -> str:
+    """The gear filter's field keeping out what `rule` reserves."""
+    return f"exclude_{rule_key(rule)}"
+
+
 def parse_gear_filter(
     form: Mapping[str, str],
     account: Account,
@@ -82,7 +87,7 @@ def parse_gear_filter(
     if "locked" in form and not (level.isdigit() and int(level) < max(LOCK_LEVELS)):
         errors.append(f"lock level must be 0 to {max(LOCK_LEVELS) - 1}")
 
-    excluded = tuple(rule for rule in rules if f"exclude_{rule_key(rule)}" in form)
+    excluded = tuple(rule for rule in rules if exclude_field(rule) in form)
     return GearFilter(
         unworn_only="unworn_only" in form,
         lock_level=int(level) if "locked" in form and level.isdigit() else None,
