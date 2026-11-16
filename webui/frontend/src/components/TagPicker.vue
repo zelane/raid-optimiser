@@ -134,3 +134,66 @@ function leave(event: FocusEvent) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* A search box over a dropdown of options in groups; a pick adds a chip. */
+.picker {
+  position: relative;
+}
+
+.picker-options {
+  position: absolute;
+  z-index: 20;
+  inset-inline: 0;
+  top: calc(100% + var(--space-2xs));
+  overflow-y: auto;
+  max-height: 20rem;
+  padding: var(--space-xs);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-l);
+  color: var(--on-surface);
+  background: var(--surface-container-low);
+}
+
+.picker-group + .picker-group {
+  margin-top: var(--space-xs);
+}
+
+.picker-group-title {
+  padding: var(--space-xs) var(--space-s) var(--space-2xs);
+  font-size: var(--text-2xs);
+}
+
+/* Options are buttons: the button look (border, fill, focus ring, its text colour: the text
+   inherits the list's) and weight are undone here. */
+.picker-option {
+  &,
+  &:is(:hover, :active, :focus) {
+    display: flex;
+    gap: var(--space-s);
+    align-items: center;
+    width: 100%;
+    margin: 0;
+    padding: var(--space-2xs) var(--space-s);
+    border: 0;
+    border-radius: var(--radius);
+    font-size: var(--text-s);
+    font-weight: 400;
+    line-height: 1.3;
+    color: inherit;
+    text-align: left;
+    background: none;
+    box-shadow: none;
+  }
+
+  &:is(:hover, :focus-visible) {
+    background: var(--surface-container-lowest);
+    outline: none;
+  }
+}
+
+.picker-empty {
+  margin: 0;
+  padding: var(--space-s);
+}
+</style>

@@ -1,5 +1,5 @@
-// Stylelint over webui/static/*.css (`just css`, part of `just check`; Prettier formats, one
-// declaration per line): the standard config, properties in one order everywhere
+// Stylelint over webui/static/*.css and the Vue components' <style> blocks (`just css`, part of
+// `just check`; Prettier formats, one declaration per line): the standard config, properties in one order everywhere
 // (stylelint-order, with the clean-order preset's groups: interaction, positioning, layout, box
 // model, typography, appearance, transition), and native nesting no deeper than 3.
 //
@@ -49,4 +49,13 @@ export default {
       { ignoreProperties: ["text-size-adjust", "-webkit-text-size-adjust"] },
     ],
   },
+  // A component's <style scoped> is checked like the stylesheets. Its template's inline styles
+  // are too: the primitives' parameters (`--space: …; --align: …`) sit on one line there.
+  overrides: [
+    {
+      files: ["**/*.vue"],
+      customSyntax: "postcss-html",
+      rules: { "custom-property-empty-line-before": null },
+    },
+  ],
 };

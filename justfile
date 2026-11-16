@@ -166,12 +166,12 @@ style:
 # config, properties in one order, nesting at most 3 deep)
 css:
     node_modules/.bin/prettier --check --log-level warn "webui/static/*.css"
-    node_modules/.bin/stylelint "webui/static/*.css"
+    node_modules/.bin/stylelint "webui/static/*.css" "webui/frontend/src/**/*.vue"
 
 # Fix what can be: format, sort properties, format again
 css-fix:
     node_modules/.bin/prettier --write --log-level warn "webui/static/*.css"
-    node_modules/.bin/stylelint --fix "webui/static/*.css"
+    node_modules/.bin/stylelint --fix "webui/static/*.css" "webui/frontend/src/**/*.vue"
     node_modules/.bin/prettier --write --log-level warn "webui/static/*.css"
 
 # Format, lint and style-check

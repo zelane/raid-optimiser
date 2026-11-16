@@ -117,3 +117,79 @@ function target(set: number, type: string, event: Event) {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* A grid of the types each set is for, its value a badge to type into over each column. */
+table.set-grid {
+  width: auto;
+
+  th,
+  td {
+    padding: var(--space-2xs);
+    text-align: center;
+  }
+
+  tr > :first-child {
+    position: sticky;
+    z-index: 1;
+    left: 0;
+    padding-inline: var(--space-s);
+    text-align: left;
+    white-space: nowrap;
+    background: var(--surface-container-lowest);
+  }
+
+  .set-name {
+    vertical-align: bottom;
+
+    span {
+      transform: rotate(180deg);
+      display: inline-block;
+      writing-mode: vertical-rl;
+      white-space: nowrap;
+    }
+  }
+
+  /* Brass above 1, red below. The column under the pointer lit (`lit`), so a tick finds its
+     set. */
+  .set-values input {
+    width: 2.6rem;
+    padding: var(--space-3xs);
+    border-radius: var(--radius);
+    font-size: var(--text-xs);
+    background: color-mix(in srgb, var(--on-surface-variant) 12%, transparent);
+
+    &.high {
+      color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 16%, transparent);
+    }
+
+    &.low {
+      color: var(--stat-down);
+      background: color-mix(in srgb, var(--stat-down) 18%, transparent);
+    }
+
+    &:focus {
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+  }
+
+  :is(td, th).lit,
+  tbody tr:not(.set-group):hover > * {
+    background: color-mix(in srgb, var(--primary) 8%, var(--surface-container-lowest));
+  }
+
+  thead th.lit,
+  .set-group th {
+    color: var(--primary);
+  }
+
+  .set-group th {
+    padding-top: var(--space-m);
+  }
+
+  input[type="checkbox"] {
+    margin: 0;
+  }
+}
+</style>

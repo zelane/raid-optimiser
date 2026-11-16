@@ -90,3 +90,36 @@ function teamsLink(region: string, stage: number) {
     <p v-if="fw.done.length" class="muted">All stars: {{ fw.done.join(", ") }}.</p>
   </section>
 </template>
+
+<style scoped>
+/* The info page. Faction Wars: a panel per crypt short of its stars, in masonry columns of
+   32rem at least, each crypt whole in one (down a column, then across); a row per stage with
+   the stars earned. */
+.crypt-grid {
+  columns: 32rem;
+  column-gap: var(--space-xl);
+}
+
+.crypt {
+  break-inside: avoid;
+  margin-bottom: var(--space-xl);
+
+  :is(th, td) {
+    vertical-align: top;
+  }
+
+  tbody th {
+    width: 3.5rem;
+    font-weight: 700;
+  }
+
+  ul {
+    margin: 0;
+  }
+}
+
+.crypt-state {
+  width: 7rem;
+  white-space: nowrap;
+}
+</style>

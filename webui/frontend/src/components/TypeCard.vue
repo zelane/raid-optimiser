@@ -121,3 +121,73 @@ function remove() {
     </div>
   </form>
 </template>
+
+<style scoped>
+/* A card a champion type, in four zones: who (name, kind, faction, who it came from), its stat
+   weights as tiles, the main stats it suits a slot a row, then copy and delete. Its kind on the
+   rail. One under another on narrow screens. */
+.type-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-m) var(--space-xl);
+  align-items: center;
+  padding: var(--space-m) var(--space-l);
+  border-left: 3px solid var(--primary);
+
+  &.support {
+    border-left-color: var(--tertiary);
+
+    .type-kind label:has(:checked) {
+      background: var(--tertiary);
+    }
+  }
+
+  .stat-tiles {
+    grid-template-columns: repeat(7, minmax(3rem, 1fr));
+  }
+}
+
+input.type-name {
+  height: auto;
+  margin-inline: calc(var(--space-2xs) * -1);
+  padding: var(--space-3xs) var(--space-2xs);
+  border-color: transparent;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+  font-weight: 700;
+  color: var(--heading);
+  background: none;
+
+  &:is(:hover, :focus) {
+    border-color: var(--outline-variant);
+    background: var(--surface-container-lowest);
+  }
+}
+
+.type-mains {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: var(--space-2xs) var(--space-s);
+  place-items: center start;
+  justify-content: start;
+}
+
+.type-actions {
+  display: flex;
+  gap: var(--space-2xs);
+
+  button {
+    flex: 1;
+  }
+}
+
+@container page (min-width: 62rem) {
+  .type-card {
+    grid-template-columns: minmax(12rem, 15rem) minmax(0, 1fr) auto auto;
+  }
+
+  .type-actions {
+    flex-direction: column;
+  }
+}
+</style>
