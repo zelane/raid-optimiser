@@ -10,7 +10,7 @@ import type { FinderView, ListedChampion } from "../types/generated/webui.servic
 import ChampionCard from "./ChampionCard.vue";
 import ChampionFilters, { KEPT, REMEMBERED, type Filters } from "./ChampionFilters.vue";
 
-const props = defineProps<{ only?: [string, string][] }>();
+const props = defineProps<{ only?: [string, string][]; onlyLabel?: string | null }>();
 const emit = defineEmits<{ picked: [listed: ListedChampion] }>();
 
 const dialog = ref<HTMLDialogElement>();
@@ -80,6 +80,9 @@ function closeOnBackdrop(event: MouseEvent) {
         placeholder="Name (Enter takes the first)"
         @keydown.enter.prevent="takeFirst"
       />
+      <p v-if="onlyLabel" class="note info">
+        The target admits only {{ onlyLabel }}: only they are listed.
+      </p>
       <div
         class="finder-results stack"
         :class="{ busy }"

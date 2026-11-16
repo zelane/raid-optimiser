@@ -12,7 +12,7 @@ import Tally from "../components/Tally.vue";
 import TeamOptions from "../components/TeamOptions.vue";
 import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
-import { teamQuery, visitWith } from "../composables/teamQuery";
+import { slotEdits, teamQuery, visitWith } from "../composables/teamQuery";
 import type { OptionView, TeamsPage } from "../types/generated/webui.service.teams";
 
 const { page } = defineProps<{ page: TeamsPage }>();
@@ -119,7 +119,13 @@ function met(option: { number: number }) {
       </template>
     </section>
 
-    <TeamSlots :team="page.team" :links="page.links" :ran="page.ran" keep="teams" />
+    <TeamSlots
+      :slots="page.team.slots"
+      :empty-url="page.links.empty"
+      keep="teams"
+      @place="(slot, choice) => slotEdits(page.links, page.ran).place(slot, choice)"
+      @wear="(slot, relic) => slotEdits(page.links, page.ran).wear(slot, relic)"
+    />
     <BringPanels
       :team="page.team"
       :links="page.links"

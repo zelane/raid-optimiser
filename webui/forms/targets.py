@@ -3,7 +3,7 @@ targets.py - the target picker's query into a `TargetQuery`.
 
 Fields: `zone`, `group`, `difficulty`, `stage` (a stage id), `wave` (1 first), `enemy`
 ("<wave>-<slot>"): each level's pick, any of them absent; `changed`: the field the user just
-changed (htmx's `HX-Trigger-Name`), whose lower levels go back to their defaults; `target`
+changed (the picker sends it), whose lower levels go back to their defaults; `target`
 ("<stage>:<wave>:<slot>"), a saved pick that overrides the rest. Anything unknown falls back
 to a default rather than failing: the picker always shows something.
 

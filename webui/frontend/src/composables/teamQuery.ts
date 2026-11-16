@@ -28,3 +28,21 @@ export function visitWith(query: URLSearchParams) {
 export function visitTeamPage(url: string) {
   router.get(url, {}, { preserveState: true, preserveScroll: true });
 }
+
+// The slots' changes on a team page: a champion placed in a slot (its relic back to what they
+// wear), or a slot's relic picked; the search runs again if it ran.
+export function slotEdits(links: TeamLinks, ran: boolean) {
+  return {
+    place(slot: number, choice: string) {
+      const query = teamQuery(links, ran);
+      setAt(query, "slot", slot, choice);
+      setAt(query, "relic", slot, "");
+      visitWith(query);
+    },
+    wear(slot: number, relic: string) {
+      const query = teamQuery(links, ran);
+      setAt(query, "relic", slot, relic);
+      visitWith(query);
+    },
+  };
+}

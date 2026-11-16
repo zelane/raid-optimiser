@@ -22,6 +22,7 @@ INERTIA_PAGES = (
     r"^/champions/\d+$",
     r"^/teams$",
     r"^/chimera$",
+    r"^/team-gear$",
 )
 
 

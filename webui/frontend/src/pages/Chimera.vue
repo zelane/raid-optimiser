@@ -15,7 +15,7 @@ import Tally from "../components/Tally.vue";
 import TeamOptions from "../components/TeamOptions.vue";
 import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
-import { teamQuery, visitWith } from "../composables/teamQuery";
+import { slotEdits, teamQuery, visitWith } from "../composables/teamQuery";
 import type { ChimeraPage, OptionView } from "../types/generated/webui.service.chimera";
 
 const { page } = defineProps<{ page: ChimeraPage }>();
@@ -92,7 +92,13 @@ function glance(option: { number: number }) {
       </ul>
     </article>
 
-    <TeamSlots :team="page.team" :links="page.links" :ran="page.ran" keep="chimera" />
+    <TeamSlots
+      :slots="page.team.slots"
+      :empty-url="page.links.empty"
+      keep="chimera"
+      @place="(slot, choice) => slotEdits(page.links, page.ran).place(slot, choice)"
+      @wear="(slot, relic) => slotEdits(page.links, page.ran).wear(slot, relic)"
+    />
     <BringPanels
       :team="page.team"
       :links="page.links"

@@ -18,7 +18,6 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
 """
 
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -39,8 +38,6 @@ from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
 from webui.forms.chimera import Unknown, parse_chimera
 from webui.forms.common import FormErrors
-from webui.forms.finder import GRADES as FINDER_GRADES
-from webui.forms.finder import RARITIES as FINDER_RARITIES
 from webui.forms.finder import FinderQuery, parse_finder_query
 from webui.forms.request import parse_equip, parse_request
 from webui.forms.settings import (
@@ -107,11 +104,6 @@ templates = Jinja2Templates(directory=HERE / "templates")
 templates.env.cache = None
 templates.env.globals["static_url"] = lambda path: static_url(path)
 templates.env.globals["synced_ago"] = reader.synced_ago
-templates.env.globals["finder_rarities"] = FINDER_RARITIES
-templates.env.globals["finder_grades"] = FINDER_GRADES
-templates.env.globals["finder_factions"] = lambda: finder_pages.account_factions(
-    current.current_account()
-)
 templates.env.globals["optimiser_url"] = lambda: optimiser_url()
 templates.env.globals["nav_sections"] = lambda path: layout.nav_sections(path, optimiser_url())
 templates.env.filters["faction_label"] = faction_label  # a faction's key as the game shows it
@@ -396,7 +388,7 @@ def teams(request: Request):
     return inertia_page(request, "Teams", {"page": page})
 
 
-@app.get("/team-gear", response_class=HTMLResponse)
+@app.get("/team-gear")
 def team_gear(request: Request):
     """A team's gear against one target: solved when the query says `run`."""
     account = current.current_account()
@@ -418,8 +410,7 @@ def team_gear(request: Request):
         account, asked, rules, picker.picked, picker.title, restriction
     )
     only = finder_pages.only_view(restriction) if isinstance(restriction, Restriction) else None
-    context = {"page": page, "picker": picker, "fill": False, "finder_only": only}
-    return templates.TemplateResponse(request, "team_gear.html", context)
+    return inertia_page(request, "TeamGear", {"page": page, "picker": picker, "only": only})
 
 
 @app.get("/champions/{champion_id}")
@@ -447,40 +438,22 @@ def info(request: Request):
     return inertia_page(request, "Info", {"page": page})
 
 
-@app.get("/targets", response_class=HTMLResponse)
+@app.get("/targets")
 def targets(request: Request):
-    """The target picker after a change (`changed`, or htmx's trigger, names the field
-    changed); a saved target (`target=`) is shown without filling the page's fields in again.
-    The Vue picker asks for the view as JSON."""
-    changed = request.query_params.get("changed") or request.headers.get("HX-Trigger-Name")
-    query = parse_target_query(request.query_params, changed)
-    picker = target_pages.target_picker(current.current_enemies(), query)
-
-    if wants_json(request):
-        return view_json(picker)
-
-    for_form = request.query_params.get("for_form", "")
-    context = {
-        "picker": picker,
-        "fill": query.target is None,
-        "for_form": for_form if re.fullmatch(r"[\w-]+", for_form) else "request",
-    }
-    return templates.TemplateResponse(request, "_target_picker.html", context)
+    """The target picker (`TargetPicker.vue`) after a change: `changed` names the field
+    changed (the levels under it go back to their defaults)."""
+    query = parse_target_query(request.query_params, request.query_params.get("changed"))
+    return view_json(target_pages.target_picker(current.current_enemies(), query))
 
 
-@app.get("/finder", response_class=HTMLResponse)
+@app.get("/finder")
 def finder(request: Request):
-    """The champions the filters match, as the list or the finder dialog asks while the user
-    types (`_champion_filters.html`); `pick=1`: the dialog's, picks rather than locks."""
+    """The champions the filters match, as the finder dialog (`ChampionFinder.vue`) asks while
+    the user types."""
     view = finder_pages.find_champions(
         current.current_account(), current.current_locks(), finder_query(request)
     )
-
-    if wants_json(request):
-        return view_json(view)
-
-    context = {"finder": view, "picking": request.query_params.get("pick") == "1"}
-    return templates.TemplateResponse(request, "_finder_results.html", context)
+    return view_json(view)
 
 
 @app.post("/champions/{champion_id}/builds")
