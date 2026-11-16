@@ -8,30 +8,37 @@
 
 :root {
   --rarity: var(--rarity-common);
+  --rarity-light: var(--rarity-common-light);
 }
 
 .rarity-common {
   --rarity: var(--rarity-common);
+  --rarity-light: var(--rarity-common-light);
 }
 
 .rarity-uncommon {
   --rarity: var(--rarity-uncommon);
+  --rarity-light: var(--rarity-uncommon-light);
 }
 
 .rarity-rare {
   --rarity: var(--rarity-rare);
+  --rarity-light: var(--rarity-rare-light);
 }
 
 .rarity-epic {
   --rarity: var(--rarity-epic);
+  --rarity-light: var(--rarity-epic-light);
 }
 
 .rarity-legendary {
   --rarity: var(--rarity-legendary);
+  --rarity-light: var(--rarity-legendary-light);
 }
 
 .rarity-mythical {
   --rarity: var(--rarity-mythical);
+  --rarity-light: var(--rarity-mythical-light);
 }
 
 /* --- Type ------------------------------------------------------------------- */
@@ -646,28 +653,6 @@ fieldset.panel {
     background: color-mix(in srgb, var(--stat-down) 14%, transparent);
     box-shadow: 0 0 10px color-mix(in srgb, var(--stat-down) 30%, transparent);
   }
-}
-
-/* The champion tiles' frames: the game's 9-slice art, extracted under /static (so here, not in
-   `ChampionTile`, which draws the rest; keyed by the tile, they outrank its plain border). */
-.tile > .tile-frame.frame-rare {
-  border-image: url("assets/frames/rare.png") 25 25 30 25;
-}
-
-.tile > .tile-frame.frame-epic {
-  border-image: url("assets/frames/epic.png") 25 25 31 25;
-}
-
-.tile > .tile-frame.frame-legendary {
-  border-image: url("assets/frames/legendary.png") 25 25 31 25;
-}
-
-.tile > .tile-frame.frame-mythical {
-  border-image: url("assets/frames/mythical.png") 25 25 31 25;
-}
-
-.tile > .tile-frame.frame-common {
-  border-image: url("assets/frames/common.png") 24 24 31 24;
 }
 
 /* The banners are about 300 x 390; their width is held before they load, so names don't shift. */

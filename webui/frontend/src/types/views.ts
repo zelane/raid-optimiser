@@ -16,8 +16,6 @@ export interface TileView {
   awakening?: number;
   empower?: number;
   stars?: StarView[];
-  crest_url?: string | null;
-  crest_top_url?: string | null;
 }
 
 // A team a search found, as the team finder's and the Chimera page's options both have it.

@@ -48,11 +48,17 @@
      and the white figures over it, the empower gold, and the Chimera's forms: quiet tints
      (about half the status colours' chroma) at their own hues, identity rather than status. */
   --rarity-common: #9aa0a6;
+  --rarity-common-light: #adb2b7; /* -light: a touch lighter, for highlights */
   --rarity-uncommon: #3fb950;
+  --rarity-uncommon-light: #56c666;
   --rarity-rare: #4c8eda;
-  --rarity-epic: #a371f7;
-  --rarity-legendary: #e3a008;
-  --rarity-mythical: #f85149;
+  --rarity-rare-light: #6aa1e0;
+  --rarity-epic: #9e2fea;
+  --rarity-epic-light: color-mix(in srgb, var(--rarity-epic) 90%, white);
+  --rarity-legendary: #f6c120;
+  --rarity-legendary-light: #f7cb42;
+  --rarity-mythical: #bf124b;
+  --rarity-mythical-light: color-mix(in srgb, var(--rarity-mythical) 90%, white);
   --art-backdrop: #000;
   --on-art: #fff;
   --on-art-muted: #ddd;

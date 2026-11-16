@@ -30,7 +30,6 @@ class Choice:
 @dataclass(frozen=True)
 class StarView:
     colour: str  # "red" awakened, "purple" ascended, "yellow" neither
-    image_url: str | None
 
 
 @dataclass(frozen=True)
@@ -51,15 +50,9 @@ class ChampionRow:
     stars: list[StarView] = field(default_factory=list)
     affinity_icon_url: str | None = None
     faction_icon_url: str | None = None
-    # The game's rarity crests (Epic up): one set over the portrait's lower edge, and for
-    # Mythicals another over its top.
-    crest_url: str | None = None
-    crest_top_url: str | None = None
 
 
 def champion_row(champion: Champion) -> ChampionRow:
-    rarity = champion.rarity.lower()
-    mythical = rarity == "mythical"
     return ChampionRow(
         id=champion.id,
         name=champion.name,
@@ -75,14 +68,12 @@ def champion_row(champion: Champion) -> ChampionRow:
         stars=star_views(champion.grade, champion.ascension, champion.awakening),
         affinity_icon_url=asset_url("affinities", champion.element.lower()),
         faction_icon_url=asset_url("factions", champion.faction),
-        crest_url=asset_url("ui", f"crest-{rarity}-bottom" if mythical else f"crest-{rarity}"),
-        crest_top_url=asset_url("ui", "crest-mythical") if mythical else None,
     )
 
 
 def star_views(stars: int, ascension: int, awakening: int) -> list[StarView]:
     colours = (star_colour(star, ascension, awakening) for star in range(stars))
-    return [StarView(colour, asset_url("stars", colour)) for colour in colours]
+    return [StarView(colour) for colour in colours]
 
 
 def star_colour(star: int, ascension: int, awakening: int) -> str:

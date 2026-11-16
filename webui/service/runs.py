@@ -152,10 +152,11 @@ def revive_outcome(saved: dict) -> Outcome | None:
 
 
 def revive[T](cls: type[T], data: dict) -> T:
-    """A view `asdict` saved, rebuilt with its nested views; raises on fields that don't
-    fit."""
+    """A view `asdict` saved, rebuilt with its nested views; fields the view has since
+    dropped are left out, and it raises on fields that don't fit."""
     hints = typing.get_type_hints(cls)
-    return cls(**{name: revive_value(hints[name], value) for name, value in data.items()})
+    kept = {name: value for name, value in data.items() if name in hints}
+    return cls(**{name: revive_value(hints[name], value) for name, value in kept.items()})
 
 
 def revive_value(hint: object, value: object) -> object:

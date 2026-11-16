@@ -12,7 +12,7 @@ defineProps<{ piece: PieceView }>();
   <td><PieceArt :piece="piece" size="small" /></td>
   <td>
     <strong>{{ piece.slot }}</strong>
-    {{ " " }}<Stars :count="piece.rank" :art="piece.stars" kind="piece-stars" />
+    {{ " " }}<Stars :count="piece.rank" :colours="piece.stars" kind="piece-stars" />
     <slot />
     <br />
     <small>{{ piece.set_name }}</small>

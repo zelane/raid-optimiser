@@ -1,7 +1,6 @@
 <script setup lang="ts">
 // A champion as the game's collection shows them: the portrait in its rarity frame, with
-// affinity, level and empower on it, the rarity's crest over its lower edge (and a Mythical's
-// over its top), and the stars under it. An enemy has no level or stars.
+// affinity, level and empower on it, and the stars under it. An enemy has no level or stars.
 import { computed } from "vue";
 import type { TileView } from "../types/views";
 import Stars from "./Stars.vue";
@@ -20,17 +19,10 @@ const starsTitle = computed(() => {
 <template>
   <figure
     class="tile"
-    :class="[size, `rarity-${rarity}`, { crested: champion.crest_url }]"
+    :class="[size, `rarity-${rarity}`]"
     :title="`${champion.name}, ${champion.rarity}`"
   >
-    <img
-      v-if="champion.crest_top_url"
-      class="crest crest-top"
-      :src="champion.crest_top_url"
-      alt=""
-    />
-    <img v-if="champion.crest_url" class="crest crest-under" :src="champion.crest_url" alt="" />
-    <div class="tile-frame" :class="`frame-${rarity}`">
+    <div class="tile-frame">
       <img
         v-if="champion.portrait_url"
         class="tile-art"
@@ -55,7 +47,7 @@ const starsTitle = computed(() => {
     <Stars
       v-if="champion.stars"
       :count="champion.grade"
-      :art="champion.stars"
+      :colours="champion.stars"
       :title="starsTitle"
       kind="champion-stars"
     />
@@ -63,13 +55,10 @@ const starsTitle = computed(() => {
 </template>
 
 <style scoped>
-/* After the game's collection: the portrait (140x182) in its rarity frame, the game's 9-slice
-   frames (slices from the sprites' borders, top right bottom left) over a plain border in the
-   rarity's colour for when a frame isn't extracted (and Uncommon, which has none). Overlays
-   scale with the tile's font size. */
+/* After the game's collection: the portrait (140x182) in its rarity frame. Overlays scale with
+   the tile's font size. */
 .tile {
   --tile-width: 5rem;
-  --crest-height: 0px;
 
   position: relative;
   width: var(--tile-width);
@@ -87,66 +76,27 @@ const starsTitle = computed(() => {
   .champion-stars {
     display: flex;
     justify-content: center;
-    margin-top: 0.15em;
+    margin-top: .3em;
   }
 }
 
-/* The stars are Stars' root (reached); their images are inside it. (A :deep() only compiles
-   right in a rule of its own, not nested.) */
-.tile .champion-stars :deep(img) {
+/* The stars are Stars' root (reached); each a sixth of the tile across. (A :deep() only
+   compiles right in a rule of its own, not nested.) */
+.tile .champion-stars :deep(.star) {
   width: calc(100% / 6 + 0.1em);
-  max-width: none;
-  margin: 0 -0.05em;
-}
-
-/* The rarity's crest over the frame's lower edge (and a Mythical's over its top edge), on
-   top of the frame as the game sets them, at the tile's scale; the stars move down under it,
-   about two thirds of the crest over the frame. */
-.tile.crested {
-  &.rarity-epic {
-    --crest-height: calc(var(--tile-width) * 0.13);
-  }
-
-  &.rarity-legendary {
-    --crest-height: calc(var(--tile-width) * 0.118);
-  }
-
-  &.rarity-mythical {
-    --crest-height: calc(var(--tile-width) * 0.235);
-  }
-
-  .champion-stars {
-    margin-top: calc(var(--crest-height) * 0.35);
-  }
-}
-
-.crest {
-  pointer-events: none;
-  position: absolute;
-  z-index: 2;
-  left: 50%;
-  transform: translateX(-50%);
-  width: auto;
-  max-width: none;
-}
-
-.crest-top {
-  top: 0;
-  height: calc(var(--tile-width) * 0.14);
-}
-
-.crest-under {
-  top: calc(var(--tile-width) * 182 / 140 - var(--crest-height));
-  height: var(--crest-height);
+  gap: 1px;
+  /* margin: 0 -0.05em; */
 }
 
 .tile-frame {
   position: relative;
   overflow: hidden;
   aspect-ratio: 140 / 182;
-  border: solid var(--rarity);
-  border-width: 0.4em 0.4em 0.5em;
+  border: 1px solid var(--rarity);
   background: var(--art-backdrop);
+
+  /* The frame, as the game's: a band of the rarity's colour, its outer edge lit. */
+  /* outline: 1px solid var(--rarity-light); */
 }
 
 .tile-art {
@@ -154,6 +104,7 @@ const starsTitle = computed(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border: 3px solid black;
 }
 
 .tile-missing {

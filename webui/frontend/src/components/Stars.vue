@@ -1,63 +1,80 @@
 <script setup lang="ts">
-// Stars: the game's art (`art`, plain ★ where a star has none), or `count` filled of `of`.
+// Stars, flat, in the rarity colours: each star's own colour (`colours`: plain, ascended,
+// awakened), or `count` filled of `of`.
 import { computed } from "vue";
 import type { StarView } from "../types/generated/webui.service.views";
 
 const props = defineProps<{
   count?: number;
-  art?: StarView[];
+  colours?: StarView[];
   of?: number;
   title?: string;
   kind?: string;
 }>();
 const filled = computed(() => props.count ?? 0);
+
+const stars = computed(() =>
+  props.colours
+    ? props.colours.map((star) => star.colour)
+    : Array.from({ length: props.of ?? filled.value }, (_, n) =>
+        n < filled.value ? "yellow" : "off",
+      ),
+);
 </script>
 
 <template>
   <span class="stars" :class="kind" :title="title || `${filled} stars`">
-    <template v-if="art">
-      <template v-for="(star, n) in art" :key="n">
-        <img v-if="star.image_url" :src="star.image_url" alt="" />
-        <span v-else :class="`star-${star.colour}`">★</span>
-      </template>
-    </template>
-    <template v-else>
-      <span v-for="n in of ?? filled" :key="n" :class="{ off: n > filled }">★</span>
-    </template>
+    <span v-for="(colour, n) in stars" :key="n" class="star" :class="`star-${colour}`" />
   </span>
 </template>
 
 <style scoped>
-/* A piece's stars: inline, the art at the text's height. */
-.piece-stars {
+/* Stars at the text's height, each a star-clipped box lit from the top, in its rarity's
+   colours: plain the Legendary gold, ascended the Epic violet, awakened the Mythical scarlet;
+   those not earned muted. */
+.stars {
   display: inline-flex;
   vertical-align: middle;
 
-  img {
-    height: 1em;
-    margin-right: -0.1em;
-  }
+  /* A 1px black stroke: the stars are clipped, so it's drawn round the row's outline. */
+  filter: drop-shadow(1px 0 0 var(--shadow)) drop-shadow(-1px 0 0 var(--shadow))
+    drop-shadow(0 1px 0 var(--shadow)) drop-shadow(0 -1px 0 var(--shadow));
 }
 
-/* Stars in the legendary gold, those not earned muted; the game's star colours by kind. */
-.stars {
-  color: var(--rarity-legendary);
-  letter-spacing: -0.1em;
+.star {
+  --star: var(--outline-variant);
+  --star-light: var(--outline-variant);
 
-  .off {
-    color: var(--outline-variant);
-  }
+  flex: none;
+  aspect-ratio: 1;
+  width: 1em;
+  background: linear-gradient(var(--star-light), var(--star) 70%);
+  clip-path: polygon(
+    50% 0%,
+    61.8% 34.5%,
+    100% 34.5%,
+    69.1% 57.3%,
+    80.9% 95.1%,
+    50% 72.4%,
+    19.1% 95.1%,
+    30.9% 57.3%,
+    0% 34.5%,
+    38.2% 34.5%
+  );
 }
 
 .star-yellow {
-  color: var(--rarity-legendary);
+  --star: var(--rarity-legendary);
+  --star-light: var(--rarity-legendary-light);
 }
 
 .star-purple {
-  color: var(--rarity-epic);
+  --star: var(--rarity-epic);
+  --star-light: var(--rarity-epic-light);
 }
 
 .star-red {
-  color: var(--stat-down);
+  --star: var(--rarity-mythical);
+  --star-light: var(--rarity-mythical-light);
 }
 </style>

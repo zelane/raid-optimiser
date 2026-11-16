@@ -34,7 +34,12 @@ const ascensionTitle = computed(() => {
           <PieceArt :piece="piece" />
           <div class="piece-title">
             <strong>{{ piece.slot }}</strong>
-            <Stars :count="piece.rank" :art="piece.stars" :title="starsTitle" kind="piece-stars" />
+            <Stars
+              :count="piece.rank"
+              :colours="piece.stars"
+              :title="starsTitle"
+              kind="piece-stars"
+            />
             <span class="piece-main">
               <span :class="{ ignored: !piece.primary.optimised }">{{ piece.primary.label }}</span>
               <span
