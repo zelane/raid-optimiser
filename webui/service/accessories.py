@@ -10,7 +10,7 @@ piece (`scores`).
   `DropRow`, `CandidateRow`, `SwapRow`, `SwapGroup`, `SetSummary`, `CleanupView`,
   `EnhanceView`, `AccessoriesPage`, `RowContext`: the views
 - `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`, `TARGET_LABELS`: their shape
-- `accessories_page`, `cleanup_page`, `set_target_free`, `protect_accessory`,
+- `accessories_page`, `set_target_free`, `protect_accessory`,
   `save_type`, `add_type`, `copy_type`, `delete_type`, `save_set_value`, `save_set_target`,
   `save_off_target`,
   `pieces_to_sell`: what the pages ask for
@@ -274,18 +274,12 @@ def accessories_page(account: Account, tab: str) -> AccessoriesPage:
     )
 
 
-def cleanup_page(account: Account) -> CleanupView:
-    return cleanup_view(account, current_plan(account, current_assessment(account)))
-
-
-def set_target_free(account: Account, target: int) -> CleanupView:
+def set_target_free(target: int) -> None:
     write_number(STORE, TARGET_FREE, target)
-    return cleanup_page(account)
 
 
-def protect_accessory(account: Account, artifact_id: int, protected: bool) -> CleanupView:
+def protect_accessory(artifact_id: int, protected: bool) -> None:
     write_protected(STORE, artifact_id, protected)
-    return cleanup_page(account)
 
 
 def save_type(account: Account, edit: TypeEdit) -> bool:

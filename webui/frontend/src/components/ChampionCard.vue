@@ -3,10 +3,10 @@
 // it (after their faction's banner with `banner`), linking to their optimiser (`href`: a URL,
 // or false for no link). `size`: the tile's ("small", "large"); `card`: on a card, lit in their
 // rarity when pointed at. The default slot goes under the link (a lock picker, a note).
+import { Link } from "@inertiajs/vue3";
 import { computed } from "vue";
 import type { ChampionRow } from "../types/generated/webui.service.views";
 import ChampionTile from "./ChampionTile.vue";
-import PageLink from "./PageLink.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -33,7 +33,7 @@ const classes = computed(() => [
 
 <template>
   <div :class="classes">
-    <component :is="url ? PageLink : 'div'" v-bind="url ? { href: url } : {}">
+    <component :is="url ? Link : 'div'" v-bind="url ? { href: url } : {}">
       <ChampionTile :champion="champion" :size="size" />
       <span v-if="name" class="champion-name">
         <template v-if="banner">

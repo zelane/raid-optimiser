@@ -1,29 +1,13 @@
 """
-layout.py - what every page's frame shows: the nav's sections and their tabs, and how old the
-account is. Jinja's `base.html` and the Vue layout both draw it, so the menu is defined once.
+layout.py - what every page's frame shows (the Vue layout, `AppLayout.vue`): the nav's
+sections and their tabs, and how old the account is.
 
-The pages are moving to Inertia one at a time: a link to one that has (`INERTIA_PAGES`, the
-Vue side's `PageLink` reads them) is an Inertia visit, any other a full page load (an Inertia
-visit answered with plain HTML would open it in Inertia's error dialog).
-
-- `INERTIA_PAGES`: the paths Inertia serves, as patterns (JavaScript's regex syntax too)
 - `NavTab`, `NavSection`, `Layout`: the views
 - `layout_view`: the frame for a page at a path
 - `nav_sections`: the menu
 """
 
 from dataclasses import dataclass
-
-INERTIA_PAGES = (
-    r"^/$",
-    r"^/info$",
-    r"^/empower$",
-    r"^/config$",
-    r"^/champions/\d+$",
-    r"^/teams$",
-    r"^/chimera$",
-    r"^/team-gear$",
-)
 
 
 @dataclass(frozen=True)
@@ -42,16 +26,11 @@ class NavSection:
     link: str
     tabs: tuple[NavTab, ...]
 
-    @property
-    def current(self) -> bool:
-        return any(tab.current for tab in self.tabs)
-
 
 @dataclass(frozen=True)
 class Layout:
     sections: tuple[NavSection, ...]
     synced_ago: str
-    inertia_pages: tuple[str, ...] = INERTIA_PAGES
 
 
 def layout_view(path: str, optimiser_link: str, synced_ago: str) -> Layout:

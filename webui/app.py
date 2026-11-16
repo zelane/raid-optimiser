@@ -1,14 +1,15 @@
 """
-app.py - the web entry point: routes that render the service's views as HTML. Only this
-module and the templates know about HTTP or HTML; a JSON API would sit beside it.
+app.py - the web entry point: routes that hand the service's views to Vue pages (Inertia,
+`webui/inertia.py`), take forms and answer components' own requests as JSON. Only this module,
+`inertia.py` and the page shell (`templates/inertia.html`) know about HTTP or HTML.
 
-- `app`, `templates`: the FastAPI app and its Jinja templates (uncached: edits show at once)
+- `app`, `templates`: the FastAPI app and the shell's Jinja templates
 - `index`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
   `reserve_rule`, `champion`, `builds`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
   `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `sync`: the routes
-- `wants_json`, `view_json`: a Vue component's own requests, answered with a view
+- `sent`, `saved`, `view_json`: a Vue component's own requests, answered as JSON
 - `finder_query`: the champion filters in a request's query
 - `back_with`: back to a Vue page's form with its errors
 - `inertia_page`: a Vue page (`webui/frontend/src/pages`), with the props every page gets
@@ -23,12 +24,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
 
-from optimiser.account import LOCK_LEVELS, Account, Champion, faction_label
+from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.chimera.tags import NEVER_LANDS
 from optimiser.enemies import Restriction, team_restriction
 from optimiser.factionwars import crypts
@@ -98,15 +99,7 @@ class CachedStatic(StaticFiles):
 app = FastAPI(title="Raid optimiser")
 app.mount("/static", CachedStatic(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
-# No template cache: Jinja reloads a changed template but not the ones that import it (a page
-# importing `_accessory.html`, which imports `_macros.html`, kept the old macros), so every
-# render compiles afresh. Cheap at this size.
-templates.env.cache = None
 templates.env.globals["static_url"] = lambda path: static_url(path)
-templates.env.globals["synced_ago"] = reader.synced_ago
-templates.env.globals["optimiser_url"] = lambda: optimiser_url()
-templates.env.globals["nav_sections"] = lambda path: layout.nav_sections(path, optimiser_url())
-templates.env.filters["faction_label"] = faction_label  # a faction's key as the game shows it
 
 
 @app.get("/")
@@ -123,9 +116,10 @@ def index(request: Request):
     return inertia_page(request, "Champions", {"finder": finder, "lock_levels": list(LOCK_LEVELS)})
 
 
-@app.get("/palette", response_class=HTMLResponse)
+@app.get("/palette")
 def palette(request: Request):
-    """The theme's colours and the shared components, for checking the palette in place."""
+    """The theme's colours and the shared components, for checking the palette in place: a
+    champion of each rarity the account has."""
     view = finder_pages.find_champions(
         current.current_account(), current.current_locks(), FinderQuery()
     )
@@ -134,9 +128,7 @@ def palette(request: Request):
     for row in view.picks:
         by_rarity.setdefault(row.champion.rarity, row.champion)
 
-    return templates.TemplateResponse(
-        request, "palette.html", {"champions": list(by_rarity.values())}
-    )
+    return inertia_page(request, "Palette", {"champions": list(by_rarity.values())})
 
 
 @app.post("/champions/{champion_id}/lock")
@@ -208,114 +200,111 @@ async def reserve_rule(request: Request):
             return inertia.back(request)
 
 
-@app.get("/accessories", response_class=HTMLResponse)
+@app.get("/accessories")
 def accessories(request: Request, tab: str = accessory_pages.ACCESSORY_TABS[0]):
     if tab not in accessory_pages.ACCESSORY_TABS:
         raise HTTPException(404, f"no tab {tab}")
 
     page = accessory_pages.accessories_page(current.current_account(), tab)
-    return templates.TemplateResponse(request, "accessories.html", {"page": page})
+    return inertia_page(request, "Accessories", {"page": page})
 
 
 WEIGHTS_TAB = "/accessories?tab=weights"
-SAVED = '<small class="up">Saved: the lists re-plan with it.</small>'
 
 
-@app.post("/accessories/types", response_class=HTMLResponse)
+@app.post("/accessories/types")
 async def accessory_type(request: Request):
-    """A type's row, saved whole on each change."""
+    """A type's row, saved whole on each change; the lists re-plan with it on the next visit
+    (rescoring is slow, so the page doesn't reload)."""
     account, form = current.current_account(), await read_form(request)
 
     match parse_champion_type(form, accessory_pages.type_factions(account)):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return saved(errors)
 
         case TypeEdit() as edit if accessory_pages.save_type(account, edit):
-            return HTMLResponse(SAVED)
+            return saved(None)
 
         case TypeEdit():
-            errors = FormErrors(["that type is gone; reload the page"])
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return saved(FormErrors(["that type is gone; reload the page"]))
 
 
 @app.post("/accessories/types/add")
 def add_accessory_type():
     accessory_pages.add_type()
-    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+    return inertia.redirect(WEIGHTS_TAB)
 
 
 @app.post("/accessories/types/{key}/copy")
 def copy_accessory_type(key: str):
     accessory_pages.copy_type(current.current_account(), key)
-    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+    return inertia.redirect(WEIGHTS_TAB)
 
 
 @app.post("/accessories/types/{key}/delete")
 def delete_accessory_type(key: str):
     accessory_pages.delete_type(key)
-    return RedirectResponse(WEIGHTS_TAB, status_code=303)
+    return inertia.redirect(WEIGHTS_TAB)
 
 
-@app.post("/accessories/sets/value", response_class=HTMLResponse)
+@app.post("/accessories/sets/value")
 async def accessory_set_value(request: Request):
     match parse_set_value(await read_form(request)):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return saved(errors)
 
         case value:
             accessory_pages.save_set_value(current.current_account(), value.set_id, value.factor)
-            return HTMLResponse(SAVED)
+            return saved(None)
 
 
-@app.post("/accessories/sets/target", response_class=HTMLResponse)
+@app.post("/accessories/sets/target")
 async def accessory_set_target(request: Request):
     account, form = current.current_account(), await read_form(request)
     type_keys = {t.key for t in accessory_pages.current_types(account)}
 
     match parse_set_target(form, type_keys):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return saved(errors)
 
         case target:
             accessory_pages.save_set_target(account, target.set_id, target.type_key, target.on)
-            return HTMLResponse(SAVED)
+            return saved(None)
 
 
-@app.post("/accessories/off-target", response_class=HTMLResponse)
+@app.post("/accessories/off-target")
 async def accessory_off_target(request: Request):
     match parse_off_target(await read_form(request)):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return saved(errors)
 
         case share:
             accessory_pages.save_off_target(share)
-            return HTMLResponse(SAVED)
+            return saved(None)
 
 
-@app.post("/accessories/target", response_class=HTMLResponse)
+@app.post("/accessories/target")
 async def accessory_target(request: Request):
-    form = await read_form(request)
-
-    match parse_target_free(form):
+    """The clean-up's spaces to leave free; back to the page, re-planned."""
+    match parse_target_free(await read_form(request)):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return back_with(request, errors)
 
         case target:
-            plan = accessory_pages.set_target_free(current.current_account(), target)
-            return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
+            accessory_pages.set_target_free(target)
+            return inertia.back(request)
 
 
-@app.post("/accessories/{artifact_id}/protect", response_class=HTMLResponse)
+@app.post("/accessories/{artifact_id}/protect")
 async def protect_accessory(request: Request, artifact_id: int):
     form = await read_form(request)
-    plan = accessory_pages.protect_accessory(
-        current.current_account(), artifact_id, parse_protect(form)
-    )
-    return templates.TemplateResponse(request, "_cleanup.html", {"plan": plan})
+    accessory_pages.protect_accessory(artifact_id, parse_protect(form))
+    return inertia.back(request)
 
 
-@app.post("/accessories/sell", response_class=HTMLResponse)
+@app.post("/accessories/sell")
 async def sell_accessories(request: Request):
+    """Selects the pieces in the game's sell screen; the user confirms the sale there."""
     fields = [str(value) for value in (await request.form()).getlist("artifact_id")]
 
     match parse_sell(fields, accessory_pages.pieces_to_sell(current.current_account())):
@@ -325,11 +314,7 @@ async def sell_accessories(request: Request):
         case artifact_ids:
             outcome = extractor.select_to_sell(artifact_ids)
 
-    context = {
-        "error": outcome.reason if failed(outcome) else None,
-        "done": "Selected in game: check them and confirm the sale there.",
-    }
-    return templates.TemplateResponse(request, "_equip_result.html", context)
+    return sent(outcome)
 
 
 @app.get("/empower")
@@ -482,26 +467,13 @@ def delete_run(request: Request, champion_id: int, run_id: int):
     return inertia.back(request)
 
 
-@app.post("/sync", response_class=HTMLResponse)
-def sync(request: Request):
-    """Reads the account; on success the page reloads with it (htmx's HX-Refresh). The Vue
-    layout asks for JSON and reloads its page's props itself."""
-    outcome = reader.sync()
-    error = outcome.reason if failed(outcome) else None
-
-    if wants_json(request):
-        return JSONResponse({"error": error})
-
-    context = {"error": error, "done": "Synced"}
-    response = templates.TemplateResponse(request, "_equip_result.html", context)
-
-    if not failed(outcome):
-        response.headers["HX-Refresh"] = "true"
-
-    return response
+@app.post("/sync")
+def sync():
+    """Reads the account; on success the layout reloads its page's props with it."""
+    return sent(reader.sync())
 
 
-@app.post("/champions/{champion_id}/equip", response_class=HTMLResponse)
+@app.post("/champions/{champion_id}/equip")
 async def equip(request: Request, champion_id: int):
     def send(account: Account, champion: Champion, artifact_ids: list[int]):
         match extractor.equip(champion.id, artifact_ids):
@@ -514,22 +486,21 @@ async def equip(request: Request, champion_id: int):
 
         return None
 
-    return await send_build(request, champion_id, send, "Equipped and synced.")
+    return await send_build(request, champion_id, send)
 
 
-@app.post("/champions/{champion_id}/preview", response_class=HTMLResponse)
+@app.post("/champions/{champion_id}/preview")
 async def preview(request: Request, champion_id: int):
     def send(account: Account, champion: Champion, artifact_ids: list[int]):
         return extractor.preview(account, champion.id, artifact_ids)
 
-    return await send_build(request, champion_id, send, "Previewing in game.")
+    return await send_build(request, champion_id, send)
 
 
 async def send_build(
     request: Request,
     champion_id: int,
     send: Callable[[Account, Champion, list[int]], Result[None]],
-    done: str,
 ) -> Response:
     """The build button's pieces, sent to the game by `send`."""
     account = current.current_account()
@@ -543,18 +514,17 @@ async def send_build(
         case artifact_ids:
             outcome = send(account, champion, artifact_ids)
 
-    error = outcome.reason if failed(outcome) else None
-
-    if wants_json(request):
-        return JSONResponse({"error": error, "done": done})
-
-    context = {"error": error, "done": done}
-    return templates.TemplateResponse(request, "_equip_result.html", context)
+    return sent(outcome)
 
 
-def wants_json(request: Request) -> bool:
-    """A Vue component's own request (not a page visit): it takes the view as JSON."""
-    return request.headers.get("Accept") == "application/json"
+def sent(outcome: Result[None]) -> JSONResponse:
+    """A command to the game, done or why not."""
+    return JSONResponse({"error": outcome.reason if failed(outcome) else None})
+
+
+def saved(errors: FormErrors | None) -> JSONResponse:
+    """A setting saved in place (no reload): what was wrong, or null."""
+    return JSONResponse({"error": "; ".join(errors.messages) if errors else None})
 
 
 def view_json(view: object) -> Response:

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 // The app's frame, as base.html draws it: the bar (menu, Sync), the band of the current
 // section's pages when it has several, then the page.
-import { router, usePage } from "@inertiajs/vue3";
+import { Link, router, usePage } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
-import PageLink from "../components/PageLink.vue";
 import { sendToGame } from "../composables/send";
+import { providePageSubnav } from "../composables/subnav";
 
 const page = usePage();
+const ownSubnav = providePageSubnav();
 const layout = computed(() => page.props.layout);
 const open = computed(() =>
   layout.value.sections.find((section) => section.tabs.some((tab) => tab.current)),
@@ -32,14 +33,17 @@ async function sync() {
     <nav class="container">
       <ul>
         <li>
-          <PageLink href="/" class="wordmark">Raid optimiser</PageLink>
+          <Link href="/" class="wordmark">Raid optimiser</Link>
         </li>
       </ul>
       <ul class="menu">
         <li v-for="section in layout.sections" :key="section.label">
-          <PageLink :href="section.link" :current="section.tabs.some((tab) => tab.current)">
+          <Link
+            :href="section.link"
+            :aria-current="section.tabs.some((tab) => tab.current) ? 'page' : undefined"
+          >
             {{ section.label }}
-          </PageLink>
+          </Link>
         </li>
       </ul>
       <ul class="tools">
@@ -57,11 +61,14 @@ async function sync() {
         </li>
       </ul>
     </nav>
-    <div v-if="open && open.tabs.length > 1" class="subbar">
+    <div v-show="ownSubnav > 0" id="page-subnav" class="subbar"></div>
+    <div v-if="!ownSubnav && open && open.tabs.length > 1" class="subbar">
       <nav class="container tabs" :aria-label="open.label">
         <ul>
           <li v-for="tab in open.tabs" :key="tab.label">
-            <PageLink :href="tab.link" :current="tab.current">{{ tab.label }}</PageLink>
+            <Link :href="tab.link" :aria-current="tab.current ? 'page' : undefined">{{
+              tab.label
+            }}</Link>
           </li>
         </ul>
       </nav>

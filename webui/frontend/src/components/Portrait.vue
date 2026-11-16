@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A champion as a round portrait, rimmed in their rarity's colour (none: muted); `name` is its
 // alt and, without art, its first letters; `href`: a link (it grows when pointed at).
-import PageLink from "./PageLink.vue";
+import { Link } from "@inertiajs/vue3";
 
 defineProps<{
   url: string | null;
@@ -15,7 +15,7 @@ defineProps<{
 
 <template>
   <component
-    :is="href ? PageLink : 'span'"
+    :is="href ? Link : 'span'"
     v-bind="href ? { href } : {}"
     class="portrait"
     :class="[size, rarity ? `rarity-${rarity.toLowerCase()}` : '']"

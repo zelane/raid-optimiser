@@ -211,7 +211,7 @@ the game itself.
   `TeamLinks.current` (the state as a form would send it; `composables/teamQuery.ts`), edits it
   and visits the page (`preserveState`); a chip's × is `links.without[key]`. The query is kept
   in localStorage per page (`composables/keptQuery.ts`: each visit's saved, a bare visit goes
-  to the saved one; "Empty all" forgets it); unlike `keep.js` it stays in the address bar.
+  to the saved one; "Empty all" forgets it); it stays in the address bar.
   URLs are built in Python: `service.team.PageUrl` (the page's path, its own fields and the
   team's) gives each option's `show_url`/`use_url` and the page's `TeamLinks` (`current`,
   `empty`, `without` per chip, `more`). Team gear uses `TeamSlots` too (it emits `place` and
@@ -288,9 +288,10 @@ the game itself.
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
-- Nav (`base.html` `sections`): Optimiser, Accessories, Teams, Info; a section with several pages
-  shows them as tabs in a band under the bar (`subbar`), unless the page fills it itself (its
-  `subnav` block: Accessories' steps). Optimiser: the champion list, the champion last solved for
+- Nav (`service/layout.py` `nav_sections`, drawn by `layouts/AppLayout.vue`): Optimiser,
+  Accessories, Teams, Info; a section with several pages shows them as tabs in a band under the
+  bar (`subbar`), unless the page fills it itself (`composables/subnav.ts`: it teleports its
+  tabs to `#page-subnav`; Accessories' steps). Optimiser: the champion list, the champion last solved for
   (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera, Gear (`/team-gear`). Info: Faction Wars
   (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
@@ -318,39 +319,37 @@ the game itself.
   champion page sets `enemy_def` and keeps the "stage:wave:slot" `target`, saved with runs; the
   server draws a run's picker from it; Team gear sends its page again). The panel dims
   (`detached`) when `enemy_def` no longer matches it.
-- Inertia (moving page by page, Vue 3 + TypeScript): `webui/inertia.py` is the server side of
-  Inertia v3's protocol, our own (`respond`: the shell `templates/inertia.html` with the page in
-  its `<script data-page>` on a first load, JSON on the client's visits; partial reloads; props
-  may be callables, evaluated only when sent; 409 on a stale build; `redirect`/`back`, 303).
-  `app.inertia_page` adds what every page gets (`layout`: `service/layout.py`'s nav and sync
-  age; `errors`). `service/layout.py` is the menu for both Jinja's `base.html` and the Vue
-  layout, and `INERTIA_PAGES` the paths Vue serves (patterns): `PageLink` makes a link to one
-  an Inertia visit, any other a full load (an Inertia visit answered with HTML opens Inertia's
-  error dialog). Ported: the champion list (`/`), the champion page (`/champions/{id}`), Config,
-  Info, Empower, the team finder, the Chimera page, Team gear. A form that fails goes `back` with its errors (`app.back_with`: a one-shot
-  cookie, `inertia.ERRORS_COOKIE`, shown in the layout's alert). A component's own requests
-  (the finder dialog, the target picker, equip/preview/sync) send `Accept: application/json`
-  and get the view as JSON (`app.wants_json`, `view_json`; `/finder` and `/targets` answer
-  only that). The champion page: `?run=<id>`
-  names the run shown (`champions.shown_run`: else the latest), its form restored from it;
-  history picks reload `run` and `picker` alone; a solve redirects to its new run. The front end is
-  `webui/frontend/` (Vite; `src/app.ts`, `layouts/AppLayout.vue`, `pages/<Component>.vue`,
-  `components/`, `composables/`), built into `webui/static/dist/` (gitignored); it uses the
-  global stylesheets' classes, no styles of its own. Props are typed:
-  `tools/gen_ts_types.py` writes `src/types/generated/<python module>.ts` (gitignored) from
-  `webui.service`'s dataclasses and those they reach (shared shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against
-  them (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
-  `webui/forms/` parse them as before. Still Jinja + htmx: Accessories, the palette; then drop htmx, the Jinja pages and their scripts. `app.js` (filter
-  bars, stat tiles, set grid) is loaded by no page now: the accessories port should redo it.
-- `webui/`: FastAPI + Jinja + htmx, our own CSS (no framework). `service/` is framework-free (frozen
-  dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
+- Inertia (Vue 3 + TypeScript): every page is a Vue page. `webui/inertia.py` is the server
+  side of Inertia v3's protocol, our own (`respond`: the shell `templates/inertia.html`, the
+  only Jinja left, with the page in its `<script data-page>` on a first load, JSON on the
+  client's visits; partial reloads; props may be callables, evaluated only when sent; 409 on a
+  stale build; `redirect`/`back`, 303). `app.inertia_page` adds what every page gets (`layout`:
+  `service/layout.py`'s nav and sync age; `errors`). A form that fails goes `back` with its
+  errors (`app.back_with`: a one-shot cookie, `inertia.ERRORS_COOKIE`, shown in the layout's
+  alert). A component's own requests get JSON, not a page: the finder dialog (`/finder`), the
+  target picker (`/targets`), the game commands (equip, preview, sync, sell: `app.sent`,
+  `{error}`) and settings saved in place without a reload (accessory weights and set fits:
+  `app.saved`, as rescoring is slow); `composables/send.ts` posts them. Settings that change
+  what a page shows post with `composables/save.ts` and reload its `page` prop. The champion
+  page: `?run=<id>` names the run shown (`champions.shown_run`: else the latest), its form
+  restored from it; history picks reload `run` and `picker` alone; a solve redirects to its
+  new run. The front end is `webui/frontend/` (Vite; `src/app.ts`, `layouts/AppLayout.vue`,
+  `pages/<Component>.vue`, `components/`, `composables/`), built into `webui/static/dist/`
+  (gitignored); it uses the global stylesheets' classes (the palette alone has scoped
+  styles). Props are typed: `tools/gen_ts_types.py` writes `src/types/generated/<python
+  module>.ts` (gitignored) from `webui.service`'s dataclasses and those they reach (shared
+  shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against them
+  (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
+  `webui/forms/` parse them as before.
+- `webui/`: FastAPI + Inertia + Vue, our own CSS (no framework). `service/` is framework-free
+  (frozen dataclass view models, sent to the pages as props), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
   cached account, locks), `views` (champion rows, piece names and art) and `scores` (accessory
   potentials kept in `data/cache/potentials.pickle` by piece state, per scorer and scoring
   code, so only changed pieces are rescored); `forms/` is the form boundary (`request`: the
   solve form and build buttons, `settings`: the forms that change the store, `chimera`, and
   `common`: `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
-  `reader.py` return; only `app.py` and `templates/` know about HTTP/HTML.
+  `reader.py` return; only `app.py`, `inertia.py` and the shell know about HTTP/HTML.
   Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
   colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
   `--surface-container-lowest`…`-high` for depth, `--on-surface`, `--on-surface-variant` for
@@ -381,20 +380,20 @@ the game itself.
   `panel`/`panel-head`, `well`, `table-well`, `caps`, `note` (small, muted), `figure` (a big
   number), `badge` (`quiet`: outlined; scores and difficulty too), `alert`, `chip` (`on`),
   `status` (`met`/`missing`), `segmented` (`small`; checkboxes for several) and `page-tabs`
-  (the same look for links), `filter-bar` (`data-filter`: filters items in the page, app.js),
+  (the same look for links), `filter-bar` (the page filters its items),
   `slot` (`empty`), `stat-tiles` (`edit`), `switch-rows`, `page-head`, `tally`, `cta`,
-  `danger` (selling), `champion` (`_macros.champion(c, size, name, banner, card, href,
-  extra, attrs)`: every listed champion, tile and name as one link, a `call` block's extras
-  under it; `card`, `small`, `suggested`; its `tile` carries the rarity's crest, scaled by
+  `danger` (selling), `champion` (`ChampionCard`: every listed champion, tile and name as one
+  link, its slot's extras under it; `card`, `small`, `suggested`; its `tile`, `ChampionTile`,
+  carries the rarity's crest, scaled by
   `--tile-width`, and draws any view with a name, rarity and portrait: the target picker's
   enemies have no level or stars) in a `champion-grid`, `portrait` (round, rimmed in the
-  rarity: who brings a need, who wears a piece), `stars` (one macro: the game's star art,
-  plain ★, or so many out of a total), `page_head` (a `call(part)` block gives its "lede"
-  and "aside") and `tally`, `gear-pair` (`gear-card` `candidate`/`worn` over
-  the optimiser's `piece` card). A piece is one view everywhere, `service.results.PieceView`
+  rarity: who brings a need, who wears a piece), `stars` (`Stars`: the game's star art,
+  plain ★, or so many out of a total), `page-head` (`PageHead`: its `lede` and `aside`
+  slots) and `tally`, `gear-pair` (`GearCard` `candidate`/`worn` over the optimiser's
+  `PieceCard`). A piece is one view everywhere, `service.results.PieceView`
   (`piece_view(artifact, account, champion=None)`: through a champion's eyes, or nobody's);
-  an accessory's `AccessoryRow` is that plus its scores. Drawn as a card (`piece`) or a list
-  row's cells (`piece_cells`), both with `piece_art`, `meter`; in tables, `num` cells. Heads' own margins are
+  an accessory's `AccessoryRow` is that plus its scores. Drawn as a card (`PieceCard`) or a
+  list row's cells (`PieceCells`), both with `PieceArt`, `meter`; in tables, `num` cells. Heads' own margins are
   zero-specificity (`:where`), so a primitive's gap wins. Build pages from those, the
   primitives and the tokens; `/palette` shows them all.
 
@@ -414,13 +413,14 @@ just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs fro
 just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)
 just frontend-build   # prop types + Vite build into webui/static/dist (part of update)
 just assets           # portraits and icons from the game's bundles (part of update)
-just check            # black + ruff over all Python, the house style checker, then stylelint
+just check            # black + ruff over all Python, the house style checker, stylelint, then Prettier + vue-tsc over the front end
 just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css
 uv run --group dev pytest   # tests/ (not part of just check)
 ```
 
 The web server reloads itself when Python under `optimiser/` or `webui/` changes
-(watchfiles; `--no-reload` turns it off); templates are compiled afresh per render (no Jinja cache: it missed changes to imported templates) and static files are read fresh anyway. Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
+(watchfiles; `--no-reload` turns it off); static files are read fresh anyway. Vue pages need
+`just frontend-build` after a change, or `just web-dev` (Vite's dev server, hot reload). Stop it by port (`ss -ltnp 'sport = :8000'`), not `pkill -f` with a pattern
 that also matches your own shell command.
 
 ## Conventions
@@ -437,7 +437,11 @@ checks it (`just css`, in `just check`; `just css-fix` fixes both). `stylelint.c
 standard config, properties in the clean-order preset's order (stylelint-order), and native
 nesting at most 3 deep (`&` for the same element: `&:hover`, `&.on`; bare for descendants).
 Nest under a single selector, not a list (`&` would act as `:is()` and raise specificity).
-`package.json` holds only that tooling (`npm ci`, part of `just update`).
+Vue/TypeScript: Prettier formats `webui/frontend` too (`just frontend-check`); a component
+starts with a comment saying what it draws, as a module's docstring would; pages get their
+data as props typed from the views, never by fetching it themselves (a component's own
+request, like the finder's, is the exception). `package.json` holds the front end and that
+tooling (`npm ci`, part of `just update`).
 Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 
 ## Stat model (verified exact against the game)
@@ -550,8 +554,8 @@ Portraits are named by type id with ascension 0 (`9990`); enemies' (bosses, Hydr
 `HeroAvatars_Bosses`/`HeroAvatarsHydra`) by full type id, via their type's `avatar`. Piece art `<set id>_<slot>`, set
 icons by set id. Affinity icons by lower-case affinity, faction banners by faction key (`account.faction_name`: the game's internal name, but
 Samurai → Shadowkin, Olympians → Argonites, which the game's tables, stage conditions and
-crypts still use; champions, pieces and relics carry the key; `faction_label`, the
-`faction_label` Jinja filter, is what's shown: "Dark Elves", "Lizardmen"), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
+crypts still use; champions, pieces and relics carry the key; `faction_label` is what's
+shown (views carry it: `PieceView.faction_label`, the team views' factions): "Dark Elves", "Lizardmen"), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
 portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only
 set-less accessories use `<faction>_<slot>`. Old sprite names mapped by the user: Berserker = Crit
 Damage, Healing = Regeneration, Rage = Killstroke, Stalwart2 = Defiant, Taunting = Provoke,

@@ -151,11 +151,10 @@ details.section {
    - segmented: radios as one control, the picked one gold; checkboxes for any number picked;
      `small` inside a row or card. page-tabs: the same look for links between a page's views.
    - filter-bar: what narrows a list, in one row: a search taking the room, selects and
-     segmented choices, a count at the end. `data-filter` (a selector) filters those items
-     here in the page (app.js); a bar the server answers (htmx) leaves it off.
+     segmented choices, a count at the end (the page filters its items).
    - slot: a card for something placed, `empty` dashed.
    - stat-tiles: stats as caps label over value, as many to a row as fit; `edit` makes each a
-     cell with its number field, a zero dimmed (`zero`, kept by app.js).
+     cell with its number field, a zero dimmed (`zero`).
    - switch-rows: settings as rows, the switch at the end.
    - page-head: title and lede, tabs or a tally (a big n/max with a caps note) at the other end.
    - gear-pair: the piece to take (gold rim) beside what it replaces, one under the other when
@@ -713,17 +712,6 @@ fieldset.panel {
   }
 }
 
-/* The part of a page keep.js re-renders: dimmed and still while its request runs. */
-.page-swap.htmx-request {
-  cursor: progress;
-
-  & > * {
-    pointer-events: none;
-    opacity: 0.6;
-    transition: opacity var(--transition);
-  }
-}
-
 /* --- The top bar ------------------------------------------------------------- */
 
 /* Two rows: the wordmark, the sections and (at the end) sync; then, in a darker band of
@@ -1032,7 +1020,7 @@ img.faction {
   gap: var(--space-l) var(--space-m);
 }
 
-/* A champion wherever one is listed (`_macros.champion`): the tile, the name under it (after
+/* A champion wherever one is listed (`ChampionCard`): the tile, the name under it (after
    the faction's banner), as one link; its name smaller under a small tile. `card` on a card,
    lit in their rarity when pointed at; `suggested` ringed. */
 :is(.champion, .champion > a) {
@@ -1046,7 +1034,7 @@ img.faction {
   text-decoration: none;
 }
 
-/* A champion as a round portrait (`_macros.portrait`), rimmed in their rarity (muted when it
+/* A champion as a round portrait (`Portrait`), rimmed in their rarity (muted when it
    isn't known); a linked one grows when pointed at. */
 .portrait {
   overflow: hidden;
@@ -1157,7 +1145,7 @@ dialog.finder > article {
   overflow-y: auto;
   min-height: 12rem;
 
-  &:is(.htmx-request, .busy) {
+  &.busy {
     opacity: 0.7;
   }
 }
@@ -1416,7 +1404,7 @@ table.limits {
   gap: var(--space-l) var(--space-2xl);
   align-items: center;
 
-  &:is(.htmx-request, .busy) {
+  &.busy {
     opacity: 0.8;
   }
 
@@ -2049,7 +2037,7 @@ table.set-grid {
     }
   }
 
-  /* Brass above 1, red below. The column under the pointer lit (app.js), so a tick finds its
+  /* Brass above 1, red below. The column under the pointer lit (`lit`), so a tick finds its
      set. */
   .set-values input {
     width: 2.6rem;
@@ -2112,7 +2100,7 @@ h2 + .lede,
   margin-top: calc(var(--space-2xs) * -1);
 }
 
-/* Finding teams (the team finder and the Chimera page; `_team.html`): the slots, what else to
+/* Finding teams (the team finder, the Chimera page, Team gear's slots): the slots, what else to
    bring and the gear (a picker each), the search bar, the options found, then the needs: a
    panel per Chimera form (its trials across) or per kind of need. Laid out with the
    primitives; what's here is the parts' own look. */

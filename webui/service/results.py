@@ -12,7 +12,17 @@ current gear, or why there are none.
 import time
 from dataclasses import dataclass, field
 
-from optimiser.account import Account, Artifact, Champion, Slot, Stat, StatLine, Stats, worn_gear
+from optimiser.account import (
+    Account,
+    Artifact,
+    Champion,
+    Slot,
+    Stat,
+    StatLine,
+    Stats,
+    faction_label,
+    worn_gear,
+)
 from optimiser.assume import assume
 from optimiser.damage import estimate_damage
 from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label, reason_label
@@ -83,6 +93,7 @@ class PieceView:
     planned_ascend_level: int | None = None  # assumed ascended to this
     reserved_by: list[str] = field(default_factory=list)  # reserve rules keeping it elsewhere
     faction_icon_url: str | None = None  # an accessory's faction lock, as its banner
+    faction_label: str | None = None  # the lock as the game names it ("Dark Elves")
 
 
 @dataclass(frozen=True)
@@ -257,6 +268,7 @@ def piece_view(
         planned_ascend_level=artifact.planned_ascend_level,
         faction=artifact.faction,
         faction_icon_url=asset_url("factions", artifact.faction) if artifact.faction else None,
+        faction_label=faction_label(artifact.faction) if artifact.faction else None,
         worn_by=owner.name if owner else None,
         worn_by_portrait=champion_row(wearer).portrait_url if wearer else None,
         equipped=mine,
