@@ -457,3 +457,245 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
     @picked="(listed) => router.visit(`/champions/${listed.champion.id}`)"
   />
 </template>
+
+<style scoped>
+/* The champion: portrait with name and faction beside it, the form switch (a mythical's),
+   then their stats in the gear worn now, lit faintly in their rarity's colour. */
+.champion-profile {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 15% 0%,
+      color-mix(in srgb, var(--rarity) 14%, transparent),
+      transparent 70%
+    ),
+    var(--surface-container-low);
+
+  /* The tile is ChampionTile's: its frame is inside it. */
+  :deep(.tile-frame) {
+    box-shadow: 0 0 18px color-mix(in srgb, var(--rarity) 35%, transparent);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    line-height: 1.15;
+  }
+
+  .stat-tiles {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.champion-identity {
+  display: flex;
+  gap: var(--space-l);
+  align-items: flex-start;
+
+  .stack {
+    align-items: flex-start;
+    padding-top: var(--space-s);
+  }
+}
+
+/* A mythical's form switch, after the game's: two helms in a dark pill (a `segmented`), the
+   picked one gold (and named), the other white and dim. */
+.segmented.form-switch {
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 70%, var(--shadow));
+
+  label {
+    padding: var(--space-2xs) var(--space-m) var(--space-2xs) var(--space-xs);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 400;
+  }
+
+  label:has(:checked) {
+    color: var(--on-surface);
+    background: color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+
+  img {
+    width: 1.6rem;
+    height: 1.6rem;
+    object-fit: contain;
+  }
+
+  .form-on,
+  label:has(:checked) .form-off {
+    display: none;
+  }
+
+  label:has(:checked) .form-on {
+    display: block;
+  }
+
+  .form-off {
+    opacity: 0.55;
+  }
+
+  label:hover .form-off {
+    opacity: 0.85;
+  }
+}
+
+/* Stat targets: a ledger on the slab, blanks as dashes; a stat with anything asked of it
+   lights up. Damage, its skill and the DEF it's against, close the panel. */
+table.limits {
+  th,
+  td {
+    padding: var(--space-2xs) var(--space-s);
+  }
+
+  tbody th {
+    font-size: var(--text-s);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  input {
+    height: auto;
+    padding-block: var(--space-2xs);
+    border-color: transparent;
+    background: var(--surface-container-low);
+
+    &::placeholder {
+      opacity: 0.6;
+    }
+  }
+
+  td.priority {
+    width: 4rem;
+  }
+
+  tr:has(input:not(:placeholder-shown)) {
+    > * {
+      background: color-mix(in srgb, var(--primary) 7%, transparent);
+    }
+
+    th,
+    input {
+      color: var(--primary);
+    }
+  }
+}
+
+.damage-pick {
+  > .caps {
+    color: var(--primary);
+  }
+
+  select {
+    flex: 1 1 9rem;
+    width: auto;
+    min-width: 0;
+  }
+
+  label {
+    font-size: var(--text-xs);
+    color: var(--on-surface-variant);
+  }
+
+  input {
+    width: 4.75rem;
+
+    &[name="rank_DAMAGE"] {
+      width: 3rem;
+    }
+  }
+}
+
+/* Sets: a row card each (the set's icon, which set, how many pieces), then a dashed button
+   for another. */
+.set-row {
+  display: flex;
+  gap: var(--space-s);
+  align-items: center;
+  margin-bottom: var(--space-s);
+
+  select {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 600;
+  }
+
+  input {
+    flex: 0 0 3.5rem;
+  }
+
+  .icon {
+    font-size: var(--text-l);
+  }
+}
+
+.set-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  border-radius: var(--radius);
+  background: var(--shade);
+
+  img {
+    width: 85%;
+    height: 85%;
+    object-fit: contain;
+  }
+}
+
+/* The search: its numbers as three small wells, the gear filters as rows with their switch
+   at the end, then the buttons. */
+.settings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-s);
+
+  label {
+    margin: 0;
+  }
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--space-m);
+}
+
+.solving {
+  color: var(--primary);
+}
+
+/* The target across the top, then three columns of panels: the champion and their run
+   history; the stat targets; the sets and the search. Two columns on a middling page (the
+   sets and search under the champion), one on a narrow one. The request form is
+   `display: contents`: its two columns are the page grid's own. The results run full width
+   under it all. */
+.champion-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2xl);
+  align-items: start;
+  margin-bottom: var(--space-4xl);
+}
+
+.champion-main {
+  display: contents;
+}
+
+@container page (min-width: 46rem) {
+  .champion-page {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .target-section {
+    grid-column: 1 / -1;
+  }
+}
+
+@container page (min-width: 68rem) {
+  .champion-page {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+</style>

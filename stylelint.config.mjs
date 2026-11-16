@@ -29,14 +29,14 @@ export default {
     // colours outside custom properties, no bare durations in transitions.
     "declaration-property-value-disallowed-list": [
       {
-        "/^(margin|padding|gap|row-gap|column-gap|inset|top|right|bottom|left)(-|$)/": [
-          "/\\drem/",
-        ],
+        "/^(margin|padding|gap|row-gap|column-gap|inset|top|right|bottom|left)(-|$)/": ["/\\drem/"],
         "font-size": ["/\\d(rem|px)/"],
         "/^border(-[a-z]+)*-radius$/": ["/\\d(rem|px)/"],
         "/^transition/": ["/\\dm?s\\b/"],
-        "/^(color|background|border|outline|box-shadow|text-shadow|fill|stroke|text-decoration)/":
-          ["/#[0-9a-f]{3,8}\\b/i", "/\\b(rgb|hsl|hwb|lab|lch|oklab|oklch)a?\\(/"],
+        "/^(color|background|border|outline|box-shadow|text-shadow|fill|stroke|text-decoration)/": [
+          "/#[0-9a-f]{3,8}\\b/i",
+          "/\\b(rgb|hsl|hwb|lab|lch|oklab|oklch)a?\\(/",
+        ],
       },
       { message: (property, value) => `"${property}: ${value}": use a theme.css token` },
     ],
@@ -55,7 +55,14 @@ export default {
     {
       files: ["**/*.vue"],
       customSyntax: "postcss-html",
-      rules: { "custom-property-empty-line-before": null },
+      rules: {
+        "custom-property-empty-line-before": null,
+        // Vue's: reaching into a child component, styling slotted content, leaving the scope.
+        "selector-pseudo-class-no-unknown": [
+          true,
+          { ignorePseudoClasses: ["deep", "slotted", "global"] },
+        ],
+      },
     },
   ],
 };

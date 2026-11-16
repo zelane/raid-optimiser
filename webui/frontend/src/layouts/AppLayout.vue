@@ -81,3 +81,10 @@ async function sync() {
     <slot />
   </main>
 </template>
+
+<style scoped>
+/* The page's width is what its layouts ask about (`@container page`), not the window's. */
+main.container {
+  container: page / inline-size;
+}
+</style>

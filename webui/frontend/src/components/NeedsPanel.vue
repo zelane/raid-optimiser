@@ -35,3 +35,54 @@ const met = computed(() => props.needs.filter((need) => need.met).length);
     </slot>
   </section>
 </template>
+
+<style scoped>
+/* A panel in its own colour (`--accent`): a Chimera form's (theme.css), else the extras'. */
+.accent-panel {
+  --accent: var(--form-any);
+
+  border-top: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 8%, var(--surface-container-low)),
+    var(--surface-container-low) 50%
+  );
+
+  h3 {
+    font-size: var(--text-l);
+    color: var(--accent);
+  }
+}
+
+.form-ram {
+  --accent: var(--form-ram);
+}
+
+.form-lion {
+  --accent: var(--form-lion);
+}
+
+.form-snake {
+  --accent: var(--form-snake);
+}
+
+.form-icon {
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 45%, transparent));
+}
+
+.form-glyph {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+  font-weight: 700;
+  color: var(--surface);
+  background: var(--accent);
+}
+</style>

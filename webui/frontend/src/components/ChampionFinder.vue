@@ -113,3 +113,23 @@ function closeOnBackdrop(event: MouseEvent) {
     </article>
   </dialog>
 </template>
+
+<style scoped>
+/* The champion finder: a dialog, wide; the filters in a row (name, rarity, stars), then
+   the champions as portraits, the list scrolling inside the dialog. */
+dialog.finder > article {
+  max-width: min(64rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow) 70%, transparent);
+}
+
+.finder-results {
+  overflow-y: auto;
+  min-height: 12rem;
+
+  &.busy {
+    opacity: 0.7;
+  }
+}
+</style>

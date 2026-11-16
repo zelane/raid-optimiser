@@ -209,3 +209,81 @@ function glance(option: { number: number }) {
     </div>
   </section>
 </template>
+
+<style scoped>
+table.glance {
+  width: auto;
+  margin: 0;
+  font-size: var(--text-xs);
+
+  th,
+  td {
+    padding: var(--space-3xs) var(--space-s);
+    border: 0;
+    text-align: center;
+  }
+
+  th {
+    text-align: left;
+  }
+}
+
+/* A form's trials three across, a chevron between them; one under the next on a narrow page. */
+.trial-row {
+  --trial-gap: var(--space-2xl);
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-m);
+  align-items: start;
+}
+
+@container page (min-width: 46rem) {
+  .trial-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--trial-gap);
+
+    .trial + .trial::before {
+      content: "›";
+      position: absolute;
+      top: 50%;
+      left: calc(var(--trial-gap) / -2);
+      transform: translate(-50%, -50%);
+      font-size: var(--text-xl);
+      color: color-mix(in srgb, var(--accent) 70%, var(--on-surface-variant));
+    }
+  }
+}
+
+.trial {
+  position: relative;
+  padding: var(--space-m);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  background: var(--surface-container-lowest);
+
+  &.met {
+    border-color: color-mix(in srgb, var(--stat-up) 55%, transparent);
+    box-shadow: inset 3px 0 0 var(--stat-up);
+  }
+}
+
+.trial-state {
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.trial-target {
+  align-self: flex-start;
+  padding: var(--space-3xs) var(--space-s);
+  border-radius: var(--radius);
+  font-size: var(--text-2xs);
+  color: var(--on-surface-variant);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+
+  strong {
+    color: var(--accent);
+  }
+}
+</style>

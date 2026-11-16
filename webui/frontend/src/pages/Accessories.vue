@@ -299,3 +299,20 @@ function addType() {
     </SetFits>
   </template>
 </template>
+
+<style scoped>
+/* Swaps: a champion to a row, three columns: who, their swaps (one gear pair under another),
+   the gain and Equip; who and the gain from the top. One column on narrow screens. */
+.swap-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-l);
+  align-items: start;
+}
+
+@container page (min-width: 52rem) {
+  .swap-group {
+    grid-template-columns: 12rem minmax(0, 1fr) auto;
+  }
+}
+</style>

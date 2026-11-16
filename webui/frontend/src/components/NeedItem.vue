@@ -77,3 +77,21 @@ const tone = computed(() =>
     </div>
   </li>
 </template>
+
+<style scoped>
+/* A need: met or not, what would do, how far it can be counted on, who brings it. */
+.need-mark {
+  flex: none;
+  font-weight: 700;
+}
+
+.need-body {
+  flex: 1;
+}
+
+.need-brought {
+  padding: var(--space-3xs) var(--space-2xs);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--outline-variant) 30%, transparent);
+}
+</style>

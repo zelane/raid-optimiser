@@ -121,3 +121,114 @@ const levels = [
     </div>
   </div>
 </template>
+
+<style scoped>
+/* The target picker across the top: zone…stage as a 2×2 of labelled selects, then the stage's
+   last wave as portraits (the picked one lit) and the pick's stats, on the slab. When the DEF
+   field no longer matches it, it dims and says so. */
+.target-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-l) var(--space-2xl);
+  align-items: center;
+
+  &.busy {
+    opacity: 0.8;
+  }
+
+  &.off-target .target-card {
+    opacity: 0.6;
+  }
+
+  &:not(.off-target) .target-detached {
+    display: none;
+  }
+}
+
+@container page (min-width: 60rem) {
+  .target-picker {
+    grid-template-columns: minmax(16rem, 2fr) minmax(0, 3fr);
+  }
+}
+
+.target-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-s) var(--space-m);
+
+  label {
+    margin: 0;
+  }
+
+  select {
+    font-weight: 600;
+  }
+}
+
+.target-card {
+  padding: var(--space-m) var(--space-l);
+}
+
+.target-enemy {
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+  border: 0;
+  opacity: 0.55;
+  background: none;
+  transition: opacity var(--transition);
+
+  .tile {
+    --tile-width: 3.6rem;
+  }
+
+  &:hover,
+  &:focus-visible {
+    opacity: 0.85;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  &.picked {
+    opacity: 1;
+
+    .tile {
+      --tile-width: 4.6rem;
+    }
+  }
+}
+
+.target-facts {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+/* The enemy's name, and the wave select at the line's far end. */
+.target-head {
+  display: flex;
+  gap: var(--space-xs) var(--space-m);
+  align-items: center;
+  justify-content: space-between;
+
+  .target-name {
+    min-width: 0;
+  }
+}
+
+.target-wave {
+  flex: none;
+  margin-block: 0;
+
+  select {
+    font-weight: 600;
+  }
+}
+
+.target-name strong {
+  font-family: var(--font-display);
+  font-size: var(--text-l);
+}
+</style>

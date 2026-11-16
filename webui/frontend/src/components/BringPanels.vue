@@ -213,3 +213,20 @@ function assume() {
     </section>
   </div>
 </template>
+
+<style scoped>
+.chip-remove {
+  margin-left: var(--space-3xs);
+  font-weight: 700;
+  color: var(--on-surface-variant);
+}
+
+.chip:hover .chip-remove {
+  color: var(--stat-down);
+}
+
+.count-mark {
+  font-weight: 700;
+  color: var(--primary);
+}
+</style>

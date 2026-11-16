@@ -174,3 +174,10 @@ function removeRule(rule: string) {
     </section>
   </div>
 </template>
+
+<style scoped>
+/* A glyph assumed is outlined in brass. */
+table.glyphs select.is-planned {
+  border-color: var(--primary);
+}
+</style>

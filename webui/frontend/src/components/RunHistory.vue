@@ -57,3 +57,70 @@ function forget(id: number) {
     <p v-else class="note">No runs yet: what you solve for is kept here.</p>
   </section>
 </template>
+
+<style scoped>
+/* History: a card a run, newest first; the one the results show has the brass rail. Under the
+   champion, it scrolls on its own past a few runs. */
+ul.history {
+  overflow-y: auto;
+  max-height: 22rem;
+  margin: 0;
+  padding: 0 var(--space-2xs) 0 0;
+
+  li {
+    position: relative;
+    border: 1px solid var(--outline-variant);
+    border-left: 3px solid transparent;
+    border-radius: var(--radius);
+    list-style: none;
+    background: var(--surface-container-lowest);
+
+    &:hover {
+      border-color: color-mix(in srgb, var(--secondary) 50%, transparent);
+      border-left-color: transparent;
+    }
+
+    &.current {
+      border-left-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 7%, var(--surface-container-lowest));
+    }
+  }
+
+  .icon {
+    position: absolute;
+    top: var(--space-s);
+    right: var(--space-xs);
+    font-size: var(--text-2xs);
+  }
+}
+
+.run-link {
+  padding: var(--space-s) var(--space-3xl) var(--space-s) var(--space-m);
+  color: inherit;
+  text-decoration: none;
+}
+
+.run-meta {
+  display: flex;
+  gap: var(--space-s);
+  align-items: center;
+  justify-content: space-between;
+
+  time {
+    font-size: var(--text-2xs);
+    font-weight: 700;
+    color: var(--on-surface-variant);
+    letter-spacing: 0.04em;
+  }
+}
+
+li.current .run-meta time {
+  color: var(--primary);
+}
+
+.run-summary {
+  font-size: var(--text-s);
+  font-weight: 600;
+  line-height: 1.35;
+}
+</style>

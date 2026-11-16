@@ -107,3 +107,45 @@ function picked(listed: ListedChampion) {
     <ChampionFinder ref="finder" :only="only" :only-label="onlyLabel" @picked="picked" />
   </section>
 </template>
+
+<style scoped>
+/* A slot: the champion, or an open one with its +, the finder behind it. */
+.team-slot {
+  min-height: 9rem;
+
+  &.empty {
+    justify-content: flex-start;
+  }
+
+  &.suggested {
+    border-color: var(--primary);
+    border-style: dashed;
+  }
+
+  > select {
+    width: 100%;
+  }
+}
+
+button.slot-plus {
+  --button-bg: var(--surface-container-low);
+  --button-edge: var(--outline-variant);
+  --button-fg: var(--primary);
+
+  display: grid;
+  place-items: center;
+  width: 4.5rem;
+  height: 4.5rem;
+  margin-block: auto;
+  padding: 0;
+  border-radius: var(--radius-l);
+  font-size: var(--text-4xl);
+  font-weight: 400;
+  line-height: 1;
+
+  &:is(:hover, :focus) {
+    --button-bg: var(--surface-container-low);
+    --button-edge: var(--primary);
+  }
+}
+</style>

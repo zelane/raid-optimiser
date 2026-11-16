@@ -64,3 +64,29 @@ defineProps<{
     </div>
   </article>
 </template>
+
+<style scoped>
+/* The options found: a card each, its members across (any champion where it needs none), a
+   glance at what it clears, and its buttons. The one the needs below show has the brass rail. */
+.team-option.shown {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.team-members {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2xs);
+}
+
+.free-slot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  width: 3.5rem;
+  border: 2px dashed var(--outline-variant);
+  border-radius: var(--radius-l);
+  font-size: var(--text-2xs);
+  color: var(--on-surface-variant);
+}
+</style>
