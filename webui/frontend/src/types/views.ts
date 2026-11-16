@@ -1,4 +1,5 @@
 // Shapes the components share across the generated views.
+import type { SlotView } from "./generated/webui.service.team";
 import type { StarView } from "./generated/webui.service.views";
 
 // Anything drawn as a champion's tile: a champion (`ChampionRow`), or an enemy of the target
@@ -17,4 +18,13 @@ export interface TileView {
   stars?: StarView[];
   crest_url?: string | null;
   crest_top_url?: string | null;
+}
+
+// A team a search found, as the team finder's and the Chimera page's options both have it.
+export interface TeamOptionView {
+  number: number;
+  slots: SlotView[];
+  score: number;
+  show_url: string;
+  use_url: string;
 }

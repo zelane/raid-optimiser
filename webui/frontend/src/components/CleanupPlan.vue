@@ -4,18 +4,19 @@
 // confirms the sale there) and those to leave in the mailbox. Keep protects a piece.
 import { Link } from "@inertiajs/vue3";
 import { computed, ref, watch } from "vue";
+import { checkedOf } from "../composables/format";
 import { save } from "../composables/save";
-import { sendToGame } from "../composables/send";
-import type { AccessoryRow, CleanupView } from "../types/generated/webui.service.accessories";
-import AccessoryCells from "./AccessoryCells.vue";
-import ScoreHeads from "./ScoreHeads.vue";
+import { sendToGame, type Sent } from "../composables/send";
+import type { CleanupView } from "../types/generated/webui.service.accessories";
+import DropTable from "./DropTable.vue";
+import SentNote from "./SentNote.vue";
 
 const props = defineProps<{ plan: CleanupView }>();
 
 const targetFree = ref(String(props.plan.target_free));
 const ticked = ref<Set<number>>(new Set());
 const selling = ref(false);
-const sold = ref<{ error: string | null } | null>(null);
+const sold = ref<Sent | null>(null);
 
 function tickAll() {
   ticked.value = new Set(props.plan.to_sell.map((drop) => drop.row.piece.id));
@@ -37,10 +38,6 @@ function tick(id: number, on: boolean) {
   if (on) next.add(id);
   else next.delete(id);
   ticked.value = next;
-}
-
-function protect(row: AccessoryRow, on: boolean) {
-  save(`/accessories/${row.piece.id}/protect`, on ? { on: "1" } : {});
 }
 
 async function sell() {
@@ -173,57 +170,13 @@ const keptByRule = computed(() =>
           <input
             type="checkbox"
             :checked="all"
-            @change="($event.target as HTMLInputElement).checked ? tickAll() : (ticked = new Set())"
+            @change="checkedOf($event) ? tickAll() : (ticked = new Set())"
           />
           All
         </label>
-        <small v-if="sold?.error" class="down">Failed: {{ sold.error }}</small>
-        <small v-else-if="sold" class="up">
-          Selected in game: check them and confirm the sale there.
-        </small>
+        <SentNote :sent="sold" done="Selected in game: check them and confirm the sale there." />
       </div>
-      <div class="table-well">
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th></th>
-              <th>Piece</th>
-              <th>Main</th>
-              <th>Substats</th>
-              <ScoreHeads />
-              <th>Group</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="drop in plan.to_sell" :key="drop.row.piece.id">
-              <td>
-                <input
-                  type="checkbox"
-                  :checked="ticked.has(drop.row.piece.id)"
-                  :aria-label="`Sell ${drop.row.piece.set_name} ${drop.row.piece.slot}`"
-                  @change="tick(drop.row.piece.id, ($event.target as HTMLInputElement).checked)"
-                />
-              </td>
-              <AccessoryCells :row="drop.row" scores />
-              <td class="nowrap">
-                <small :class="{ down: drop.surplus }">{{ drop.group }}</small>
-              </td>
-              <td>
-                <label class="inline" title="Never drop this piece">
-                  <input
-                    type="checkbox"
-                    :checked="drop.row.protected"
-                    @change="protect(drop.row, ($event.target as HTMLInputElement).checked)"
-                  />
-                  Keep
-                </label>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DropTable :rows="plan.to_sell" :ticked="ticked" @tick="tick" />
     </form>
     <p v-else>Nothing to sell.</p>
 
@@ -232,39 +185,7 @@ const keptByRule = computed(() =>
       <p class="note">
         Not worth a space: claim everything else in the mailbox once the sale is done.
       </p>
-      <div class="table-well">
-        <table>
-          <thead>
-            <tr>
-              <th></th>
-              <th>Piece</th>
-              <th>Main</th>
-              <th>Substats</th>
-              <ScoreHeads />
-              <th>Group</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="drop in plan.leave_unclaimed" :key="drop.row.piece.id">
-              <AccessoryCells :row="drop.row" scores />
-              <td class="nowrap">
-                <small :class="{ down: drop.surplus }">{{ drop.group }}</small>
-              </td>
-              <td>
-                <label class="inline" title="Never drop this piece">
-                  <input
-                    type="checkbox"
-                    :checked="drop.row.protected"
-                    @change="protect(drop.row, ($event.target as HTMLInputElement).checked)"
-                  />
-                  Keep
-                </label>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <DropTable :rows="plan.leave_unclaimed" />
     </template>
     <p v-else>Claim the whole mailbox.</p>
   </div>

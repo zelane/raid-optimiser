@@ -2,6 +2,7 @@
 // A run's builds: the ledger (the gear worn now, then a build a row, each change beside its
 // value), and the picked build's details under it (the first to begin with).
 import { ref, watch } from "vue";
+import { plural } from "../composables/format";
 import type { ResultsView } from "../types/generated/webui.service.results";
 import BuildDetail from "./BuildDetail.vue";
 import Ledger from "./Ledger.vue";
@@ -19,8 +20,7 @@ watch(
   <div class="panel results-panel stack" style="--space: var(--space-m)">
     <p class="cluster note" style="--space: var(--space-xs) var(--space-l)">
       <span class="badge info">
-        Found {{ results.builds.length }} build{{ results.builds.length !== 1 ? "s" : "" }} in
-        {{ results.seconds.toFixed(1) }}s
+        Found {{ plural(results.builds.length, "build") }} in {{ results.seconds.toFixed(1) }}s
       </span>
       <span v-if="results.champion_level_note" class="planned">
         {{ results.champion.name }} {{ results.champion_level_note }}.

@@ -4,11 +4,18 @@
 // page's fixed hold on the list (`service.finder.OnlyView`'s fields). Enter in the search
 // takes the first; Escape, × or the backdrop close it. The filters (not the name) are the
 // champion list's, remembered in this browser.
-import { ref, watch } from "vue";
-import { readKept, writeKept } from "../composables/kept";
+import { ref } from "vue";
+import { plural } from "../composables/format";
+import { readKept } from "../composables/kept";
+import { getJson } from "../composables/send";
 import type { FinderView, ListedChampion } from "../types/generated/webui.service.finder";
 import ChampionCard from "./ChampionCard.vue";
-import ChampionFilters, { KEPT, REMEMBERED, type Filters } from "./ChampionFilters.vue";
+import ChampionFilters, {
+  KEPT,
+  REMEMBERED,
+  watchFilters,
+  type Filters,
+} from "./ChampionFilters.vue";
 
 const props = defineProps<{ only?: [string, string][]; onlyLabel?: string | null }>();
 const emit = defineEmits<{ picked: [listed: ListedChampion] }>();
@@ -17,7 +24,6 @@ const dialog = ref<HTMLDialogElement>();
 const filters = ref<Filters>({ q: "", rarity: "", faction: "", grade: "" });
 const found = ref<FinderView | null>(null);
 const busy = ref(false);
-let pending: ReturnType<typeof setTimeout> | undefined;
 let asked = 0;
 
 function open() {
@@ -29,11 +35,7 @@ function open() {
 
 defineExpose({ open });
 
-watch(filters, (now, before) => {
-  writeKept(KEPT, Object.fromEntries(REMEMBERED.map((name) => [name, now[name]])));
-  clearTimeout(pending);
-  pending = setTimeout(search, now.q !== before.q ? 200 : 0);
-});
+watchFilters(filters, search);
 
 async function search() {
   const query = new URLSearchParams(
@@ -44,8 +46,8 @@ async function search() {
   busy.value = true;
 
   try {
-    const response = await fetch(`/finder?${query}`, { headers: { Accept: "application/json" } });
-    if (response.ok && ask === asked) found.value = (await response.json()) as FinderView;
+    const view = await getJson<FinderView>(`/finder?${query}`);
+    if (view && ask === asked) found.value = view;
   } finally {
     if (ask === asked) busy.value = false;
   }
@@ -90,7 +92,7 @@ function closeOnBackdrop(event: MouseEvent) {
         aria-live="polite"
       >
         <template v-if="found">
-          <p class="caps">{{ found.found }} champion{{ found.found !== 1 ? "s" : "" }}</p>
+          <p class="caps">{{ plural(found.found, "champion") }}</p>
           <div v-if="found.picks.length" class="champion-grid">
             <ChampionCard
               v-for="listed in found.picks"

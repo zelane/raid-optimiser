@@ -4,13 +4,10 @@
 import { Head, Link } from "@inertiajs/vue3";
 import ChampionCard from "../components/ChampionCard.vue";
 import PageHead from "../components/PageHead.vue";
+import { plural } from "../composables/format";
 import type { EmpowerPage } from "../types/generated/webui.service.empower";
 
 const { page } = defineProps<{ page: EmpowerPage }>();
-
-function copies(count: number) {
-  return `${count} cop${count === 1 ? "y" : "ies"}`;
-}
 </script>
 
 <template>
@@ -136,7 +133,9 @@ function copies(count: number) {
           <template v-if="item.substitute"
             >with {{ item.substitute }}: {{ item.fodder }} owned</template
           >
-          <template v-else-if="item.fodder">{{ copies(item.fodder) }} to feed</template>
+          <template v-else-if="item.fodder"
+            >{{ plural(item.fodder, "copy", "copies") }} to feed</template
+          >
           <template v-else>no duplicate</template>
         </small>
       </ChampionCard>

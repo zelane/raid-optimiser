@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // Stars: the game's art (`art`, plain ★ where a star has none), or `count` filled of `of`.
+import { computed } from "vue";
 import type { StarView } from "../types/generated/webui.service.views";
 
 const props = defineProps<{
@@ -9,11 +10,11 @@ const props = defineProps<{
   title?: string;
   kind?: string;
 }>();
-const count = props.count ?? 0;
+const filled = computed(() => props.count ?? 0);
 </script>
 
 <template>
-  <span class="stars" :class="kind" :title="title || `${count} stars`">
+  <span class="stars" :class="kind" :title="title || `${filled} stars`">
     <template v-if="art">
       <template v-for="(star, n) in art" :key="n">
         <img v-if="star.image_url" :src="star.image_url" alt="" />
@@ -21,7 +22,7 @@ const count = props.count ?? 0;
       </template>
     </template>
     <template v-else>
-      <span v-for="n in of ?? count" :key="n" :class="{ off: n > count }">★</span>
+      <span v-for="n in of ?? filled" :key="n" :class="{ off: n > filled }">★</span>
     </template>
   </span>
 </template>

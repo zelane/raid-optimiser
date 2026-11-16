@@ -4,6 +4,7 @@
 import { Head } from "@inertiajs/vue3";
 import { ref, watch } from "vue";
 import PageHead from "../components/PageHead.vue";
+import { checkedOf, valueOf } from "../composables/format";
 import { save } from "../composables/save";
 import type { AssumptionsPage } from "../types/generated/webui.service.assumptions";
 
@@ -23,12 +24,12 @@ watch(
 );
 
 function flag(name: string, event: Event) {
-  const on = (event.target as HTMLInputElement).checked;
+  const on = checkedOf(event);
   save("/assumptions", on ? { flag: name, on: "1" } : { flag: name });
 }
 
 function glyph(kind: string, event: Event) {
-  save("/glyphs", { kind, grade: (event.target as HTMLSelectElement).value });
+  save("/glyphs", { kind, grade: valueOf(event) });
 }
 
 function addRule(rule: string) {

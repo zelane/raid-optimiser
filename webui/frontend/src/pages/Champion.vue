@@ -9,6 +9,7 @@ import ChampionTile from "../components/ChampionTile.vue";
 import RunHistory from "../components/RunHistory.vue";
 import RunResults from "../components/RunResults.vue";
 import TargetPicker from "../components/TargetPicker.vue";
+import { checkedOf } from "../composables/format";
 import type { ChampionPage, FormView } from "../types/generated/webui.service.champions";
 import type { RunView } from "../types/generated/webui.service.runs";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
@@ -111,7 +112,7 @@ function checked(name: string) {
 }
 
 function tick(name: string, event: Event) {
-  if ((event.target as HTMLInputElement).checked) fields.value[name] = "on";
+  if (checkedOf(event)) fields.value[name] = "on";
   else delete fields.value[name];
 }
 

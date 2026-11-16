@@ -6,6 +6,7 @@
 import { Link } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import { forgetKept } from "../composables/keptQuery";
+import { valueOf } from "../composables/format";
 import type { ListedChampion } from "../types/generated/webui.service.finder";
 import type { SlotView } from "../types/generated/webui.service.team";
 import ChampionCard from "./ChampionCard.vue";
@@ -64,7 +65,7 @@ function picked(listed: ListedChampion) {
           class="small"
           :aria-label="`Relic for slot ${n + 1}`"
           :value="slot.relic"
-          @change="emit('wear', n, ($event.target as HTMLSelectElement).value)"
+          @change="emit('wear', n, valueOf($event))"
         >
           <option v-for="option in slot.relics" :key="option.value" :value="option.value">
             {{ option.label }}

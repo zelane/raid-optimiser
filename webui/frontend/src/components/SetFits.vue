@@ -3,19 +3,16 @@
 // for (the types down, grouped by kind; the sets across, most valued first, the column under
 // the pointer lit). Each change is saved at once; what it says goes to the page (`saved`).
 import { ref } from "vue";
-import { sendToGame } from "../composables/send";
+import { checkedOf, valueOf } from "../composables/format";
+import { sendToGame, type Sent } from "../composables/send";
 import type { SetGrid } from "../types/generated/webui.service.accessories";
 
 defineProps<{ grid: SetGrid }>();
-const emit = defineEmits<{ saved: [error: string | null] }>();
+const emit = defineEmits<{ saved: [sent: Sent] }>();
 const lit = ref<number | null>(null);
 
 async function store(url: string, fields: Record<string, string>) {
-  emit("saved", (await sendToGame(url, fields)).error);
-}
-
-function value(event: Event) {
-  return (event.target as HTMLInputElement).value;
+  emit("saved", await sendToGame(url, fields));
 }
 
 function tone(factor: number) {
@@ -23,7 +20,7 @@ function tone(factor: number) {
 }
 
 function target(set: number, type: string, event: Event) {
-  const on = (event.target as HTMLInputElement).checked;
+  const on = checkedOf(event);
   store("/accessories/sets/target", { set: String(set), type, ...(on ? { on: "1" } : {}) });
 }
 </script>
@@ -41,7 +38,7 @@ function target(set: number, type: string, event: Event) {
           max="1"
           step="0.05"
           autocomplete="off"
-          @change="store('/accessories/off-target', { off_target: value($event) })"
+          @change="store('/accessories/off-target', { off_target: valueOf($event) })"
         />
         of their score
       </label>
@@ -84,7 +81,7 @@ function target(set: number, type: string, event: Event) {
                 @change="
                   store('/accessories/sets/value', {
                     set: String(column.set_id),
-                    factor: value($event),
+                    factor: valueOf($event),
                   })
                 "
               />

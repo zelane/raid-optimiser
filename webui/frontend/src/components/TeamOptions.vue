@@ -1,18 +1,10 @@
-<script setup lang="ts">
-// The teams a search found: what it found (`found`, `complete`, `partial` say how many and
-// whether they bring it all), the option cards (a glance per card in the `glance` slot), and
-// the link listing more.
+<script setup lang="ts" generic="Option extends TeamOptionView">
+// The teams a search found: what it found (`found`, `complete` say how many; the `lede` slot
+// says what that means), the option cards (`met`: how much each meets, of `total`; a glance
+// per card in the default slot), and the link listing more.
 import { Link } from "@inertiajs/vue3";
+import type { TeamOptionView } from "../types/views";
 import OptionCard from "./OptionCard.vue";
-import type { SlotView } from "../types/generated/webui.service.team";
-
-type Option = {
-  number: number;
-  slots: SlotView[];
-  score: number;
-  show_url: string;
-  use_url: string;
-};
 
 defineProps<{
   options: Option[];

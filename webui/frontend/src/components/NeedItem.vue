@@ -1,15 +1,14 @@
 <script setup lang="ts">
 // A need: met or not, what would do (icons), and who brings it (portraits) or what else does.
 import { computed } from "vue";
+import { scoreTone } from "../composables/format";
 import type { NeedView } from "../types/generated/webui.service.team";
 import Portrait from "./Portrait.vue";
 import ScorePill from "./ScorePill.vue";
 import StatusIcon from "./StatusIcon.vue";
 
 const props = defineProps<{ need: NeedView }>();
-const tone = computed(() =>
-  props.need.score >= 75 ? "good" : props.need.score >= 45 ? "mid" : "bad",
-);
+const tone = computed(() => scoreTone(props.need.score));
 </script>
 
 <template>

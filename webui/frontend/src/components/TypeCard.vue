@@ -4,12 +4,12 @@
 // Copy adds a copy; Delete asks first. What a save says goes to the page (`saved`).
 import { router } from "@inertiajs/vue3";
 import { ref, watch } from "vue";
-import { sendToGame } from "../composables/send";
+import { sendToGame, type Sent } from "../composables/send";
 import type { TypeRow } from "../types/generated/webui.service.accessories";
 import type { Choice } from "../types/generated/webui.service.views";
 
 const props = defineProps<{ row: TypeRow; kinds: Choice[]; factions: Choice[] }>();
-const emit = defineEmits<{ saved: [error: string | null] }>();
+const emit = defineEmits<{ saved: [sent: Sent] }>();
 
 function edits(row: TypeRow) {
   return {
@@ -34,7 +34,7 @@ async function store() {
   const fields = new URLSearchParams({ type: props.row.key, label, kind, faction });
   for (const [field, value] of Object.entries(weights)) fields.append(field, value);
   for (const [field, on] of Object.entries(mains)) if (on) fields.append(field, "on");
-  emit("saved", (await sendToGame("/accessories/types", fields)).error);
+  emit("saved", await sendToGame("/accessories/types", fields));
 }
 
 function copy() {

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 // A champion's lock (0: unlocked), saved as soon as it's changed.
 import { router } from "@inertiajs/vue3";
+import { valueOf } from "../composables/format";
 import type { ListedChampion } from "../types/generated/webui.service.finder";
 
 const { listed, levels } = defineProps<{ listed: ListedChampion; levels: number[] }>();
 
 function lock(event: Event) {
-  const level = (event.target as HTMLSelectElement).value;
+  const level = valueOf(event);
   router.post(
     `/champions/${listed.champion.id}/lock`,
     { level },

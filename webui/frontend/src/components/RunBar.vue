@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // The search bar: the champions searched from, what the last search covered, Find.
+import { valueOf } from "../composables/format";
 import { teamQuery, visitWith } from "../composables/teamQuery";
 import type { TeamLinks } from "../types/generated/webui.service.team";
 
@@ -29,7 +30,7 @@ function regrade(grade: string) {
   <div class="panel cluster" style="--space: var(--space-m) var(--space-2xl)">
     <label class="inline">
       <span class="caps">Search from</span>
-      <select :value="minGrade" @change="regrade(($event.target as HTMLSelectElement).value)">
+      <select :value="minGrade" @change="regrade(valueOf($event))">
         <option v-for="grade in grades" :key="grade" :value="grade">
           Champions at {{ grade }}★ and up
         </option>

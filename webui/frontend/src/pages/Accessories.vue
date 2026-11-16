@@ -1,16 +1,18 @@
 <script setup lang="ts">
 // Accessories, in the workflow's order: swaps, rolling, reworking, the clean-up, then the
 // weights the scores come from. The steps are the page's own tabs, each with what it holds.
-import { Head, Link, router } from "@inertiajs/vue3";
+import { Head, router } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import CandidateTable from "../components/CandidateTable.vue";
 import ChampionCard from "../components/ChampionCard.vue";
 import CleanupPlan from "../components/CleanupPlan.vue";
 import GearCard from "../components/GearCard.vue";
 import PageHead from "../components/PageHead.vue";
+import SentNote from "../components/SentNote.vue";
 import SetFits from "../components/SetFits.vue";
 import TypeCard from "../components/TypeCard.vue";
-import { sendToGame } from "../composables/send";
+import { plural } from "../composables/format";
+import { equipInGame, type Sent } from "../composables/send";
 import { usePageSubnav } from "../composables/subnav";
 import type { AccessoriesPage, SwapGroup } from "../types/generated/webui.service.accessories";
 
@@ -71,18 +73,15 @@ usePageSubnav(() => ({
 
 // Swaps: each champion's swaps equipped together.
 const equipping = ref<number | null>(null);
-const equipped = ref<Record<number, string | null>>({});
+const equipped = ref<Record<number, Sent>>({});
 
 async function equip(group: SwapGroup) {
   const count = group.swaps.length;
-  if (!confirm(`Equip ${count} piece${count > 1 ? "s" : ""} on ${group.champion.name}?`)) return;
+  if (!confirm(`Equip ${plural(count, "piece")} on ${group.champion.name}?`)) return;
   equipping.value = group.champion.id;
-  const sent = await sendToGame(`/champions/${group.champion.id}/equip`, {
-    artifact_ids: group.artifact_ids,
-  });
+  const sent = await equipInGame(group.champion.id, group.artifact_ids);
   equipping.value = null;
-  equipped.value = { ...equipped.value, [group.champion.id]: sent.error };
-  if (!sent.error) router.reload();
+  equipped.value = { ...equipped.value, [group.champion.id]: sent };
 }
 
 // Weights: the types filtered in the page (by name or champion, faction, kind).
@@ -98,8 +97,8 @@ const shownTypes = computed(() => {
   );
 });
 
-const typeSaved = ref<string | null | undefined>(undefined);
-const setSaved = ref<string | null | undefined>(undefined);
+const typeSaved = ref<Sent | null>(null);
+const setSaved = ref<Sent | null>(null);
 
 function addType() {
   router.post("/accessories/types/add");
@@ -152,12 +151,7 @@ function addType() {
           <strong class="figure up">{{ group.gain }}</strong>
           <div class="cluster" style="--justify: flex-end">
             <span class="swap-result">
-              <small v-if="equipped[group.champion.id]" class="down">
-                Failed: {{ equipped[group.champion.id] }}
-              </small>
-              <small v-else-if="group.champion.id in equipped" class="up"
-                >Equipped and synced.</small
-              >
+              <SentNote :sent="equipped[group.champion.id]" done="Equipped and synced." />
             </span>
             <button type="button" class="cta" :disabled="equipping !== null" @click="equip(group)">
               Equip{{ group.swaps.length > 1 ? " all" : "" }}
@@ -261,8 +255,7 @@ function addType() {
         </span>
       </form>
       <p>
-        <small v-if="typeSaved" class="down">Failed: {{ typeSaved }}</small>
-        <small v-else-if="typeSaved === null" class="up">Saved: the lists re-plan with it.</small>
+        <SentNote :sent="typeSaved" done="Saved: the lists re-plan with it." />
       </p>
       <div class="stack" style="--space: var(--space-s)">
         <TypeCard
@@ -271,7 +264,7 @@ function addType() {
           :row="row"
           :kinds="weights.kinds"
           :factions="weights.factions"
-          @saved="(error) => (typeSaved = error)"
+          @saved="(sent) => (typeSaved = sent)"
         />
       </div>
     </section>
@@ -282,10 +275,9 @@ function addType() {
       set is for. A type a set isn't for still counts, at a share of its score. A set for no damage
       type still keeps a C.DMG amulet. New types and new sets start ticked everywhere.
     </p>
-    <SetFits :grid="weights.sets" @saved="(error) => (setSaved = error)">
+    <SetFits :grid="weights.sets" @saved="(sent) => (setSaved = sent)">
       <p class="note">
-        <small v-if="setSaved" class="down">Failed: {{ setSaved }}</small>
-        <small v-else-if="setSaved === null" class="up">Saved: the lists re-plan with it.</small>
+        <SentNote :sent="setSaved" done="Saved: the lists re-plan with it." />
       </p>
     </SetFits>
   </template>

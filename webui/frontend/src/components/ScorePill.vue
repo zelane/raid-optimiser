@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // A score (%) as a badge, coloured by how far it can be counted on.
 import { computed } from "vue";
+import { scoreTone } from "../composables/format";
 
 const props = defineProps<{ score: number; title?: string }>();
-const tone = computed(() => (props.score >= 75 ? "good" : props.score >= 45 ? "mid" : "bad"));
+const tone = computed(() => scoreTone(props.score));
 </script>
 
 <template>

@@ -3,12 +3,12 @@
 // where it needs none), what the default slot adds (a glance), then a link showing its needs
 // below and one using it.
 import { Link } from "@inertiajs/vue3";
-import type { SlotView } from "../types/generated/webui.service.team";
+import type { TeamOptionView } from "../types/views";
 import ChampionCard from "./ChampionCard.vue";
 import ScorePill from "./ScorePill.vue";
 
 defineProps<{
-  option: { number: number; slots: SlotView[]; score: number; show_url: string; use_url: string };
+  option: TeamOptionView;
   shown: boolean;
   met: number;
   total: number;

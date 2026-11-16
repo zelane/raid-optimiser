@@ -5,6 +5,8 @@
 // (`picked`) for the page to fill in what it wants. `detached`: the page no longer uses the
 // pick (its DEF was typed over), so the card dims and says so.
 import { ref, watch } from "vue";
+import { valueOf } from "../composables/format";
+import { getJson } from "../composables/send";
 import type { EnemyCard, TargetPicker } from "../types/generated/webui.service.targets";
 import ChampionTile from "./ChampionTile.vue";
 
@@ -40,10 +42,10 @@ async function change(level: Level, value: string) {
   busy.value = true;
 
   try {
-    const response = await fetch(`/targets?${query}`, { headers: { Accept: "application/json" } });
-    if (!response.ok) return;
-    shown.value = (await response.json()) as TargetPicker;
-    emit("picked", shown.value.picked, shown.value.target);
+    const view = await getJson<TargetPicker>(`/targets?${query}`);
+    if (!view) return;
+    shown.value = view;
+    emit("picked", view.picked, view.target);
   } finally {
     busy.value = false;
   }
@@ -62,10 +64,7 @@ const levels = [
     <div class="target-levels">
       <label v-for="[level, label, list] in levels" :key="level">
         <span class="caps">{{ label }}</span>
-        <select
-          :value="selected(shown[list])"
-          @change="change(level, ($event.target as HTMLSelectElement).value)"
-        >
+        <select :value="selected(shown[list])" @change="change(level, valueOf($event))">
           <option v-for="option in shown[list]" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
@@ -100,7 +99,7 @@ const levels = [
             <select
               class="small"
               :value="selected(shown.waves)"
-              @change="change('wave', ($event.target as HTMLSelectElement).value)"
+              @change="change('wave', valueOf($event))"
             >
               <option v-for="option in shown.waves" :key="option.value" :value="option.value">
                 {{ option.label }}

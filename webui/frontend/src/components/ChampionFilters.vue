@@ -2,6 +2,9 @@
 // The champion filters: name, rarity, faction, fewest stars, as the query `/finder` and the
 // champion list read (`q`, `rarity`, `faction`, `grade`; empty: any). The filters (not the
 // name) are remembered in this browser, the same for the list and the finder dialog.
+import { watch, type Ref } from "vue";
+import { writeKept } from "../composables/kept";
+
 export interface Filters {
   q: string;
   rarity: string;
@@ -11,17 +14,29 @@ export interface Filters {
 
 export const KEPT = "finder-filters";
 export const REMEMBERED = ["rarity", "faction", "grade"] as const;
+
+// Searches again on each change (typing in the name waits for a pause), remembering the
+// filters as they go.
+export function watchFilters(filters: Ref<Filters>, search: () => void) {
+  let pending: ReturnType<typeof setTimeout> | undefined;
+
+  watch(filters, (now, before) => {
+    writeKept(KEPT, Object.fromEntries(REMEMBERED.map((name) => [name, now[name]])));
+    clearTimeout(pending);
+    pending = setTimeout(search, now.q !== before.q ? 200 : 0);
+  });
+}
 </script>
 
 <script setup lang="ts">
+import { valueOf } from "../composables/format";
 import type { FinderView } from "../types/generated/webui.service.finder";
 
 defineProps<{ finder: FinderView; placeholder?: string; autofocus?: boolean }>();
 const filters = defineModel<Filters>({ required: true });
 
 function set(name: keyof Filters, event: Event) {
-  const value = (event.target as HTMLInputElement | HTMLSelectElement).value;
-  filters.value = { ...filters.value, [name]: value };
+  filters.value = { ...filters.value, [name]: valueOf(event) };
 }
 </script>
 

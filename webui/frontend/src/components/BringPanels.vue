@@ -3,10 +3,10 @@
 // buffs), and how it brings it besides skills (gear, relics, assumptions): chosen ones as
 // removable chips, a picker adding one, and the count and assume forms. Two panels side by
 // side where they fit. `subtitle`: what the wants are besides.
-import { Link } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import { teamQuery, visitWith } from "../composables/teamQuery";
 import type { TeamLinks, TeamView } from "../types/generated/webui.service.team";
+import RemoveChip from "./RemoveChip.vue";
 import StatusIcon from "./StatusIcon.vue";
 import TagPicker, { type PickerGroup } from "./TagPicker.vue";
 
@@ -41,6 +41,11 @@ const gearGroups = computed<PickerGroup[]>(() =>
       })),
   })),
 );
+
+// A chip's link: the page without what it asks.
+function without(key: string) {
+  return props.links.without[key] ?? props.links.current;
+}
 
 const countSide = ref("debuff");
 const countN = ref("");
@@ -79,30 +84,24 @@ function assume() {
           Also bring <small class="muted">{{ subtitle }}</small>
         </h2>
         <div class="cluster" style="--space: var(--space-xs)">
-          <Link
+          <RemoveChip
             v-for="want in team.wanted"
             :key="want.key"
-            class="chip on"
-            :href="links.without[want.key] ?? links.current"
+            :href="without(want.key)"
             :title="`Stop asking for ${want.label}`"
-            preserve-scroll
-            preserve-state
           >
-            <StatusIcon :url="want.icon_url" :label="want.label" size="small" />{{ want.label
-            }}<span class="chip-remove" aria-hidden="true">×</span>
-          </Link>
-          <Link
+            <StatusIcon :url="want.icon_url" :label="want.label" size="small" />{{
+              want.label
+            }}</RemoveChip
+          >
+          <RemoveChip
             v-for="count in team.counts"
             :key="count.key"
-            class="chip on"
-            :href="links.without[count.key] ?? links.current"
+            :href="without(count.key)"
             :title="`Stop asking for ${count.label}`"
-            preserve-scroll
-            preserve-state
           >
-            <span class="count-mark" aria-hidden="true">#</span>{{ count.label
-            }}<span class="chip-remove" aria-hidden="true">×</span>
-          </Link>
+            <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}</RemoveChip
+          >
           <small v-if="!team.wanted.length && !team.counts.length" class="muted">
             Nothing extra yet
           </small>
@@ -140,14 +139,11 @@ function assume() {
           <small class="muted">how the team brings it, besides skills</small>
         </h2>
         <div class="cluster" style="--space: var(--space-xs)">
-          <Link
+          <RemoveChip
             v-for="gear in team.gear_on"
             :key="gear.key"
-            class="chip on"
-            :href="links.without[gear.key] ?? links.current"
+            :href="without(gear.key)"
             :title="`Stop allowing ${gear.name}`"
-            preserve-scroll
-            preserve-state
           >
             <StatusIcon
               v-for="icon in gear.brings.slice(0, 3)"
@@ -155,21 +151,19 @@ function assume() {
               :url="icon.url"
               :label="icon.label"
               size="small"
-            />{{ gear.name }}<span class="chip-remove" aria-hidden="true">×</span>
-          </Link>
-          <Link
+            />{{ gear.name }}</RemoveChip
+          >
+          <RemoveChip
             v-for="assumed in team.assumed"
             :key="assumed.key"
-            class="chip on assumed"
-            :href="links.without[assumed.key] ?? links.current"
+            class="assumed"
+            :href="without(assumed.key)"
             title="Stop assuming it"
-            preserve-scroll
-            preserve-state
           >
             <StatusIcon :url="assumed.icon.url" :label="assumed.icon.label" size="small" />{{
               assumed.champion ?? "Team"
-            }}: {{ assumed.label }}<span class="chip-remove" aria-hidden="true">×</span>
-          </Link>
+            }}: {{ assumed.label }}</RemoveChip
+          >
           <small v-if="!team.gear_on.length && !team.assumed.length" class="muted">
             Skills only
           </small>
@@ -215,16 +209,6 @@ function assume() {
 </template>
 
 <style scoped>
-.chip-remove {
-  margin-left: var(--space-3xs);
-  font-weight: 700;
-  color: var(--on-surface-variant);
-}
-
-.chip:hover .chip-remove {
-  color: var(--stat-down);
-}
-
 .count-mark {
   font-weight: 700;
   color: var(--primary);

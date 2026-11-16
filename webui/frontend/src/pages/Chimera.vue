@@ -16,7 +16,7 @@ import TeamOptions from "../components/TeamOptions.vue";
 import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
 import { slotEdits, teamQuery, visitWith } from "../composables/teamQuery";
-import type { ChimeraPage, OptionView } from "../types/generated/webui.service.chimera";
+import type { ChimeraPage } from "../types/generated/webui.service.chimera";
 
 const { page } = defineProps<{ page: ChimeraPage }>();
 useKeptQuery("chimera");
@@ -24,19 +24,12 @@ useKeptQuery("chimera");
 const LEVELS = ["Easy", "Normal", "Hard"];
 const LEVEL_TONES: Record<string, string> = { Easy: "info", Normal: "mid" };
 const column = computed(() => page.columns.find((each) => each.part === page.column));
+const edits = computed(() => slotEdits(page.links, page.ran));
 
 function pickColumn(part: string) {
   const query = teamQuery(page.links, page.ran);
   query.set("column", part);
   visitWith(query);
-}
-
-function cleared(option: { number: number }) {
-  return (option as OptionView).cleared;
-}
-
-function glance(option: { number: number }) {
-  return (option as OptionView).glance;
 }
 </script>
 
@@ -96,8 +89,8 @@ function glance(option: { number: number }) {
       :slots="page.team.slots"
       :empty-url="page.links.empty"
       keep="chimera"
-      @place="(slot, choice) => slotEdits(page.links, page.ran).place(slot, choice)"
-      @wear="(slot, relic) => slotEdits(page.links, page.ran).wear(slot, relic)"
+      @place="edits.place"
+      @wear="edits.wear"
     />
     <BringPanels
       :team="page.team"
@@ -119,7 +112,7 @@ function glance(option: { number: number }) {
       :options="page.options"
       :shown="page.shown"
       :total="9"
-      :met="cleared"
+      :met="(option) => option.cleared"
       score-title="Team score: how far it can count on what the trials need"
       show-label="Show trials"
       :found="page.found"
@@ -145,7 +138,7 @@ function glance(option: { number: number }) {
       <template #default="{ option }">
         <table class="glance" aria-label="Trials cleared">
           <tbody>
-            <tr v-for="[form, hits] in glance(option)" :key="form">
+            <tr v-for="[form, hits] in option.glance" :key="form">
               <th scope="row">{{ form }}</th>
               <td v-for="(hit, n) in hits" :key="n" :class="hit ? 'up' : 'down'" :title="LEVELS[n]">
                 {{ hit ? "✓" : "✗" }}

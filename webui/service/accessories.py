@@ -190,12 +190,12 @@ class SwapRow:
 @dataclass(frozen=True)
 class SwapGroup:
     """A champion wearing pieces a loose one clearly beats, and the swaps: equipped together
-    (`artifact_ids`, comma-separated, as the equip button posts them)."""
+    (`artifact_ids`)."""
 
     champion: ChampionRow
     swaps: list[SwapRow]
     gain: str
-    artifact_ids: str
+    artifact_ids: list[int]
 
 
 @dataclass(frozen=True)
@@ -572,7 +572,7 @@ def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
                 swap_row(context, swap, account.champions[champion_id], reserved) for swap in swaps
             ],
             gain=f"+{gain(swaps):.1f}",
-            artifact_ids=",".join(str(swap.pairing.better.artifact.id) for swap in swaps),
+            artifact_ids=[swap.pairing.better.artifact.id for swap in swaps],
         )
         for champion_id, swaps in sorted(by_champion.items(), key=lambda item: -gain(item[1]))
         if champion_id in account.champions

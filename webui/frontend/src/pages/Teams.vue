@@ -3,6 +3,7 @@
 // what every team must bring besides and how, then the teams found and the needs of the one
 // shown. The page's state is its query, kept in this browser.
 import { Head } from "@inertiajs/vue3";
+import { computed } from "vue";
 import BringPanels from "../components/BringPanels.vue";
 import NeedsPanel from "../components/NeedsPanel.vue";
 import PageHead from "../components/PageHead.vue";
@@ -11,12 +12,14 @@ import ScorePill from "../components/ScorePill.vue";
 import Tally from "../components/Tally.vue";
 import TeamOptions from "../components/TeamOptions.vue";
 import TeamSlots from "../components/TeamSlots.vue";
+import { valueOf } from "../composables/format";
 import { useKeptQuery } from "../composables/keptQuery";
 import { slotEdits, teamQuery, visitWith } from "../composables/teamQuery";
-import type { OptionView, TeamsPage } from "../types/generated/webui.service.teams";
+import type { TeamsPage } from "../types/generated/webui.service.teams";
 
 const { page } = defineProps<{ page: TeamsPage }>();
 useKeptQuery("teams");
+const edits = computed(() => slotEdits(page.links, page.ran));
 
 function change(name: string, value: string) {
   const query = teamQuery(page.links, page.ran);
@@ -27,10 +30,6 @@ function change(name: string, value: string) {
 
 function stages(count: number) {
   return Array.from({ length: count }, (_, n) => n + 1);
-}
-
-function met(option: { number: number }) {
-  return (option as OptionView).met;
 }
 </script>
 
@@ -77,7 +76,7 @@ function met(option: { number: number }) {
             <span class="caps">Crypt</span>
             <select
               :value="page.base.crypts.find((crypt) => crypt.selected)?.region"
-              @change="change('crypt', ($event.target as HTMLSelectElement).value)"
+              @change="change('crypt', valueOf($event))"
             >
               <option v-for="crypt in page.base.crypts" :key="crypt.region" :value="crypt.region">
                 {{ crypt.name }}
@@ -86,10 +85,7 @@ function met(option: { number: number }) {
           </label>
           <label class="inline">
             <span class="caps">{{ page.base.difficulty }} stage</span>
-            <select
-              :value="page.base.number"
-              @change="change('stage', ($event.target as HTMLSelectElement).value)"
-            >
+            <select :value="page.base.number" @change="change('stage', valueOf($event))">
               <option v-for="n in stages(page.base.stages)" :key="n" :value="n">{{ n }}</option>
             </select>
           </label>
@@ -123,8 +119,8 @@ function met(option: { number: number }) {
       :slots="page.team.slots"
       :empty-url="page.links.empty"
       keep="teams"
-      @place="(slot, choice) => slotEdits(page.links, page.ran).place(slot, choice)"
-      @wear="(slot, relic) => slotEdits(page.links, page.ran).wear(slot, relic)"
+      @place="edits.place"
+      @wear="edits.wear"
     />
     <BringPanels
       :team="page.team"
@@ -153,7 +149,7 @@ function met(option: { number: number }) {
         :options="page.options"
         :shown="page.shown"
         :total="page.needs"
-        :met="met"
+        :met="(option) => option.met"
         score-title="Team score: how far it can count on what's asked"
         show-label="Show needs"
         :found="page.found"

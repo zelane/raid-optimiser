@@ -1,17 +1,19 @@
 <script setup lang="ts">
 // The info page: Faction Wars, per crypt the stages still short of their stars.
-import { Head } from "@inertiajs/vue3";
+import { Head, Link } from "@inertiajs/vue3";
+import { computed } from "vue";
 import PageHead from "../components/PageHead.vue";
 import Stars from "../components/Stars.vue";
 import Tally from "../components/Tally.vue";
+import { plural } from "../composables/format";
 import type { InfoPage } from "../types/generated/webui.service.info";
 
 const { page } = defineProps<{ page: InfoPage }>();
-const fw = page.faction_wars;
-const plural = fw.open_stages !== 1 ? "s" : "";
+// Read through `computed`: a sync reloads the page's props without remounting it.
+const fw = computed(() => page.faction_wars);
 
 function teamsLink(region: string, stage: number) {
-  return `/teams?base=fw&crypt=${region}&difficulty=${fw.difficulty}&stage=${stage}`;
+  return `/teams?base=fw&crypt=${region}&difficulty=${fw.value.difficulty}&stage=${stage}`;
 }
 </script>
 
@@ -28,7 +30,7 @@ function teamsLink(region: string, stage: number) {
         <Tally
           :count="fw.stars"
           :total="fw.max_stars"
-          :label="`stars · ${fw.open_stages} stage${plural} short`"
+          :label="`stars · ${plural(fw.open_stages, 'stage')} short`"
           title="Stars earned"
         />
       </template>
@@ -58,13 +60,12 @@ function teamsLink(region: string, stage: number) {
             <tbody>
               <tr v-for="row in crypt.rows" :key="row.number">
                 <th scope="row">
-                  <!-- The team finder is still a Jinja page: a full load, not an Inertia visit. -->
-                  <a
+                  <Link
                     :href="teamsLink(crypt.region, row.number)"
                     title="Find a team for its challenge"
                   >
                     {{ row.number }}
-                  </a>
+                  </Link>
                 </th>
                 <td class="crypt-state">
                   <Stars :count="row.stars" :of="3" :title="row.state" />

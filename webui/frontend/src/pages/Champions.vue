@@ -2,11 +2,17 @@
 // The champion list: the account's champions as the filters narrow them, each with their lock.
 // The filters ride in the URL; a change reloads only the list.
 import { Head, router } from "@inertiajs/vue3";
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, ref } from "vue";
 import ChampionCard from "../components/ChampionCard.vue";
-import ChampionFilters, { KEPT, REMEMBERED, type Filters } from "../components/ChampionFilters.vue";
+import ChampionFilters, {
+  KEPT,
+  REMEMBERED,
+  watchFilters,
+  type Filters,
+} from "../components/ChampionFilters.vue";
 import LockPicker from "../components/LockPicker.vue";
-import { readKept, writeKept } from "../composables/kept";
+import { plural } from "../composables/format";
+import { readKept } from "../composables/kept";
 import type { FinderView } from "../types/generated/webui.service.finder";
 
 const props = defineProps<{ finder: FinderView; lock_levels: number[] }>();
@@ -14,7 +20,7 @@ const query = props.finder.query;
 
 const count = computed(() => {
   const { found, picks } = props.finder;
-  const champions = `${found} champion${found !== 1 ? "s" : ""}`;
+  const champions = plural(found, "champion");
   return found > picks.length
     ? `${champions}: the first ${picks.length}, narrow the search for the rest`
     : champions;
@@ -26,13 +32,7 @@ const filters = ref<Filters>({
   grade: query.min_grade ? String(query.min_grade) : "",
 });
 
-let pending: ReturnType<typeof setTimeout> | undefined;
-
-watch(filters, (now, before) => {
-  writeKept(KEPT, Object.fromEntries(REMEMBERED.map((name) => [name, now[name]])));
-  clearTimeout(pending);
-  pending = setTimeout(search, now.q !== before.q ? 200 : 0);
-});
+watchFilters(filters, search);
 
 function search() {
   const wanted = Object.fromEntries(Object.entries(filters.value).filter(([, value]) => value));
