@@ -1,17 +1,24 @@
 <script setup lang="ts">
-// The app's frame, as base.html draws it: the bar (menu, Sync), the band of the current
-// section's pages when it has several, then the page.
+// The app's frame: the bar (menu, Sync), the band of tabs under it (the page's own, else the
+// current section's pages when it has several), then the page.
 import { Link, router, usePage } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import { sendToGame } from "../composables/send";
-import { providePageSubnav } from "../composables/subnav";
+import { providePageSubnav, type PageSubnav } from "../composables/subnav";
 
 const page = usePage();
-const ownSubnav = providePageSubnav();
+const pageSubnav = providePageSubnav();
 const layout = computed(() => page.props.layout);
-const open = computed(() =>
-  layout.value.sections.find((section) => section.tabs.some((tab) => tab.current)),
-);
+
+const subnav = computed<PageSubnav | null>(() => {
+  if (pageSubnav.value) return pageSubnav.value.subnav;
+  const open = layout.value.sections.find((section) => section.tabs.some((tab) => tab.current));
+  if (!open || open.tabs.length < 2) return null;
+  return {
+    label: open.label,
+    tabs: open.tabs.map((tab) => ({ href: tab.link, label: tab.label, current: tab.current })),
+  };
+});
 
 const syncing = ref(false);
 const syncFailed = ref<string | null>(null);
@@ -61,14 +68,16 @@ async function sync() {
         </li>
       </ul>
     </nav>
-    <div v-show="ownSubnav > 0" id="page-subnav" class="subbar"></div>
-    <div v-if="!ownSubnav && open && open.tabs.length > 1" class="subbar">
-      <nav class="container tabs" :aria-label="open.label">
+    <div v-if="subnav" class="subbar">
+      <nav class="container tabs" :aria-label="subnav.label">
         <ul>
-          <li v-for="tab in open.tabs" :key="tab.label">
-            <Link :href="tab.link" :aria-current="tab.current ? 'page' : undefined">{{
-              tab.label
-            }}</Link>
+          <li v-for="tab in subnav.tabs" :key="tab.href">
+            <Link :href="tab.href" :aria-current="tab.current ? 'page' : undefined">
+              {{ tab.label }}
+              <span v-if="tab.badge" class="badge" :class="tab.badge.tone" :title="tab.badge.title">
+                {{ tab.badge.text }}
+              </span>
+            </Link>
           </li>
         </ul>
       </nav>
@@ -86,5 +95,131 @@ async function sync() {
 /* The page's width is what its layouts ask about (`@container page`), not the window's. */
 main.container {
   container: page / inline-size;
+}
+
+/* Two rows: the wordmark, the sections and (at the end) sync; then, in a darker band of
+   its own (the subbar), the open section's tabs, muted, the open one brass with a rule on the
+   band's lower edge. Both wrap on a narrow screen. */
+.topbar {
+  margin: 0;
+  padding-block: var(--panel-pad);
+  border-bottom: 1px solid var(--outline-variant);
+  background: var(--surface-container-low);
+
+  nav,
+  nav ul {
+    flex-wrap: wrap;
+  }
+
+  nav {
+    padding-block: var(--space-2xs);
+
+    &:not(.tabs) {
+      column-gap: var(--space-2xl);
+    }
+
+    ul.menu {
+      margin-inline: 0 auto;
+    }
+
+    a {
+      font-size: var(--text-xs);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+
+      &.wordmark {
+        font-size: var(--text-xl);
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      &[aria-current="page"] {
+        color: var(--primary);
+      }
+    }
+  }
+
+  ul.menu a[aria-current="page"] {
+    text-decoration: underline 2px;
+    text-underline-offset: 0.55em;
+  }
+
+  button.sync[disabled]::after {
+    content: "…";
+  }
+
+  /* The band sits on the bar's lower edge. */
+  &:has(.subbar) {
+    padding-bottom: 0;
+  }
+
+  nav.tabs {
+    justify-content: flex-start;
+    padding-block: 0;
+
+    ul {
+      gap: var(--space-2xs) var(--space-3xl);
+      margin: 0;
+    }
+
+    li {
+      padding: 0;
+    }
+
+    a {
+      display: inline-block;
+      margin: 0;
+      padding: var(--space-s) 0 calc(var(--space-s) - 2px);
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      font-size: var(--text-2xs);
+      color: var(--on-surface-variant);
+
+      &:hover {
+        color: var(--on-surface);
+      }
+
+      &[aria-current="page"] {
+        border-bottom-color: var(--primary);
+        color: var(--primary);
+      }
+    }
+  }
+}
+
+.wordmark {
+  display: inline-flex;
+  gap: var(--space-s);
+  align-items: center;
+  font-family: var(--font-display);
+  color: var(--heading);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.wordmark::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+
+.sync-status {
+  white-space: nowrap;
+
+  &::before {
+    content: "●";
+    margin-right: var(--space-xs);
+    color: var(--tertiary);
+  }
+}
+
+.subbar {
+  border-top: 1px solid var(--outline-variant);
+  background: color-mix(in srgb, var(--surface-container-lowest) 60%, var(--surface-container-low));
 }
 </style>

@@ -291,8 +291,8 @@ the game itself.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
 - Nav (`service/layout.py` `nav_sections`, drawn by `layouts/AppLayout.vue`): Optimiser,
   Accessories, Teams, Info; a section with several pages shows them as tabs in a band under the
-  bar (`subbar`), unless the page fills it itself (`composables/subnav.ts`: it teleports its
-  tabs to `#page-subnav`; Accessories' steps). Optimiser: the champion list, the champion last solved for
+  bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
+  the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the champion list, the champion last solved for
   (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera, Gear (`/team-gear`). Info: Faction Wars
   (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
@@ -336,8 +336,12 @@ the game itself.
   restored from it; history picks reload `run` and `picker` alone; a solve redirects to its
   new run. The front end is `webui/frontend/` (Vite; `src/app.ts`, `layouts/AppLayout.vue`,
   `pages/<Component>.vue`, `components/`, `composables/`), built into `webui/static/dist/`
-  (gitignored); it uses the global stylesheets' classes (the palette alone has scoped
-  styles). Props are typed: `tools/gen_ts_types.py` writes `src/types/generated/<python
+  (gitignored). A component's own look is its `<style scoped>` (moved out of `app.css`, so
+  deleting a component deletes its styles); the shared vocabulary stays global (below). A rule
+  reaching inside a child component uses `:deep()`, and only in a flat rule: nested, Vue
+  compiles it wrong (`.a { :deep(.b) }` becomes `.a [data-v] .b`, matching nothing). A child's
+  root element is reached without it, and slot content is styled by the component that writes
+  it. Props are typed: `tools/gen_ts_types.py` writes `src/types/generated/<python
   module>.ts` (gitignored) from `webui.service`'s dataclasses and those they reach (shared
   shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against them
   (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
@@ -373,7 +377,8 @@ the game itself.
   take its share (`--basis`, inherited), `clamp` cuts text to `--lines`. Lay pages out with
   these, not a class per container; `.joined` joins a field and its button. Spacing is the
   parent's job (`gap`, the primitives), with logical properties. `static/app.css`: the
-  components. The look (◆ section titles) follows the Stitch design system the user supplied,
+  shared components (what pages use raw, or several components share: tile frames' art, the
+  piece card's box, the listed champion's base); each component's own look is in its file. The look (◆ section titles) follows the Stitch design system the user supplied,
   but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over the spec's
   fonts. Colour by tone: `good`/`up`, `bad`/`down`, `mid`, `info` set `--tone` (registered,
   non-inheriting); text takes it as its colour, and a `badge`, `status`, `meter` or `note`

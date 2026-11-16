@@ -15,7 +15,6 @@ import { usePageSubnav } from "../composables/subnav";
 import type { AccessoriesPage, SwapGroup } from "../types/generated/webui.service.accessories";
 
 const props = defineProps<{ page: AccessoriesPage }>();
-usePageSubnav();
 
 // The steps, each with what it holds (the enhance lists stop at `shown`: a full one may hold
 // more, "+").
@@ -56,6 +55,20 @@ const steps = computed(() => {
   ];
 });
 
+// The steps are the page's tabs, in the band under the bar.
+usePageSubnav(() => ({
+  label: "Steps",
+  tabs: steps.value.map((step) => ({
+    href: `/accessories?tab=${step.key}`,
+    label: step.label,
+    current: props.page.tab === step.key,
+    badge:
+      step.count === null
+        ? undefined
+        : { text: step.count, tone: step.tone, title: `${step.count} ${step.what}` },
+  })),
+}));
+
 // Swaps: each champion's swaps equipped together.
 const equipping = ref<number | null>(null);
 const equipped = ref<Record<number, string | null>>({});
@@ -95,28 +108,6 @@ function addType() {
 
 <template>
   <Head title="Accessories" />
-  <Teleport defer to="#page-subnav">
-    <nav class="container tabs" aria-label="Steps">
-      <ul>
-        <li v-for="step in steps" :key="step.key">
-          <Link
-            :href="`/accessories?tab=${step.key}`"
-            :aria-current="page.tab === step.key ? 'page' : undefined"
-          >
-            {{ step.label }}
-            <span
-              v-if="step.count !== null"
-              class="badge"
-              :class="step.tone"
-              :title="`${step.count} ${step.what}`"
-            >
-              {{ step.count }}
-            </span>
-          </Link>
-        </li>
-      </ul>
-    </nav>
-  </Teleport>
 
   <PageHead title="Accessories" />
 

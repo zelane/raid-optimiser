@@ -28,3 +28,22 @@ function lock(event: Event) {
     <option v-for="level in levels" :key="level" :value="level">Lock {{ level }}</option>
   </select>
 </template>
+
+<style scoped>
+/* A lock: muted when unlocked, brass when locked; the card's width on a card. */
+select.lock {
+  &:not(.is-locked) {
+    color: var(--on-surface-variant);
+  }
+
+  &.is-locked {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+}
+
+.champion.card select.lock {
+  width: 100%;
+  font-size: var(--text-2xs);
+}
+</style>

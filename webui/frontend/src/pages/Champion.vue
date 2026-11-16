@@ -471,11 +471,6 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
     ),
     var(--surface-container-low);
 
-  /* The tile is ChampionTile's: its frame is inside it. */
-  :deep(.tile-frame) {
-    box-shadow: 0 0 18px color-mix(in srgb, var(--rarity) 35%, transparent);
-  }
-
   h1 {
     font-size: var(--text-2xl);
     line-height: 1.15;
@@ -484,6 +479,12 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
   .stat-tiles {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+/* The tile is ChampionTile's: its frame is inside it. (A :deep() only compiles right in a rule
+   of its own, not nested.) */
+.champion-profile :deep(.tile-frame) {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--rarity) 35%, transparent);
 }
 
 .champion-identity {

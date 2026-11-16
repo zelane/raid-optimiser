@@ -52,3 +52,32 @@ const classes = computed(() => [
     <slot />
   </div>
 </template>
+
+<style scoped>
+/* A suggested champion's frame is ringed (the frame is ChampionTile's). On a card, lit in
+   their rarity when pointed at. */
+.champion.suggested :deep(.tile-frame) {
+  outline: 2px dashed var(--primary);
+  outline-offset: 2px;
+}
+
+.champion.card {
+  padding: var(--space-s);
+  border: 1px solid transparent;
+  border-radius: var(--radius-panel);
+  background: var(--surface-container-low);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+
+  &:hover,
+  &:focus-within {
+    border-color: color-mix(in srgb, var(--rarity) 40%, transparent);
+    box-shadow: 0 0 0.75rem -0.25rem color-mix(in srgb, var(--rarity) 25%, transparent);
+  }
+
+  .champion-name {
+    min-height: 2.4em;
+  }
+}
+</style>

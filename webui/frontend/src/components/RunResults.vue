@@ -4,6 +4,7 @@
 import { ref, watch } from "vue";
 import type { ResultsView } from "../types/generated/webui.service.results";
 import BuildDetail from "./BuildDetail.vue";
+import Ledger from "./Ledger.vue";
 
 const props = defineProps<{ results: ResultsView }>();
 const picked = ref(props.results.builds[0]?.number ?? 0);
@@ -29,49 +30,49 @@ watch(
     </p>
 
     <div class="table-well">
-      <table class="ledger">
-        <thead>
-          <tr>
-            <th></th>
-            <th v-for="now in results.current" :key="now.label" scope="col">{{ now.label }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="now">
-            <th scope="row">Now</th>
-            <td v-for="now in results.current" :key="now.label">{{ now.text }}</td>
-          </tr>
-          <tr
-            v-for="build in results.builds"
-            :key="build.number"
-            class="build-row"
-            :class="{ picked: build.number === picked }"
-            @click="picked = build.number"
-          >
-            <th scope="row">
-              <button
-                type="button"
-                class="build-pick"
-                :aria-pressed="build.number === picked"
-                @click="picked = build.number"
-              >
-                Build {{ build.number }}
-              </button>
-            </th>
-            <td v-for="cell in build.stats" :key="cell.label">
-              {{ cell.text
-              }}<small :class="cell.change ? (cell.better ? 'up' : 'down') : ''">{{
-                cell.change ?? ""
-              }}</small>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <Ledger
+        :current="results.current"
+        :rows="
+          results.builds.map((build) => ({
+            key: build.number,
+            picked: build.number === picked,
+            stats: build.stats,
+          }))
+        "
+        pickable
+        @pick="(number) => (picked = number)"
+      >
+        <template #head="{ key }">
+          <button type="button" class="build-pick" :aria-pressed="key === picked">
+            Build {{ key }}
+          </button>
+        </template>
+      </Ledger>
     </div>
   </div>
   <template v-for="build in results.builds" :key="build.number">
-    <section v-if="build.number === picked" class="build-detail">
-      <BuildDetail :build="build" :champion="results.champion" />
-    </section>
+    <BuildDetail v-if="build.number === picked" :build="build" :champion="results.champion" />
   </template>
 </template>
+
+<style scoped>
+.results-panel {
+  margin-bottom: var(--space-2xl);
+  padding: var(--space-l) var(--space-xl);
+}
+
+/* A build's row heading: its name, a button, brass when picked. */
+button.build-pick {
+  --button-bg: transparent;
+  --button-edge: transparent;
+  --button-fg: inherit;
+
+  padding: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+tr.picked .build-pick {
+  color: var(--primary);
+}
+</style>

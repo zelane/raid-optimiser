@@ -6,6 +6,7 @@
 import { Head, router } from "@inertiajs/vue3";
 import { computed, ref, watch } from "vue";
 import BuildDetail from "../components/BuildDetail.vue";
+import Ledger from "../components/Ledger.vue";
 import PageHead from "../components/PageHead.vue";
 import TargetPicker from "../components/TargetPicker.vue";
 import TeamSlots from "../components/TeamSlots.vue";
@@ -305,31 +306,12 @@ function minimumTitle(placeholder: string) {
         style="--space: var(--space-m)"
       >
         <div class="table-well">
-          <table class="ledger">
-            <thead>
-              <tr>
-                <th></th>
-                <th v-for="cell in member.current" :key="cell.label" scope="col">
-                  {{ cell.label }}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr class="now">
-                <th scope="row">Now</th>
-                <td v-for="cell in member.current" :key="cell.label">{{ cell.text }}</td>
-              </tr>
-              <tr class="picked">
-                <th scope="row">Build</th>
-                <td v-for="cell in member.build.stats" :key="cell.label">
-                  {{ cell.text
-                  }}<small :class="cell.change ? (cell.better ? 'up' : 'down') : ''">{{
-                    cell.change ?? ""
-                  }}</small>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <Ledger
+            :current="member.current"
+            :rows="[{ key: 'build', picked: true, stats: member.build.stats }]"
+          >
+            <template #head>Build</template>
+          </Ledger>
         </div>
         <small class="note">
           The target resists its debuffs {{ member.resisted }} of the time; it resists the target's
@@ -337,13 +319,11 @@ function minimumTitle(placeholder: string) {
             The DMG column is {{ member.damage }}.</template
           >
         </small>
-        <div class="build-detail">
-          <BuildDetail
-            :build="member.build"
-            :champion="member.champion"
-            :title="member.champion.name"
-          />
-        </div>
+        <BuildDetail
+          :build="member.build"
+          :champion="member.champion"
+          :title="member.champion.name"
+        />
       </section>
     </section>
     <section v-else-if="shortfall" class="panel stack alert" style="--space: var(--space-s)">

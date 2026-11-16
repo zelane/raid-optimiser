@@ -25,3 +25,16 @@ const count = props.count ?? 0;
     </template>
   </span>
 </template>
+
+<style scoped>
+/* A piece's stars: inline, the art at the text's height. */
+.piece-stars {
+  display: inline-flex;
+  vertical-align: middle;
+
+  img {
+    height: 1em;
+    margin-right: -0.1em;
+  }
+}
+</style>

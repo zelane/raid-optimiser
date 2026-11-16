@@ -112,3 +112,143 @@ const ascensionTitle = computed(() => {
     </div>
   </article>
 </template>
+
+<style scoped>
+.piece {
+  header {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    gap: var(--space-s);
+    align-self: stretch;
+    min-width: 0;
+
+    .owner {
+      display: inline-flex;
+      gap: var(--space-xs);
+      align-items: center;
+      min-width: 0;
+      margin-top: auto;
+      font-size: var(--text-xs);
+
+      &.equipped {
+        color: var(--primary);
+      }
+    }
+  }
+
+  .glyph {
+    color: var(--stat-up);
+  }
+
+  .ascension {
+    color: var(--rarity-epic);
+  }
+
+  .ignored {
+    color: var(--on-surface-variant);
+    opacity: 0.8;
+  }
+}
+
+/* The piece and its substats side by side, both from the top; the header runs the body's height
+   so who wears the piece sits at its bottom. */
+.piece-body {
+  display: flex;
+  gap: var(--space-m);
+  align-items: flex-start;
+}
+
+.piece-id {
+  display: flex;
+  gap: var(--space-s);
+  align-items: center;
+  min-width: 0;
+}
+
+.piece-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3xs);
+  align-items: flex-start;
+  align-self: center;
+  min-width: 0;
+  line-height: 1.2;
+
+  strong {
+    font-family: var(--font-display);
+    font-size: var(--text-l);
+  }
+}
+
+.piece-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-xs);
+  align-items: baseline;
+  font-weight: 700;
+  color: var(--primary);
+
+  /* The ascension bonus always on a line of its own, under the main stat. */
+  .ascension {
+    flex-basis: 100%;
+    font-size: 0.85em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+}
+
+table.piece-stats {
+  display: block;
+  flex-shrink: 1;
+  width: 50%;
+  margin: 0;
+  padding: var(--space-xs) var(--space-m);
+  border-radius: var(--radius);
+  background: var(--surface-container-lowest);
+
+  /* Two columns, 40/60: the stat, then its value and glyph, both from the left. The rows are only
+   their cells (`contents`), so every row shares the columns. */
+  tbody {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    gap: var(--space-3xs) var(--space-m);
+    align-items: baseline;
+  }
+
+  tr {
+    display: contents;
+  }
+
+  th,
+  td {
+    padding: 0;
+    border: 0;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    font-weight: 500;
+    color: var(--on-surface-variant);
+  }
+
+  td.stat-value {
+    font-weight: 600;
+  }
+
+  .glyph {
+    font-size: 0.85em;
+  }
+
+  tr.stat-open th {
+    opacity: 0.4;
+  }
+}
+
+/* Already on the champion: nothing to do for it, so it steps back. */
+.piece.is-equipped {
+  opacity: 0.6;
+  filter: saturate(0.4);
+}
+</style>
