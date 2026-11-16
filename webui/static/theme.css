@@ -38,6 +38,8 @@
   --stat-up: var(--success);
   --stat-down: var(--error);
   --stat-mid: var(--warning); /* between: a score that's fair, Normal trials, waiting */
+  --debuff: var(--error); /* a tag's side, wherever it's coloured: on the enemy */
+  --buff: #5b9be0; /* on the team: always blue */
   --scrim: rgb(8 9 10 / 75%); /* behind a modal */
   --highlight: #fff; /* mixed into a colour to lighten it on hover */
   --shade: rgb(0 0 0 / 20%); /* a badge on a filled control, an icon's well */
@@ -97,10 +99,10 @@
   --panel-pad: var(--space-xl);
   --control-pad-block: var(--space-xs);
   --control-pad-inline: var(--space-m);
-  --radius-s: 0.2rem;
-  --radius: 0.25rem;
-  --radius-l: 0.4rem;
-  --radius-pill: 999px;
+  --radius-s: 0rem;
+  --radius: 0rem;
+  --radius-l: 0rem;
+  --radius-pill: 0;
   --radius-panel: var(--radius-s);
   --transition: 0.15s ease-in-out;
 

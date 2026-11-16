@@ -22,6 +22,8 @@ const SWATCHES = [
   ["--error", "--surface"],
   ["--success", "--surface"],
   ["--warning", "--surface"],
+  ["--debuff", "--surface"],
+  ["--buff", "--surface"],
   ["--on-surface", "--surface"],
   ["--on-surface-variant", "--surface"],
   ["--heading", "--surface"],
@@ -41,7 +43,8 @@ const CHIPS = [
   { kind: "debuff", icon: `${ICONS}/IncreaseDamageTaken.png`, label: "Weaken" },
   { kind: "buff", icon: `${ICONS}/StatusIncreaseAttack.png`, label: "Increase ATK" },
   { kind: "effect", icon: `${ICONS}/IncreaseStamina.png`, label: "Fill Turn Meter" },
-  { kind: "count", icon: null, label: "3 different debuffs" },
+  { kind: "debuff", icon: null, label: "3 different debuffs" },
+  { kind: "buff", icon: null, label: "2 different buffs" },
   { kind: "gear", icon: `${ICONS}/IncreasePoisoning.png`, label: "Toxic set" },
   {
     kind: "buff",
@@ -520,7 +523,7 @@ const someone = {
 <style scoped>
 .count-mark {
   font-weight: 700;
-  color: var(--warning);
+  color: var(--kind);
 }
 
 /* The palette's own scaffolding: swatches, the surface ladder, rarity labels. */

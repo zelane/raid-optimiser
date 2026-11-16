@@ -106,7 +106,7 @@ function assume() {
           :key="count.key"
           :href="without(count.key)"
           :title="`Stop asking for ${count.label}`"
-          kind="count"
+          :kind="side(count.field)"
         >
           <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}</RemoveChip
         >
@@ -218,8 +218,9 @@ function assume() {
 </template>
 
 <style scoped>
+/* The count's mark, in its chip's colour (`RemoveChip`'s `--kind`: debuffs red, buffs blue). */
 .count-mark {
   font-weight: 700;
-  color: var(--warning);
+  color: var(--kind);
 }
 </style>

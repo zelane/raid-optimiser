@@ -363,7 +363,7 @@ the game itself.
   Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
   colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
   `--surface-container-lowest`…`-high` for depth, `--on-surface`, `--on-surface-variant` for
-  muted, `--outline`/`--outline-variant`), plus `--heading`, `--stat-up/mid/down`, the game's
+  muted, `--outline`/`--outline-variant`), plus `--heading`, `--stat-up/mid/down`, `--debuff`/`--buff` (a tag's side: always red/blue), the game's
   colours (rarity, forms, art), fonts and one scale each for sizes: `--text-2xs`…`-4xl`,
   `--space-3xs`…`-4xl`, `--radius-s`/`--radius`/`-l`/`-pill`. stylelint (`declaration-property-
   value-disallowed-list`) keeps rem literals out of spacing, font sizes and radii, raw colours

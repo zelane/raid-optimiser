@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // Something asked for, as a chip whose × takes it off: a link to the page without it (`href`).
-// The slot is what's asked (its icons and name); `kind` colours its border: a debuff, buff,
-// effect or mechanic (a tag's side), a count, or gear. Assumed ones (`assumed`) are dashed.
+// The slot is what's asked (its icons and name); `kind` colours its border (`--kind`, which the
+// slot may use too): a debuff (red) or buff (blue), or a count of them; an effect or mechanic
+// (neutral), or gear. Assumed ones (`assumed`) are dashed.
 import { Link } from "@inertiajs/vue3";
 
 defineProps<{ href: string; title: string; kind: string }>();
@@ -29,8 +30,8 @@ defineProps<{ href: string; title: string; kind: string }>();
 
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid color-mix(in srgb, var(--kind) 55%, var(--outline));
-  border-radius: var(--radius-s);
+  border: 2px solid color-mix(in srgb, var(--kind) 55%, var(--outline));
+  border-radius: 0;
   font-size: var(--text-xs);
   line-height: 1.2;
   color: var(--on-surface);
@@ -52,20 +53,11 @@ defineProps<{ href: string; title: string; kind: string }>();
   }
 
   &.kind-debuff {
-    --kind: var(--error);
+    --kind: var(--debuff);
   }
 
   &.kind-buff {
-    --kind: var(--tertiary);
-  }
-
-  &.kind-effect,
-  &.kind-mechanic {
-    --kind: var(--form-any);
-  }
-
-  &.kind-count {
-    --kind: var(--warning);
+    --kind: var(--buff);
   }
 
   &.kind-gear {
