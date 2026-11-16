@@ -350,7 +350,7 @@ def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
     return inertia_page(request, "Empower", {"page": page})
 
 
-@app.get("/chimera", response_class=HTMLResponse)
+@app.get("/chimera")
 def chimera(request: Request):
     account = current.current_account()
     sets, relics = current.current_effect_sources()
@@ -371,10 +371,10 @@ def chimera(request: Request):
         case asked:
             page = chimera_pages.chimera_page(account, enemies, asked, offers, rotation)
 
-    return templates.TemplateResponse(request, "chimera.html", {"page": page})
+    return inertia_page(request, "Chimera", {"page": page})
 
 
-@app.get("/teams", response_class=HTMLResponse)
+@app.get("/teams")
 def teams(request: Request):
     """The team finder: a Faction Wars stage's challenge (or nothing) and what's asked besides."""
     account = current.current_account()
@@ -393,7 +393,7 @@ def teams(request: Request):
         case asked:
             page = teams_pages.teams_page(account, enemies, known, asked, offers)
 
-    return templates.TemplateResponse(request, "teams.html", {"page": page})
+    return inertia_page(request, "Teams", {"page": page})
 
 
 @app.get("/team-gear", response_class=HTMLResponse)

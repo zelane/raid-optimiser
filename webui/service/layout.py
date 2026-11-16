@@ -14,7 +14,15 @@ visit answered with plain HTML would open it in Inertia's error dialog).
 
 from dataclasses import dataclass
 
-INERTIA_PAGES = (r"^/$", r"^/info$", r"^/empower$", r"^/config$", r"^/champions/\d+$")
+INERTIA_PAGES = (
+    r"^/$",
+    r"^/info$",
+    r"^/empower$",
+    r"^/config$",
+    r"^/champions/\d+$",
+    r"^/teams$",
+    r"^/chimera$",
+)
 
 
 @dataclass(frozen=True)

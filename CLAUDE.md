@@ -133,7 +133,7 @@ the game itself.
     within `SEARCH_BUDGET` (20,000 teams or 1 s: for the Chimera with nothing pinned there are
     hundreds of thousands, mostly from the "N different" trials); if none meets them all,
     `partial_teams` (HiGHS) gives the best partial ones.
-- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `teams.html`): base needs
+- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `pages/Teams.vue`): base needs
   (none, or a Faction Wars stage's challenge: `base=fw&crypt=<region>&stage=<n>`, linked from
   the Info page's stages; the Chimera's trials are the Chimera page) plus what's asked besides
   (tags, counts), every team of five meeting them all. `optimiser/factionwars.py`: crypts
@@ -170,7 +170,7 @@ the game itself.
     finder, or part of a name in the URL), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
     assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
     the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
-    State rides in the URL, kept in the browser (`static/keep.js`). Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
+    State rides in the URL, kept in the browser (`keptQuery`); `pages/Chimera.vue`. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
     `tools/extract_assets.py`.
 - Team gear (`/team-gear`, `webui/service/team_gear.py`, `forms/team_gear.py`,
   `team_gear.html`): up to five champions (the team slots) geared at once against the target
@@ -195,32 +195,27 @@ the game itself.
 - Team finder parts, shared by pages that find teams (the team finder and the Chimera page):
   the slots (each a `relic` field: empty for what the champion wears now, "none", or a relic
   id; the dropdown lists each owned relic type's best copy; a new champion starts from what's
-  worn: the finder's `data-finder-reset`), "Also bring" (with counts: `count=debuff:3`, so
-  many different) and gear, relics & assumptions panels and each need's row. `forms/team.py`
-  (`parse_team` → `TeamAsk`: picks, wanted, loadout, counts, relics; `Offers`, with the relic
-  types; a search's shape: `Fill`, `parse_fill`, `GRADES`), `service/team.py` (`slot_worn`:
-  each slot's relics as gear),
-  `service/team.py` (`TeamView`,
-  `team_view(…, enemy, note)`: the want groups name the enemy, `note` says where a tag only
-  lands; `need_view`, `slot_view`), `templates/_team.html` (`team_slots`, `bring_panels`
-  (`wants_panel`, `gear_panel`), `run_bar`, `option_card` (a `call` block adds the Chimera's
-  glance), `more_link`, `needs_panel` (an accent panel of needs; a `call` block for the
-  Chimera's trial rows), `need_item`, `status_icon`, `score_pill`; a chip's × links to
-  `links.without[key]`) and `static/picker.js` (a search over what isn't
-  chosen, grouped by kind; a pick adds a field and reloads, showing it as a removable chip).
-  Their state rides in the query (the server reads only that), and `static/keep.js` keeps
-  it in localStorage per page: a query is saved (less `data-drop` fields) and cleared from
-  the address bar, a bare visit goes to the saved one, a `data-forget` link forgets it. Its
-  forms and same-page links inside `data-swap` (`#page`, a `page-swap`: all but the finder
-  dialog) are fetched with htmx and only that part swapped, no page load; scripts set up on
-  its content use `htmx.onLoad` (`picker.js`) and send forms with `requestSubmit()`.
-  Their URLs are built in Python, not the templates: `service.team.PageUrl` (the page's path,
-  its own fields and the team's) gives each option's `show_url`/`use_url` and the page's
-  `TeamLinks` (`empty`, `without` per chip, `more`).
-  Both pages are those macros on the layout primitives; their CSS is the parts' own look
-  (`team-slot`, `team-option`, `accent-panel` with `--accent`, `trial`). Icons:
-  `statuses/` (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g.
-  DecreaseDefence → StatusReduceDefence).
+  worn), "Also bring" (with counts: `count=debuff:3`, so many different) and gear, relics &
+  assumptions panels and each need's row. `forms/team.py` (`parse_team` → `TeamAsk`: picks,
+  wanted, loadout, counts, relics; `Offers`, with the relic types; a search's shape: `Fill`,
+  `parse_fill`, `GRADES`), `service/team.py` (`TeamView`, `team_view(…, enemy, note)`: the want
+  groups name the enemy, `note` says where a tag only lands; `need_view`, `slot_view`,
+  `slot_worn`: each slot's relics as gear). In Vue: `TeamSlots` (the finder dialog fills a
+  slot), `BringPanels` (chips, `TagPicker`: a search over what isn't chosen, grouped by kind;
+  the count and assume forms), `RunBar`, `TeamOptions`/`OptionCard` (a slot for the Chimera's
+  glance), `NeedsPanel` (a slot for the Chimera's trial rows), `NeedItem`, `StatusIcon`,
+  `ScorePill`. Their state rides in the query (the server reads only that): a change starts from
+  `TeamLinks.current` (the state as a form would send it; `composables/teamQuery.ts`), edits it
+  and visits the page (`preserveState`); a chip's × is `links.without[key]`. The query is kept
+  in localStorage per page (`composables/keptQuery.ts`: each visit's saved, a bare visit goes
+  to the saved one; "Empty all" forgets it); unlike `keep.js` it stays in the address bar.
+  URLs are built in Python: `service.team.PageUrl` (the page's path, its own fields and the
+  team's) gives each option's `show_url`/`use_url` and the page's `TeamLinks` (`current`,
+  `empty`, `without` per chip, `more`). Team gear (still Jinja) uses `_team.html`'s
+  `team_slots` and `static/keep.js`. Their CSS is the parts' own look (`team-slot`,
+  `team-option`, `accent-panel` with `--accent`, `trial`). Icons: `statuses/`
+  (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g. DecreaseDefence
+  → StatusReduceDefence).
 - `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
   (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
@@ -333,7 +328,7 @@ the game itself.
   layout, and `INERTIA_PAGES` the paths Vue serves (patterns): `PageLink` makes a link to one
   an Inertia visit, any other a full load (an Inertia visit answered with HTML opens Inertia's
   error dialog). Ported: the champion list (`/`), the champion page (`/champions/{id}`), Config,
-  Info, Empower. A form that fails goes `back` with its errors (`app.back_with`: a one-shot
+  Info, Empower, the team finder, the Chimera page. A form that fails goes `back` with its errors (`app.back_with`: a one-shot
   cookie, `inertia.ERRORS_COOKIE`, shown in the layout's alert). A component's own requests
   (the finder dialog, the target picker, equip/preview/sync) send `Accept: application/json`
   and get the view as JSON (`app.wants_json`, `view_json`). The champion page: `?run=<id>`
@@ -345,8 +340,8 @@ the game itself.
   `tools/gen_ts_types.py` writes `src/types/generated/<python module>.ts` (gitignored) from
   `webui.service`'s dataclasses and those they reach (shared shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against
   them (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
-  `webui/forms/` parse them as before. Still Jinja + htmx: Teams/Chimera, Team gear,
-  Accessories, the palette; then drop htmx, the Jinja pages and their scripts. `app.js` (filter
+  `webui/forms/` parse them as before. Still Jinja + htmx: Team gear, Accessories, the
+  palette; then drop htmx, the Jinja pages and their scripts. `app.js` (filter
   bars, stat tiles, set grid) is loaded by no page now: the accessories port should redo it.
 - `webui/`: FastAPI + Jinja + htmx, our own CSS (no framework). `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page

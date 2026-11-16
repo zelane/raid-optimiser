@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from urllib.parse import urlencode
 
-from optimiser.account import Account, Champion, Relic
+from optimiser.account import Account, Champion, Relic, faction_label
 from optimiser.teams.cover import Member, NeedCover
 from optimiser.teams.find import Worn
 from optimiser.teams.gear import Assumed, Gear, Loadout, worn_relic
@@ -122,7 +122,7 @@ class WantGroup:
 @dataclass(frozen=True)
 class GearView:
     """A set or relic the user can let any champion wear, what it brings, and whether they
-    have; `faction`: only a champion of it gets the relic's skill."""
+    have; `faction`: only a champion of it gets the relic's skill (as the game names it)."""
 
     key: str
     name: str
@@ -178,10 +178,12 @@ class TeamView:
 
 @dataclass(frozen=True)
 class TeamLinks:
-    """A team page's own links: every slot open (`empty`), without each chip (`without`, by
-    the chip's key: a wanted tag, a count, gear, an assumption), and listing more options
-    (`more`; None when there are no more)."""
+    """A team page's own links: its state as its form would send it (`current`, no search: a
+    change starts from it), every slot open (`empty`), without each chip (`without`, by the
+    chip's key: a wanted tag, a count, gear, an assumption), and listing more options (`more`;
+    None when there are no more)."""
 
+    current: str
     empty: str
     without: dict[str, str]
     more: str | None
@@ -217,6 +219,7 @@ class PageUrl:
         keys = [w.key for w in team.wanted] + [c.key for c in team.counts]
         keys += [g.key for g in team.gear_on] + [a.key for a in team.assumed]
         return TeamLinks(
+            current=self.to(team.slots),
             empty=self.to([]),
             without={key: self.to(team.slots, keep, key) for key in keys},
             more=self.to(team.slots, more) if more else None,
@@ -382,7 +385,8 @@ def gear_groups(offered: list[Gear], allowed: set[str]) -> list[GearGroup]:
 
 def gear_view(gear: Gear, on: bool) -> GearView:
     brings = [icon_view(tag) for tag in gear.tags if tag.side != Side.MECHANIC]
-    return GearView(gear.key, gear.name, gear.faction, on, sorted(brings, key=lambda i: i.label))
+    faction = faction_label(gear.faction) if gear.faction else None
+    return GearView(gear.key, gear.name, faction, on, sorted(brings, key=lambda i: i.label))
 
 
 def assumed_views(loadout: Loadout) -> list[AssumedView]:

@@ -12,7 +12,7 @@ a few at a time) and, for the team shown, who brings what.
 
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion
+from optimiser.account import Account, Champion, faction_label
 from optimiser.enemies import Enemies
 from optimiser.factionwars import ENEMIES, Challenge, Crypt, admits, challenge
 from optimiser.teams.cover import Lineup
@@ -53,7 +53,8 @@ class CryptOption:
 class BaseView:
     """The base needs as picked: `kind` ("fw", or "" for none), the crypts and the stage
     numbers to pick from, the challenge's text (`checked`: the finder reads it; else nothing is
-    asked of the team for it), the crypt's faction (only its champions are searched) and the
+    asked of the team for it), the crypt's faction as the game names it (only its champions
+    are searched) and the
     slots' champions it doesn't admit."""
 
     kind: str
@@ -201,7 +202,7 @@ def base_view(
         number=base.number if base else 1,
         challenge=picked.text if picked else None,
         checked=bool(picked and picked.checked),
-        faction=crypt.faction if base else None,
+        faction=faction_label(crypt.faction) if base else None,
         faction_url=asset_url("factions", crypt.faction) if base else None,
         refused=[c.name for c in slots if base and c and not admits(base.crypt, c)],
     )
