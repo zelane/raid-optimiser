@@ -1,14 +1,14 @@
 """
-team.py - a team finder's query, shared by the pages that find teams: `slot` (repeated, one
-per team slot) is a champion picked from its list, which ends in "#<champion id>", or part of
-a champion's name typed in, or empty for an open slot; `want` (repeated) a debuff, buff or
-effect every team must bring (a `Tag.key`, one of `Offers.tags`); `gear` (repeated) a set or
-relic any champion may wear (a `Gear.key`; `gear_set` present: the list is as sent, else the
-defaults); `assume` (repeated) something assumed: "<tag key>" for the team, "<champion
-id>@<tag key>" for one champion; `assume_what` and `assume_who`: the assume form's new entry;
-`count` (repeated) so many different debuffs or buffs every team must bring ("debuff:3"),
-`count_side` and `count_n`: the count form's new entry; `relic` (repeated, one per slot) the
-relic a slot's champion wears: empty for what they wear now, "none", or a relic's id.
+team.py - a team finder's query, shared by the pages that find teams: `slot` (repeated, one per
+team slot; missing ones are open) is a champion's id, or a choice from a typed list ending in
+"#<champion id>", or part of a champion's name typed in, or empty for an open slot; `want`
+(repeated) a debuff, buff or effect every team must bring (a `Tag.key`, one of `Offers.tags`);
+`gear` (repeated) a set or relic any champion may wear (a `Gear.key`; `gear_set` present: the
+list is as sent, else the defaults); `assume` (repeated) something assumed: "<tag key>" for the
+team, "<champion id>@<tag key>" for one champion; `assume_what` and `assume_who`: the assume
+form's new entry; `count` (repeated) so many different debuffs or buffs every team must bring
+("debuff:3"), `count_side` and `count_n`: the count form's new entry; `relic` (repeated, one per
+slot) the relic a slot's champion wears: empty for what they wear now, "none", or a relic's id.
 A search (`run`) lists `listed` teams, the page showing option number `option`.
 
 - `GRADES`, `FIRST_SHOWN`, `MAX_LISTED`, `TRUE`: a search's shape
@@ -176,10 +176,13 @@ def parse_slots(texts: list[str], account: Account, size: int) -> tuple[SlotPick
 
 
 def parse_slot(text: str, account: Account) -> SlotPick:
-    """A pick from the list ("… #<id>"), or a name typed in part: the best copy of the one
-    champion whose name has it (an exact name wins)."""
+    """A champion's id, a pick from a typed list ("… #<id>"), or a name typed in part: the
+    best copy of the one champion whose name has it (an exact name wins)."""
     if not text:
         return None
+
+    if text.isdigit():
+        return account.champions.get(int(text)) or Unmatched(text, "no such champion")
 
     if match := CHAMPION_ID.search(text):
         champion = account.champions.get(int(match.group(1)))

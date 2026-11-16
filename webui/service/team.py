@@ -6,8 +6,8 @@ the gear, relics and assumptions it may count on, and each need as the team meet
 - `ChoiceView`, `RelicOption`, `SlotView`, `IconView`, `Contributor`, `NeedView`, `WantView`,
   `WantGroup`, `CountView`, `GearView`, `GearGroup`, `AssumedView`, `TeamView`: the views
 - `Note`, `no_note`: what a page says about a tag on offer
-- `Query`, `PageUrl`, `TeamLinks`, `listing`: a team page's URLs from its state (the state is
-  all in the URL)
+- `Query`, `PageUrl`, `TeamLinks`, `listing`, `trimmed`: a team page's URLs from its state
+  (the state is all in the URL)
 - `team_view`: the team's panels
 - `slot_worn`, `worn_now`, `relic_value`, `relic_options`, `best_copies`, `relic_label`: each
   slot's relics, and what it can pick from
@@ -28,7 +28,7 @@ from optimiser.teams.gear import Assumed, Gear, Loadout, worn_relic
 from optimiser.teams.needs import Distinct
 from optimiser.teams.tags import Side, Tag, plain_label
 from webui.forms.team import Offers, RelicChoice, SlotPick, TeamAsk, Unmatched
-from webui.service.views import ChampionRow, asset_url, champion_row, choice_label
+from webui.service.views import ChampionRow, asset_url, champion_row, choice_label, slot_value
 
 type Note = Callable[[Tag], str | None]
 type Query = tuple[tuple[str, str], ...]
@@ -207,7 +207,7 @@ class PageUrl:
         pairs += [("want", w.key) for w in team.wanted if w.key != without]
         pairs += [("count", c.field) for c in team.counts if c.key != without]
 
-        for slot in slots:
+        for slot in trimmed(slots):
             pairs += [("slot", slot.choice), ("relic", slot.relic)]
 
         return f"{self.path}?{urlencode(pairs + list(extra))}"
@@ -224,6 +224,16 @@ class PageUrl:
             without={key: self.to(team.slots, keep, key) for key in keys},
             more=self.to(team.slots, more) if more else None,
         )
+
+
+def trimmed(slots: list[SlotView]) -> list[SlotView]:
+    """The slots up to the last one with something in it (missing ones are open)."""
+    kept = list(slots)
+
+    while kept and not (kept[-1].choice or kept[-1].relic):
+        kept.pop()
+
+    return kept
 
 
 def listing(listed: int, option: int) -> Query:
@@ -281,7 +291,7 @@ def slot_view(member: Member | None, pick: SlotPick) -> SlotView:
 
     return SlotView(
         champion_row(member.champion),
-        choice_label(member.champion),
+        slot_value(member.champion),
         suggested=not member.chosen,
         needed=member.needed,
     )

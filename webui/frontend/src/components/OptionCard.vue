@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A team found: its score and how much it meets (`met` of `total`), its members (any champion
 // where it needs none), what the default slot adds (a glance), then a link showing its needs
-// below and one using it.
+// below, one using it, and one gearing it (Team gear, against the stage's enemy).
 import { Link } from "@inertiajs/vue3";
 import type { TeamOptionView } from "../types/views";
 import ChampionCard from "./ChampionCard.vue";
@@ -61,6 +61,7 @@ defineProps<{
       <Link :href="option.use_url" class="small grow" role="button" preserve-scroll preserve-state>
         Use this team
       </Link>
+      <Link :href="option.gear_url" class="quiet small grow" role="button">Gear this team</Link>
     </div>
   </article>
 </template>

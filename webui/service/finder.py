@@ -20,14 +20,14 @@ from optimiser.paths import STORE
 from optimiser.store import write_lock
 from webui.forms.finder import GRADES, RARITIES, FinderQuery
 from webui.service.champions import game_order
-from webui.service.views import ChampionRow, Choice, champion_row, choice_label
+from webui.service.views import ChampionRow, Choice, champion_row, slot_value
 
 FINDER_LIMIT = 200
 
 
 @dataclass(frozen=True)
 class ListedChampion:
-    """`choice`: the champion as the team slots name them ("Name, 6★ L60 #id"); `lock`: their
+    """`choice`: the champion as the team slots name them (`views.slot_value`); `lock`: their
     lock level (0: unlocked)."""
 
     champion: ChampionRow
@@ -72,7 +72,7 @@ def lock_champion(champion: Champion, level: int) -> ListedChampion:
 
 
 def listed(champion: Champion, lock: int) -> ListedChampion:
-    return ListedChampion(champion_row(champion), choice_label(champion), lock)
+    return ListedChampion(champion_row(champion), slot_value(champion), lock)
 
 
 @dataclass(frozen=True)

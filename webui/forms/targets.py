@@ -9,7 +9,7 @@ to a default rather than failing: the picker always shows something.
 
 - `LEVELS`, `SAVED`: the picker's levels, top first, and a saved pick's shape
 - `SavedTarget`, `TargetQuery`: the parsed query
-- `parse_target_query` (`parse_saved`): the boundary
+- `parse_target_query` (`parse_saved`), `saved_query`: the boundary
 """
 
 import re
@@ -17,17 +17,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 LEVELS = ("zone", "group", "difficulty", "stage", "wave", "enemy")
-SAVED = re.compile(r"(\d+):(\d+):(\d+)")
+SAVED = re.compile(r"(\d+)(?::(\d+):(\d+))?")
 
 
 @dataclass(frozen=True)
 class SavedTarget:
     stage: int
-    enemy: str  # "<wave>-<slot>"
+    enemy: str | None  # "<wave>-<slot>"; None: the stage's default
 
     @property
-    def wave(self) -> int:
-        return int(self.enemy.split("-")[0])
+    def wave(self) -> int | None:
+        return int(self.enemy.split("-")[0]) if self.enemy else None
 
 
 @dataclass(frozen=True)
@@ -43,7 +43,7 @@ class TargetQuery:
 
 def parse_target_query(query: Mapping[str, str], changed: str | None) -> TargetQuery:
     if (saved := parse_saved(query.get("target", ""))) is not None:
-        return TargetQuery(wave=saved.wave, enemy=saved.enemy, target=saved)
+        return saved_query(saved)
 
     kept = LEVELS[: LEVELS.index(changed) + 1] if changed in LEVELS else LEVELS
 
@@ -65,4 +65,12 @@ def parse_saved(text: str) -> SavedTarget | None:
         return None
 
     stage, wave, slot = match.groups()
-    return SavedTarget(int(stage), f"{wave}-{slot}")
+    return SavedTarget(int(stage), f"{wave}-{slot}" if wave else None)
+
+
+def saved_query(saved: SavedTarget | None) -> TargetQuery:
+    """The picker at a saved pick (None: its defaults)."""
+    if saved is None:
+        return TargetQuery()
+
+    return TargetQuery(wave=saved.wave, enemy=saved.enemy, target=saved)

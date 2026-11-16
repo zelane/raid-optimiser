@@ -58,7 +58,7 @@ from webui.service.finder import restriction_label
 from webui.service.results import BuildView, StatCell, build_view, damage_cell, stat_cells
 from webui.service.targets import EnemyCard
 from webui.service.team import ChoiceView, SlotView
-from webui.service.views import ChampionRow, champion_row, choice_label
+from webui.service.views import ChampionRow, champion_row, choice_label, slot_value
 
 RANK_CHOICES = (Stat.SPD, Stat.HP, Stat.DEF, Stat.ATK, Stat.RES, Stat.ACC)
 SLACK = 0.01
@@ -211,7 +211,7 @@ def gear_page(
 def slot_view(pick) -> SlotView:
     match pick:
         case Champion() as champion:
-            return SlotView(champion_row(champion), choice_label(champion), False, False)
+            return SlotView(champion_row(champion), slot_value(champion), False, False)
         case Unmatched(text=text, reason=reason):
             return SlotView(None, text, False, False, problem=reason)
         case _:

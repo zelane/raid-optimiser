@@ -98,7 +98,7 @@ function closeOnBackdrop(event: MouseEvent) {
               v-for="listed in found.picks"
               :key="listed.champion.id"
               :champion="listed.champion"
-              :title="listed.choice"
+              :title="listed.champion.name"
               :href="false"
               banner
               card

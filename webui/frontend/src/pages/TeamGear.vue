@@ -11,6 +11,7 @@ import PageHead from "../components/PageHead.vue";
 import TargetPicker from "../components/TargetPicker.vue";
 import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
+import { trimmed } from "../composables/teamQuery";
 import type { OnlyView } from "../types/generated/webui.service.finder";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
 import type { RowFields } from "../types/generated/webui.forms.team_gear";
@@ -61,7 +62,7 @@ function query(slots: string[], target: string, run: boolean): URLSearchParams {
     [names.target, target],
     [names.res, String(props.page.resistance)],
   ]);
-  for (const choice of slots) fields.append(names.slot, choice);
+  for (const choice of trimmed(slots)) fields.append(names.slot, choice);
 
   for (const row of rows.value) {
     for (const pick of row.sets) {

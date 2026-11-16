@@ -1,59 +1,66 @@
 """
-teams.py - the team finder page's query: `base` ("fw": a Faction Wars stage's challenge, with
-`crypt`, the crypt's region id, and `stage`, its number at `difficulty`; else nothing, only
-what's asked besides), `min_grade` (one of `GRADES`), `run` (search around the slots) with
-`listed` and `option`, and the team's fields (`forms.team`: slots, wants, counts, gear,
-assumptions). A crypt or stage there isn't falls back to the first.
+teams.py - the team finder page's query: `base` ("stage": what a stage asks, with `target`, the
+target picker's pick ("<stage>[:<wave>:<slot>]", else its default) and, for the Chimera,
+`column` (one of `PARTS`, else the rotation's); else nothing, only what's asked besides),
+`min_grade` (one of `GRADES`), `run` (search around the slots) with `listed` and `option`, and
+the team's fields (`forms.team`: slots, wants, counts, gear, assumptions).
 
 - `TEAM_SIZE`: the team's slots
-- `FactionWarsBase`, `TeamsRequest`: what it asks
-- `parse_teams`: the boundary
+- `Against`, `TeamsRequest`: what it asks
+- `parse_against`, `parse_teams`: the boundary (the stage first: what it is decides the offers
+  `parse_teams` reads the team's fields against)
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from optimiser.account import Account
-from optimiser.factionwars import Crypt
+from optimiser.chimera.trials import PARTS
 from webui.forms.common import FormErrors
+from webui.forms.targets import SavedTarget, parse_saved
 from webui.forms.team import GRADES, TRUE, Fill, Offers, TeamAsk, parse_fill, parse_team
 
 TEAM_SIZE = 5
 
 
 @dataclass(frozen=True)
-class FactionWarsBase:
-    """A Faction Wars stage: its crypt, difficulty and number (1 first)."""
+class Against:
+    """The stage a team is for: `target`, the picker's pick (None: its default), and `column`,
+    the Chimera's trials column (None: the rotation's)."""
 
-    crypt: Crypt
-    difficulty: str
-    number: int
-
-    @property
-    def stage(self) -> int:
-        return self.crypt.stages[self.difficulty][self.number - 1]
+    target: SavedTarget | None
+    column: str | None
 
 
 @dataclass(frozen=True)
 class TeamsRequest:
-    """The base needs (None: only what's asked besides), the champions to search from
+    """The stage (None: only what's asked besides), the champions to search from
     (`min_grade`★ up), the team, and `fill`: a search (None: the slots as they are)."""
 
-    base: FactionWarsBase | None
+    against: Against | None
     min_grade: int
     team: TeamAsk
     fill: Fill | None
 
 
+def last(query: Mapping[str, list[str]], name: str, default: str = "") -> str:
+    """A field's value (each name's values, in order; a single value is the last)."""
+    return (query.get(name) or [default])[-1]
+
+
+def parse_against(query: Mapping[str, list[str]]) -> Against | None:
+    """A column there isn't is the rotation's; a target there isn't, the picker's default."""
+    if last(query, "base") != "stage":
+        return None
+
+    column = last(query, "column")
+    return Against(parse_saved(last(query, "target")), column if column in PARTS else None)
+
+
 def parse_teams(
-    query: Mapping[str, list[str]], account: Account, offers: Offers, crypts: tuple[Crypt, ...]
+    query: Mapping[str, list[str]], account: Account, offers: Offers
 ) -> TeamsRequest | FormErrors:
-    """The query's fields (each name's values, in order; a single value is the last)."""
-
-    def last(name: str, default: str) -> str:
-        return (query.get(name) or [default])[-1]
-
-    grade = last("min_grade", str(GRADES[0]))
+    grade = last(query, "min_grade", str(GRADES[0]))
     if not grade.isdigit() or int(grade) not in GRADES:
         return FormErrors([f"rank {grade} isn't offered"])
 
@@ -61,21 +68,5 @@ def parse_teams(
     if isinstance(team, FormErrors):
         return team
 
-    base = parse_base(query, crypts) if last("base", "") == "fw" else None
-    fill = parse_fill(query) if last("run", "").lower() in TRUE else None
-    return TeamsRequest(base, int(grade), team, fill)
-
-
-def parse_base(query: Mapping[str, list[str]], crypts: tuple[Crypt, ...]) -> FactionWarsBase:
-    """The crypt named (else the first), at the difficulty named (else its last: Hard), its
-    stage numbered (else the first)."""
-    region = (query.get("crypt") or [""])[-1]
-    crypt = next((c for c in crypts if c.region == region), crypts[0])
-    difficulty = (query.get("difficulty") or [""])[-1]
-    if difficulty not in crypt.stages:
-        difficulty = list(crypt.stages)[-1]
-
-    number = (query.get("stage") or [""])[-1]
-    count = len(crypt.stages[difficulty])
-    chosen = int(number) if number.isdigit() and 1 <= int(number) <= count else 1
-    return FactionWarsBase(crypt, difficulty, chosen)
+    fill = parse_fill(query) if last(query, "run").lower() in TRUE else None
+    return TeamsRequest(parse_against(query), int(grade), team, fill)

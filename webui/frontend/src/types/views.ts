@@ -27,4 +27,5 @@ export interface TeamOptionView {
   score: number;
   show_url: string;
   use_url: string;
+  gear_url: string;
 }

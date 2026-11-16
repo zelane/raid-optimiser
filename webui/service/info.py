@@ -13,10 +13,11 @@ two (almost always its challenge, the last), and the page says so.
 - `faction_wars_section`, `crypt_view`, `stage_row`: its pieces
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from optimiser.account import Account, StageProgress, faction_name
 from optimiser.enemies import CRYPT, FACTION_WARS, Enemies, Region
+from webui.service.teams import stage_url
 from webui.service.views import asset_url
 
 FW_DIFFICULTY = "Hard"
@@ -25,18 +26,20 @@ FW_DIFFICULTY = "Hard"
 @dataclass(frozen=True)
 class StageRow:
     """A stage short of its stars. `open`: the battle quests that may still be needed; when
-    `one_of`, only one of them is (the game doesn't say which)."""
+    `one_of`, only one of them is (the game doesn't say which); `teams_url`: the team finder
+    at it."""
 
     number: int
     stars: int
     state: str  # "2/3 stars", "not beaten", "not fought"
     open: tuple[str, ...]
     one_of: bool
+    teams_url: str = ""
 
 
 @dataclass(frozen=True)
 class CryptView:
-    """A crypt short of its stars: `region` is the game's id (the team finder takes it)."""
+    """A crypt short of its stars: `region` is the game's id."""
 
     region: str
     name: str
@@ -91,7 +94,7 @@ def crypt_view(account: Account, enemies: Enemies, region: Region, difficulty: s
         max_stars += len(quests)
 
         if (row := stage_row(number, quests, progress)) is not None:
-            rows.append(row)
+            rows.append(replace(row, teams_url=stage_url(stage_id)))
 
     faction = faction_name(region.id.removeprefix(CRYPT))
     banner = asset_url("factions", faction)

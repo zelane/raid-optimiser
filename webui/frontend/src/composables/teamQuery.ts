@@ -1,7 +1,7 @@
 // A team page's state is its query (`service.team.PageUrl`): a change starts from the state as
 // the page's form would send it (`links.current`, plus `run` once a search ran, so it searches
 // again), edits it, and visits the page with it. Repeated fields (`slot`, `relic`) are one per
-// team slot.
+// team slot, missing ones open (a slot is a champion's id).
 import { router } from "@inertiajs/vue3";
 import type { TeamLinks } from "../types/generated/webui.service.team";
 
@@ -18,7 +18,14 @@ export function setAt(query: URLSearchParams, name: string, index: number, value
   while (values.length < TEAM_SIZE) values.push("");
   values[index] = value;
   query.delete(name);
-  for (const each of values) query.append(name, each);
+  for (const each of trimmed(values)) query.append(name, each);
+}
+
+// The values up to the last one set: the slots after it are open.
+export function trimmed(values: string[]): string[] {
+  const kept = [...values];
+  while (kept.length && !kept[kept.length - 1]) kept.pop();
+  return kept;
 }
 
 export function visitWith(query: URLSearchParams) {

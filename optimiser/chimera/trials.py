@@ -1,20 +1,21 @@
 """
-trials.py - the Chimera's trials for a column (Ultra Nightmare's), and what each asks of a team
-(`trial_needs`, from the trial's rules, held against the game's own list of its statuses by
-`check_needs`), as `optimiser.teams` needs. The debuff-count trials count debuffs, not kinds:
-Poisons stack, so a team placing them can reach the count if it's fast enough (Snake moves
-the Poisons on it to the team each of its turns). They pile up over the fight
-(`Distinct.accumulates`: the team gets several turns to each of the Chimera's), so any Poison
-source meets them, given speed.
+trials.py - the Chimera's trials for a column at a tier (Ultra Nightmare's by default), and what
+each asks of a team (`trial_needs`, from the trial's rules, held against the game's own list of
+its statuses by `check_needs`), as `optimiser.teams` needs. The debuff-count trials count
+debuffs, not kinds: Poisons stack, so a team placing them can reach the count if it's fast
+enough (Snake moves the Poisons on it to the team each of its turns). They pile up over the
+fight (`Distinct.accumulates`: the team gets several turns to each of the Chimera's), so any
+Poison source meets them, given speed.
 
 - `PARTS`, `ANIMAL_FORMS`, `LEVELS`, `PLAN_DIFFICULTY`, `TEAM_SIZE`: what's planned
+- `stage_tier`: the tier a Chimera stage is
 - `column_trials`, `trial_needs`, `check_needs`, `rule_count`: the trials and what they need
 """
 
 import re
 
 from optimiser.chimera.tags import immune_to
-from optimiser.enemies import Enemies, Trial
+from optimiser.enemies import ChimeraTier, Enemies, Trial
 from optimiser.teams.needs import AnyOf, Distinct, Need
 from optimiser.teams.tags import Mechanic, Side, Tag, buff, debuff, status_kind
 
@@ -29,8 +30,13 @@ PLAN_DIFFICULTY = "UltraNightmare"
 TEAM_SIZE = 5
 
 
-def column_trials(enemies: Enemies, column: str) -> list[Trial]:
-    tier = next(t for t in enemies.chimera.tiers if t.difficulty == PLAN_DIFFICULTY)
+def stage_tier(enemies: Enemies, stage_id: int) -> ChimeraTier | None:
+    """The tier whose rotations include the stage; None: it isn't the Chimera's."""
+    return next((t for t in enemies.chimera.tiers if stage_id in t.stages), None)
+
+
+def column_trials(enemies: Enemies, column: str, difficulty: str = PLAN_DIFFICULTY) -> list[Trial]:
+    tier = next(t for t in enemies.chimera.tiers if t.difficulty == difficulty)
     by_place = {(t.form, t.part, t.level): t for t in tier.trials}
     return [by_place[(form, column, level)] for form in ANIMAL_FORMS for level in LEVELS]
 

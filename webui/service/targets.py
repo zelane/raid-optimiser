@@ -3,15 +3,16 @@ targets.py - the target picker: an enemy to aim damage at, picked by zone (Dunge
 Boss, Faction Wars…), group (a dungeon, a crypt), difficulty and stage, then one enemy of the
 stage's waves (the last unless picked), shown with its portrait and stats as the battle
 starts. A component: any page can show it, and the page decides what the pick fills in (the
-champion page: the DEF damage is ranked against).
+champion page: the DEF damage is ranked against; the team finder: what the stage asks of a
+team).
 
 - `ZONES`, `ZONE_NAMES`, `REGION_NAMES`, `LEFT_OUT_REGIONS`, `PLACEHOLDER_NAME`,
   `SHOWN_STATS`: what the picker offers and what it calls things
 - `StageChoice`, `Difficulty`, `Group`, `Zone`: the catalogue
 - `Option`, `StatText`, `EnemyCard`, `TargetPicker`: the views
 - `target_picker`: the picker for a query (the component's one entry point)
-- `catalogue`, `area_zone`, `clan_boss_zone`, `group_labels`, `common_words`,
-  `difficulty_label`, `split_words`: the catalogue's pieces
+- `catalogue`, `area_zone`, `clan_boss_zone`, `chimera_zone`, `rotation_label`,
+  `group_labels`, `common_words`, `difficulty_label`, `split_words`: the catalogue's pieces
 - `locate`, `choose`, `options`, `enemy_cards`, `enemy_card`, `default_enemy`, `target_key`:
   the picker's pieces
 """
@@ -31,6 +32,7 @@ from webui.service.views import asset_url
 ZONES = (
     "Dungeon",
     "AllianceBoss",
+    "Chimera",
     "Fractions",
     "Hydra",
     "DoomTower",
@@ -111,7 +113,8 @@ class EnemyCard:
 
 @dataclass(frozen=True)
 class TargetPicker:
-    """`target` ("<stage>:<wave>:<slot>") names the pick, for a form to keep."""
+    """`target` ("<stage>:<wave>:<slot>") names the pick, for a form to keep; `stage` is its
+    stage's id."""
 
     zones: tuple[Option, ...]
     groups: tuple[Option, ...]
@@ -122,6 +125,7 @@ class TargetPicker:
     enemies: tuple[EnemyCard, ...]
     picked: EnemyCard
     target: str
+    stage: int
 
 
 def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
@@ -148,6 +152,7 @@ def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
         enemies=cards,
         picked=picked,
         target=f"{stage.id}:{picked.key.replace('-', ':')}",
+        stage=stage.id,
     )
 
 
@@ -158,6 +163,8 @@ def catalogue(enemies: Enemies) -> tuple[Zone, ...]:
     for key in ZONES:
         if key == "AllianceBoss":
             zones.append(clan_boss_zone(enemies))
+        elif key == "Chimera":
+            zones.append(chimera_zone(enemies))
         elif (area := by_id.get(key)) and (zone := area_zone(area, enemies)):
             zones.append(zone)
 
@@ -207,6 +214,30 @@ def clan_boss_zone(enemies: Enemies) -> Zone:
         ZONE_NAMES["AllianceBoss"],
         (Group("DemonLord", "Demon Lord", difficulties),),
     )
+
+
+def chimera_zone(enemies: Enemies) -> Zone:
+    """The Chimera's stages are its tiers × its four rotations (the forms' affinities), which
+    its area (a region per rotation) doesn't line up by tier."""
+    difficulties = tuple(
+        Difficulty(
+            tier.difficulty,
+            difficulty_label(tier.difficulty),
+            tuple(
+                StageChoice(stage_id, rotation_label(enemies, stage_id)) for stage_id in tier.stages
+            ),
+        )
+        for tier in enemies.chimera.tiers
+    )
+    return Zone("Chimera", "Chimera", (Group("Chimera", "Chimera", difficulties),))
+
+
+def rotation_label(enemies: Enemies, stage_id: int) -> str:
+    """A rotation by its forms' affinities: "Force, Ultimate Void" (the animal forms share
+    one)."""
+    placement = enemies.stages[stage_id].formations[0][0]
+    ultimate, animal, *_ = enemies.types[placement.type_id].forms
+    return f"{animal.affinity}, Ultimate {ultimate.affinity}"
 
 
 def group_labels(regions: list[tuple[str, str]]) -> dict[str, str]:

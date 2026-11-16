@@ -1,28 +1,51 @@
 """
-teams.py - the team finder page: the base needs (a Faction Wars stage's challenge, or none),
-what every team must bring besides (tags, so many different debuffs or buffs) and the gear it
-may count on, the team's slots, the teams the search finds (every way to bring it all, listed
-a few at a time) and, for the team shown, who brings what.
+teams.py - the team finder page: what the team is for (anything, or a stage from the target
+picker: a Faction Wars stage's challenge, the Chimera's column of trials, and any stage's hold
+on who may enter), what every team must bring besides (tags, so many different debuffs or
+buffs) and the gear it may count on, the team's slots, the teams the search finds (every way
+to bring it all, listed a few at a time) and, for the team shown, who brings what (the
+Chimera's on its trial board, `service.chimera`).
 
-- `MORE`: how many more teams "show more" lists
-- `CryptOption`, `BaseView`, `OptionView`, `TeamsPage`: the views
+- `MORE`, `DEFAULT_COLUMN`: how many more teams "show more" lists; the Chimera's column when
+  the game's raid doesn't say
+- `FactionWars`, `ChimeraTrials`, `Content`: what a stage asks
+- `ChallengeView`, `AgainstView`, `OptionView`, `TeamsPage`: the views
+- `content`, `never_lands`: the stage resolved, first (what it is decides the page's offers)
 - `teams_page`: what the page asks for
-- `finder_goals`, `base_view`, `base_query`, `option_view`: its pieces
+- `stage_url`: the page for a stage (the Info page links its stages)
+- `gear_url`: Team gear for a team found, against the stage's enemy picked
+- `stage_goals`, `finder_goals`, `against_view`, `page_query`, `option_view`: its pieces
 """
 
 from dataclasses import dataclass
+from urllib.parse import urlencode
 
-from optimiser.account import Account, Champion, faction_label
-from optimiser.enemies import Enemies
-from optimiser.factionwars import ENEMIES, Challenge, Crypt, admits, challenge
+from optimiser.account import Account, Champion
+from optimiser.chimera.plan import Brief, column_goals
+from optimiser.chimera.tags import CHIMERA, NEVER_LANDS
+from optimiser.chimera.trials import stage_tier
+from optimiser.enemies import FACTION_WARS, Enemies, Restriction, Rotating, Trial, team_restriction
+from optimiser.factionwars import ENEMIES, Challenge, challenge
 from optimiser.teams.cover import Lineup
 from optimiser.teams.find import check_slots, find_teams
 from optimiser.teams.gear import Gear, with_gear
 from optimiser.teams.kits import candidates
 from optimiser.teams.needs import AnyOf, Distinct, Goals, Objective
 from optimiser.teams.tags import Tag
-from webui.forms.team import GRADES, Fill, Offers
-from webui.forms.teams import TEAM_SIZE, FactionWarsBase, TeamsRequest
+from webui.forms.targets import saved_query
+from webui.forms.team import GRADES, Fill, Offers, TeamAsk
+from webui.forms.team_gear import PAGE_FIELDS
+from webui.forms.teams import TEAM_SIZE, Against, TeamsRequest
+from webui.service.chimera import (
+    ChimeraView,
+    FormRow,
+    chimera_view,
+    form_note,
+    form_rows,
+    glance,
+)
+from webui.service.finder import OnlyView, only_view, restriction_label
+from webui.service.targets import TargetPicker, target_picker
 from webui.service.team import (
     NeedView,
     PageUrl,
@@ -32,58 +55,88 @@ from webui.service.team import (
     TeamView,
     listing,
     need_view,
+    no_note,
     percent,
     slot_view,
     slot_worn,
     team_view,
+    trimmed,
 )
 from webui.service.views import asset_url
 
 MORE = 9  # teams each "show more" adds
+DEFAULT_COLUMN = "Tail"  # where the mythical materials are at prize offset 0
 
 
 @dataclass(frozen=True)
-class CryptOption:
-    region: str
-    name: str
-    selected: bool
+class FactionWars:
+    """A Faction Wars stage: its challenge, if it has one."""
+
+    challenge: Challenge | None
 
 
 @dataclass(frozen=True)
-class BaseView:
-    """The base needs as picked: `kind` ("fw", or "" for none), the crypts and the stage
-    numbers to pick from, the challenge's text (`checked`: the finder reads it; else nothing is
-    asked of the team for it), the crypt's faction as the game names it (only its champions
-    are searched) and the
-    slots' champions it doesn't admit."""
+class ChimeraTrials:
+    """A Chimera stage: its tier, the column of trials asked, and the column this raid's
+    mythical materials are in (None: the snapshot doesn't say)."""
 
-    kind: str
-    crypts: list[CryptOption]
     difficulty: str
-    stages: int
-    number: int
-    challenge: str | None
+    column: str
+    rotation: str | None
+
+
+@dataclass(frozen=True)
+class Content:
+    """The stage picked (`picker`), who it admits, and what it asks besides (None: nothing)."""
+
+    picker: TargetPicker
+    restriction: Restriction | Rotating | None
+    asks: FactionWars | ChimeraTrials | None
+
+
+@dataclass(frozen=True)
+class ChallengeView:
+    """A Faction Wars stage's challenge: its text (None: it has none), `checked`: the finder
+    reads it (else nothing is asked of the team for it)."""
+
+    text: str | None
     checked: bool
-    faction: str | None
+
+
+@dataclass(frozen=True)
+class AgainstView:
+    """The stage picked: what it admits (only they're searched; `rotating`: it changes with
+    the account, unknown which), a crypt's banner, the slots' champions it refuses, the
+    champion finder's hold, and what it asks: a challenge or the Chimera's column."""
+
+    picker: TargetPicker
+    admits: str | None
+    rotating: bool
     faction_url: str | None
     refused: list[str]
+    only: OnlyView | None
+    challenge: ChallengeView | None
+    chimera: ChimeraView | None
 
 
 @dataclass(frozen=True)
 class OptionView:
-    """A team the search found: its slots, how many needs it meets, its score (%)."""
+    """A team the search found: its slots, how many needs (or trials) it meets, its score (%),
+    and for the Chimera each form's trials met or not (Easy first), for a glance."""
 
     number: int  # 1 first
     slots: list[SlotView]
     met: int
     score: int
+    glance: list[tuple[str, list[bool]]]
     show_url: str  # the page showing its needs
     use_url: str  # the page with it in the slots
+    gear_url: str  # Team gear for it
 
 
 @dataclass(frozen=True)
 class TeamsPage:
-    base: BaseView
+    against: AgainstView | None  # None: no stage, only what's asked besides
     min_grade: int
     grades: tuple[int, ...]
     team: TeamView
@@ -97,28 +150,53 @@ class TeamsPage:
     listed: int
     more: int  # how many the page lists after "show more" (0: no more to show)
     shown: int | None  # the option the needs show; None: the slots as they are
-    met: int  # needs the team shown meets
-    needs: int  # needs in all
+    unit: str  # what `met` counts: "needs", or the Chimera's "trials"
+    met: int  # by the team shown
+    needs: int  # in all
     score: int  # % of what's shown
     base_needs: list[NeedView]  # the challenge's, for the team shown
+    rows: list[FormRow]  # the Chimera's trials, for the team shown
     extras: list[NeedView]  # what's asked besides, for the team shown
     links: TeamLinks
+
+
+def content(enemies: Enemies, against: Against | None, rotation: str | None) -> Content | None:
+    """The stage asked for (None: none); `rotation`: the column the game's current raid puts
+    the Chimera's mythical materials in (`service.chimera.rotation_column`), if known."""
+    if against is None:
+        return None
+
+    picker = target_picker(enemies, saved_query(against.target))
+    stage = enemies.stages[picker.stage]
+    asks: FactionWars | ChimeraTrials | None = None
+
+    if tier := stage_tier(enemies, stage.id):
+        column = against.column or rotation or DEFAULT_COLUMN
+        asks = ChimeraTrials(tier.difficulty, column, rotation)
+    elif stage.area == FACTION_WARS:
+        asks = FactionWars(challenge(stage))
+
+    return Content(picker, team_restriction(stage), asks)
+
+
+def never_lands(base: Content | None) -> frozenset[str]:
+    """The debuffs not worth offering: what the Chimera is immune to in every form."""
+    return NEVER_LANDS if base and isinstance(base.asks, ChimeraTrials) else frozenset()
 
 
 def teams_page(
     account: Account,
     enemies: Enemies,
-    crypts: tuple[Crypt, ...],
+    base: Content | None,
     request: TeamsRequest,
     offers: Offers,
 ) -> TeamsPage:
     """With `request.fill` (and something needed), the search fills the open slots every way
-    it can, from the crypt's faction for a Faction Wars stage; else the slots are shown as
-    they are."""
+    it can, from the champions the stage admits; else the slots are shown as they are."""
     ask = request.team
-    base = request.base
-    picked = challenge(enemies.stages[base.stage]) if base else None
-    goals = finder_goals(ask.wanted, ask.counts, picked, ask.loadout.team_gear)
+    asks = base.asks if base else None
+    restriction = base.restriction if base else None
+    goals, trials, problems = stage_goals(enemies, asks, ask)
     asked = bool(goals.requirements)
     slots = tuple(pick if isinstance(pick, Champion) else None for pick in ask.picks)
     worn = slot_worn(account, ask, offers, slots)
@@ -127,8 +205,8 @@ def teams_page(
         case Fill(listed=listed, option=option) if asked:
             pool = candidates(account, request.min_grade)
 
-            if base:
-                pool = [c for c in pool if admits(base.crypt, c)]
+            if isinstance(restriction, Restriction):
+                pool = [c for c in pool if restriction.admits(c)]
 
             found = find_teams(account, ask.loadout, slots, goals, pool, listed, worn)
             lineup, options = found.lineup, found.options
@@ -138,35 +216,58 @@ def teams_page(
 
     shown = option if 1 <= option <= len(options) else (1 if options else None)
     team = options[shown - 1] if shown else lineup
-    base_needs = [need_view(n) for cover in team.objectives for n in cover.needs]
+    chimera = isinstance(asks, ChimeraTrials)
+    base_needs = [] if chimera else [need_view(n) for c in team.objectives for n in c.needs]
     extras = [need_view(n) for n in team.extras]
     total = found.found if found else 0
-    based = base_view(base, picked, crypts, slots)
-    team_shown = team_view(account, lineup.slots, ask, offers, "the enemies")
-    url = PageUrl("/teams", base_query(based, request.min_grade), team_shown)
+    enemy, note = (CHIMERA, form_note) if chimera else (ENEMIES.name, no_note)
+    team_shown = team_view(account, lineup.slots, ask, offers, enemy, note)
+    url = PageUrl("/teams", page_query(base, request.min_grade), team_shown)
     more = min(listed + MORE, total) if total > listed else 0
     return TeamsPage(
-        base=based,
+        against=against_view(enemies, base, slots, problems) if base else None,
         min_grade=request.min_grade,
         grades=GRADES,
         team=team_shown,
         ran=request.fill is not None,
         asked=asked,
         candidates=found.candidates if found else 0,
-        options=[option_view(number, o, url, len(options)) for number, o in enumerate(options, 1)],
+        options=[
+            option_view(number, o, trials, url, len(options), base)
+            for number, o in enumerate(options, 1)
+        ],
         found=total,
         complete=found.complete if found else True,
         partial=found.partial if found else False,
         listed=len(options),
         more=more,
         shown=shown,
-        met=sum(n.met for n in base_needs + extras),
-        needs=len(base_needs) + len(extras),
+        unit="trials" if chimera else "needs",
+        met=team.cleared if chimera else sum(n.met for n in base_needs + extras),
+        needs=len(team.objectives) if chimera else len(base_needs) + len(extras),
         score=percent(team.score),
         base_needs=base_needs,
+        rows=form_rows(team, trials) if chimera else [],
         extras=extras,
         links=url.links(request.fill is not None, listing(more, shown or 1) if more else None),
     )
+
+
+def stage_goals(
+    enemies: Enemies, asks: FactionWars | ChimeraTrials | None, ask: TeamAsk
+) -> tuple[Goals, dict[int, Trial], tuple[str, ...]]:
+    """The goals; for the Chimera, its trials by skill (the objectives' keys) and where their
+    needs disagree with the game's data."""
+    match asks:
+        case ChimeraTrials(difficulty=difficulty, column=column):
+            brief = Brief(column, ask.wanted, ask.loadout, ask.counts, difficulty)
+            return column_goals(enemies, brief)
+
+        case FactionWars(challenge=picked):
+            return finder_goals(ask.wanted, ask.counts, picked, ask.loadout.team_gear), {}, ()
+
+        case None:
+            return finder_goals(ask.wanted, ask.counts, None, ask.loadout.team_gear), {}, ()
 
 
 def finder_goals(
@@ -186,52 +287,92 @@ def finder_goals(
     return Goals(objectives, extras, ENEMIES, TEAM_SIZE)
 
 
-def base_view(
-    base: FactionWarsBase | None,
-    picked: Challenge | None,
-    crypts: tuple[Crypt, ...],
+def against_view(
+    enemies: Enemies,
+    base: Content,
     slots: tuple[Champion | None, ...],
-) -> BaseView:
-    crypt = base.crypt if base else crypts[0]
-    difficulty = base.difficulty if base else list(crypt.stages)[-1]
-    return BaseView(
-        kind="fw" if base else "",
-        crypts=[CryptOption(c.region, c.name, c is crypt) for c in crypts],
-        difficulty=difficulty,
-        stages=len(crypt.stages[difficulty]),
-        number=base.number if base else 1,
-        challenge=picked.text if picked else None,
-        checked=bool(picked and picked.checked),
-        faction=faction_label(crypt.faction) if base else None,
-        faction_url=asset_url("factions", crypt.faction) if base else None,
-        refused=[c.name for c in slots if base and c and not admits(base.crypt, c)],
+    problems: tuple[str, ...],
+) -> AgainstView:
+    held = base.restriction if isinstance(base.restriction, Restriction) else None
+    challenge_view = chimera = faction_url = None
+
+    match base.asks:
+        case FactionWars(challenge=picked):
+            challenge_view = ChallengeView(picked.text, picked.checked) if picked else None
+            challenge_view = challenge_view or ChallengeView(None, checked=False)
+
+            if held and len(held.factions) == 1:
+                faction_url = asset_url("factions", held.factions[0])  # the crypt's banner
+
+        case ChimeraTrials(column=column, rotation=rotation):
+            chimera = chimera_view(enemies, column, rotation, problems)
+
+    return AgainstView(
+        picker=base.picker,
+        admits=restriction_label(held) if held else None,
+        rotating=isinstance(base.restriction, Rotating),
+        faction_url=faction_url,
+        refused=[c.name for c in slots if held and c and not held.admits(c)],
+        only=only_view(held) if held else None,
+        challenge=challenge_view,
+        chimera=chimera,
     )
 
 
-def base_query(base: BaseView, min_grade: int) -> Query:
-    """The page's own fields: the base needs picked, and the grade searched from."""
+def page_query(base: Content | None, min_grade: int) -> Query:
+    """The page's own fields: the stage picked (the Chimera's column), the grade searched
+    from."""
     picked: Query = ()
 
-    if base.kind:
-        region = next(c.region for c in base.crypts if c.selected)
-        picked = (
-            ("crypt", region),
-            ("difficulty", base.difficulty),
-            ("stage", str(base.number)),
-        )
+    if base:
+        picked = (("base", "stage"), ("target", base.picker.target))
 
-    return (("base", base.kind), *picked, ("min_grade", str(min_grade)))
+    if base and isinstance(base.asks, ChimeraTrials):
+        picked += (("column", base.asks.column),)
+
+    return (*picked, ("min_grade", str(min_grade)))
 
 
-def option_view(number: int, team: Lineup, url: PageUrl, listed: int) -> OptionView:
-    """`url`: the page's, `listed` the options it lists (kept when it shows this one)."""
-    covers = [n for cover in team.objectives for n in cover.needs] + list(team.extras)
+def stage_url(stage_id: int) -> str:
+    return f"/teams?base=stage&target={stage_id}"
+
+
+def gear_url(slots: list[SlotView], base: Content | None) -> str:
+    """Its champions in Team gear's slots (open ones stay open), against the enemy picked
+    (none: Team gear's default)."""
+    fields = [(PAGE_FIELDS.slot, slot.choice) for slot in trimmed(slots)]
+
+    if base:
+        fields.append((PAGE_FIELDS.target, base.picker.target))
+
+    return f"/team-gear?{urlencode(fields)}"
+
+
+def option_view(
+    number: int,
+    team: Lineup,
+    trials: dict[int, Trial],
+    url: PageUrl,
+    listed: int,
+    base: Content | None,
+) -> OptionView:
+    """`trials`: the Chimera's by skill (else none); `url`: the page's, `listed` the options it
+    lists (kept when it shows this one); `base`: the stage, Team gear's target."""
     slots = [slot_view(member, None) for member in team.slots]
+
+    if trials:
+        met, glanced = team.cleared, glance(form_rows(team, trials))
+    else:
+        covers = [n for cover in team.objectives for n in cover.needs] + list(team.extras)
+        met, glanced = sum(n.met for n in covers), []
+
     return OptionView(
         number=number,
         slots=slots,
-        met=sum(n.met for n in covers),
+        met=met,
         score=percent(team.score),
+        glance=glanced,
         show_url=url.to(url.team.slots, listing(listed, number)),
         use_url=url.to(slots),
+        gear_url=gear_url(slots, base),
     )

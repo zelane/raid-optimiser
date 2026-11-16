@@ -5,7 +5,8 @@ and pictured.
 - `ASSETS`: where the extracted game art lives
 - `Choice`: an option of a select
 - `StarView`, `ChampionRow`, `champion_row`, `star_views`, `star_colour`: a champion
-- `choice_label`: a champion as the pickers name them ("Name, 6★ L60 #id": the id decides)
+- `choice_label`: a champion as a typed list names them ("Name, 6★ L60 #id": the id decides)
+- `slot_value`: a champion in a team slot's field (and the URL): their id
 - `set_name`, `slot_label`, `piece_image_url`: a piece
 - `asset_url`: an extracted game icon
 """
@@ -125,3 +126,7 @@ def asset_url(kind: str, key: str) -> str | None:
 
 def choice_label(champion: Champion) -> str:
     return f"{champion.name}, {champion.grade}★ L{champion.level} #{champion.id}"
+
+
+def slot_value(champion: Champion) -> str:
+    return str(champion.id)

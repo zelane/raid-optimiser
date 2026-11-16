@@ -133,18 +133,23 @@ the game itself.
     within `SEARCH_BUDGET` (20,000 teams or 1 s: for the Chimera with nothing pinned there are
     hundreds of thousands, mostly from the "N different" trials); if none meets them all,
     `partial_teams` (HiGHS) gives the best partial ones.
-- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `pages/Teams.vue`): base needs
-  (none, or a Faction Wars stage's challenge: `base=fw&crypt=<region>&stage=<n>`, linked from
-  the Info page's stages; the Chimera's trials are the Chimera page) plus what's asked besides
-  (tags, counts), every team of five meeting them all. `optimiser/factionwars.py`: crypts
+- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `pages/Teams.vue`): what
+  the team is against: anything, or a stage from the target picker (`base=stage&target=<stage>[:
+  <wave>:<slot>]`; `teams.content` resolves it first, as the Chimera narrows the offers): a
+  Faction Wars stage's challenge (linked from the Info page's stages, `teams.stage_url`), the
+  Chimera's column of trials (`column=`; below), and any stage's restriction (only who it
+  admits is searched; the finder dialog's `only`), plus what's asked besides (tags, counts),
+  every team of five meeting them all. `optimiser/factionwars.py`: crypts
   (`crypts`, the faction each admits: only its champions are searched) and a stage's challenge
   (its last quest) as needs, from its text (`QUEST_NEEDS`: "Place 10+ Stun" asks for a Stun;
   counts aren't modelled, reliability is), against `ENEMIES` (no immunities). Fight quests
   (turns, losses, weak hits, damage) and make-up ones (3 Epic champions) aren't checked: the
   page says so. Hex is the `Mark` status, Perfect Veil `Invisible2`, Bomb `TimeBomb`.
-- Chimera trials (`/chimera`, `optimiser/chimera/`): one team of five that clears a whole
+- Chimera trials (a Chimera stage in the team finder; `/chimera` redirects there,
+  `optimiser/chimera/`): one team of five that clears a whole
   column (Wing/Tail/Paw: where this raid's mythical materials are; the game doesn't name its
-  columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one UNM fight (rewards
+  columns, so the page names each by its Easy Ram trial's statuses) in all three animal forms, Easy→Normal→Hard, in one fight at the stage's tier
+  (`trials.stage_tier`; UNM by default) (rewards
   only count for trials cleared in the same fight), found by `optimiser.teams`. Targets are
   shown, not checked.
   - `tags`: the Chimera's immunities, `BOSS_IMMUNE` minus `FORM_ALLOWS` (Ram takes Fear, Snake
@@ -154,9 +159,9 @@ the game itself.
     checked against the trial's own status list (`check_needs`; the page warns on a
     mismatch). The `DEBUFF_COUNT>=` trials (Lion Wing Easy, Lion Paw Normal, Snake Wing Hard)
     count instances (`Distinct.instances`, `accumulates`).
-  - `plan`: `check_lineup` (the slots alone) and `fill_lineup` (`teams.find`), from a `Brief`
-    (column, wanted, loadout, counts); `column_goals` makes the column's trials objectives (keyed by the
-    trial's skill, waiting on the one above), and `Plan.trials` maps them back for the board.
+  - `plan`: `column_goals`, from a `Brief` (column, wanted, loadout, counts, tier), makes the
+    column's trials objectives (keyed by the trial's skill, waiting on the one above) for the
+    finder's search, and its trials by skill map them back for the board.
   - `rotation`: which trial gives what this raid, read from the game's code
     (`ChimeraExtensions.GetChimeraChallengeRewardWithOffset`, `GetPrizeOffset`): a tier's 9
     reward lists (`enemies.json`, game order Ram/Lion/Snake × Wing/Tail/Paw) shift over the
@@ -165,13 +170,11 @@ the game itself.
     previous one's before. Offset 0 puts the Mythical materials on Tail, so the column is
     Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
     2, Paw). The page's default column.
-  - Page (`webui/service/chimera.py`; `forms.chimera.parse_chimera` is its boundary, `ChimeraRequest`
-    with `team: TeamAsk` and `fill: Fill | None`): rotation, slots (`slot` ×5, "Name, 6★ L60 #id" from the champion
-    finder, or part of a name in the URL), "Also bring" (`want=<Tag.key>`, from `wantable`), gear, relics &
-    assumptions, Run (3 options, 9 more per "show more", at most 300; `option` picks the one
-    the grid shows; "Use this team" puts it in the slots), then the board (a row per form, its three trials across).
-    State rides in the URL, kept in the browser (`keptQuery`); `pages/Chimera.vue`. Icons: `chimera/<Form>_<Level>` (ChimeraChallengeIcons), from
-    `tools/extract_assets.py`.
+  - In the finder (`webui/service/chimera.py`: the column picker, the trial board's views,
+    each option's glance): the column under the picker, then the finder's slots, "Also bring",
+    gear and Run, then the board (`TrialBoard`: a row per form, its three trials across;
+    `TrialGlance` on each option card). Icons: `chimera/<Form>_<Level>`
+    (ChimeraChallengeIcons), from `tools/extract_assets.py`.
 - Team gear (`/team-gear`, `webui/service/team_gear.py`, `forms/team_gear.py`,
   `pages/TeamGear.vue`): up to five champions (the team slots) geared at once against the target
   picker's enemy, each a compact row: up to two sets, SPD/ACC/C.RATE minimums and one goal
@@ -194,9 +197,9 @@ the game itself.
   each member's; pieces teammates wear stay wearable. No team: `Unmet` (who can't alone,
   `Shortfall`s) or `Clash`. The target stage's restriction holds the champion finder to what
   it admits (the `only` prop: `service.finder.OnlyView`, the dialog's `only_*` fields) and
-  flags slotted champions it doesn't. Linking a found team in from `/teams` or `/chimera` is
-  still to do.
-- Team finder parts, shared by pages that find teams (the team finder and the Chimera page):
+  flags slotted champions it doesn't. Each team the finder finds links here ("Gear this team",
+  `teams.gear_url`: its champions in the slots, against the stage's enemy picked).
+- Team finder parts (the finder's, Team gear uses `TeamSlots`):
   the slots (each a `relic` field: empty for what the champion wears now, "none", or a relic
   id; the dropdown lists each owned relic type's best copy; a new champion starts from what's
   worn), "Also bring" (with counts: `count=debuff:3`, so many different) and gear, relics &
@@ -207,7 +210,7 @@ the game itself.
   `slot_worn`: each slot's relics as gear). In Vue: `TeamSlots` (the finder dialog fills a
   slot), `BringPanels` (chips, `TagPicker`: a search over what isn't chosen, grouped by kind;
   the count and assume forms), `RunBar`, `TeamOptions`/`OptionCard` (a slot for the Chimera's
-  glance), `NeedsPanel` (a slot for the Chimera's trial rows), `NeedItem`, `StatusIcon`,
+  glance), `NeedsPanel` (a slot for the Chimera's trial rows: `TrialBoard`), `NeedItem`, `StatusIcon`,
   `ScorePill`. Their state rides in the query (the server reads only that): a change starts from
   `TeamLinks.current` (the state as a form would send it; `composables/teamQuery.ts`), edits it
   and visits the page (`preserveState`); a chip's × is `links.without[key]`. The query is kept
@@ -293,7 +296,7 @@ the game itself.
   Accessories, Teams, Info; a section with several pages shows them as tabs in a band under the
   bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
   the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the champion list, the champion last solved for
-  (`store.latest_champion`), Config. Teams: Finder (`/teams`), Chimera, Gear (`/team-gear`). Info: Faction Wars
+  (`store.latest_champion`), Config. Teams: Finder (`/teams`, the Chimera's trials too), Gear (`/team-gear`). Info: Faction Wars
   (`/info`), Empower (`/empower`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
@@ -306,13 +309,15 @@ the game itself.
   (`/champions/{id}/lock` saves it and goes back). The finder dialog
   (`components/ChampionFinder.vue`, `/finder` as JSON): its cards are picks, announced
   (`picked`) for the page to act on (the champion page's Switch champion visits their
-  optimiser; `TeamSlots` puts the pickers' "Name, 6★ L60 #id", `views.choice_label`, in a
-  slot); `only`/`onlyLabel` hold it to what a stage admits. Enter takes the first. The
+  optimiser; `TeamSlots` puts the pick's id, `views.slot_value`, in a slot: a slot field
+  is an id, still read as "… #id" or part of a name; trailing open slots are left out of URLs); `only`/`onlyLabel` hold it to what a stage admits. Enter takes the first. The
   filters (not the name) are remembered in the browser (`finder-filters` in localStorage),
   shared by the list and the dialog.
 - Target picker (`webui/service/targets.py`, `forms/targets.py`, `components/TargetPicker.vue`,
-  route `/targets`): a reusable component, top of the champion page and Team gear. Zone
-  (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
+  route `/targets`): a reusable component, top of the champion page, Team gear and the team
+  finder (its stage). Zone
+  (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, the Chimera from its tiers ×
+  rotations (the forms' affinities), Faction Wars, Hydra, Doom Tower,
   Grim Forest, Cursed City, co-op Demon Lord, Campaign) → group (region; shared names get what
   tells their ids apart) → difficulty → stage → wave (the last by default; its select at the
   right of the enemy's name), then one of its enemies (boss, else most HP). Each change asks

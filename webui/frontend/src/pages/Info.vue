@@ -11,10 +11,6 @@ import type { InfoPage } from "../types/generated/webui.service.info";
 const { page } = defineProps<{ page: InfoPage }>();
 // Read through `computed`: a sync reloads the page's props without remounting it.
 const fw = computed(() => page.faction_wars);
-
-function teamsLink(region: string, stage: number) {
-  return `/teams?base=fw&crypt=${region}&difficulty=${fw.value.difficulty}&stage=${stage}`;
-}
 </script>
 
 <template>
@@ -60,10 +56,7 @@ function teamsLink(region: string, stage: number) {
             <tbody>
               <tr v-for="row in crypt.rows" :key="row.number">
                 <th scope="row">
-                  <Link
-                    :href="teamsLink(crypt.region, row.number)"
-                    title="Find a team for its challenge"
-                  >
+                  <Link :href="row.teams_url" title="Find a team for its challenge">
                     {{ row.number }}
                   </Link>
                 </th>

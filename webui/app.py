@@ -22,6 +22,7 @@ app.py - the web entry point: routes that hand the service's views to Vue pages 
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -30,14 +31,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
-from optimiser.chimera.tags import NEVER_LANDS
 from optimiser.enemies import Restriction, team_restriction
-from optimiser.factionwars import crypts
 from optimiser.reserve import reservations
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
-from webui.forms.chimera import Unknown, parse_chimera
 from webui.forms.common import FormErrors
 from webui.forms.finder import FinderQuery, parse_finder_query
 from webui.forms.request import parse_equip, parse_request
@@ -58,10 +56,10 @@ from webui.forms.settings import (
     parse_set_value,
     parse_target_free,
 )
-from webui.forms.targets import parse_target_query
+from webui.forms.targets import TargetQuery, parse_target_query
 from webui.forms.team import Offers
 from webui.forms.team_gear import parse_gear_ask
-from webui.forms.teams import parse_teams
+from webui.forms.teams import parse_against, parse_teams
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
@@ -329,46 +327,32 @@ def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
 
 @app.get("/chimera")
 def chimera(request: Request):
-    account = current.current_account()
-    sets, relics = current.current_effect_sources()
-    offers = Offers(
-        wantable(account, NEVER_LANDS),
-        gear_options(account, sets, relics, NEVER_LANDS),
-        relics,
-    )
-    query = {name: request.query_params.getlist(name) for name in request.query_params}
-    enemies = current.current_enemies()
-    rotation = chimera_pages.rotation_column(account, enemies, datetime.now(UTC))
-
-    match parse_chimera(query, account, offers, rotation):
-        case Unknown(reason=reason):
-            raise HTTPException(404, reason)
-        case FormErrors(messages=messages):
-            raise HTTPException(400, "; ".join(messages))
-        case asked:
-            page = chimera_pages.chimera_page(account, enemies, asked, offers, rotation)
-
-    return inertia_page(request, "Chimera", {"page": page})
+    """The Chimera's trials, once a page of their own: the team finder at the Chimera's
+    hardest tier, the rest of the query kept."""
+    picker = target_pages.target_picker(current.current_enemies(), TargetQuery(zone="Chimera"))
+    kept = [(k, v) for k, v in request.query_params.multi_items() if k not in ("base", "target")]
+    query = urlencode([("base", "stage"), ("target", picker.target), *kept])
+    return RedirectResponse(f"/teams?{query}", status_code=308)
 
 
 @app.get("/teams")
 def teams(request: Request):
-    """The team finder: a Faction Wars stage's challenge (or nothing) and what's asked besides."""
+    """The team finder: a stage's needs (a Faction Wars challenge, the Chimera's trials), or
+    none, and what's asked besides."""
     account = current.current_account()
     enemies = current.current_enemies()
     sets, relics = current.current_effect_sources()
-    anywhere = frozenset()  # what's fought here isn't immune to any debuff in particular
-    offers = Offers(
-        wantable(account, anywhere), gear_options(account, sets, relics, anywhere), relics
-    )
     query = {name: request.query_params.getlist(name) for name in request.query_params}
-    known = crypts(enemies)
+    rotation = chimera_pages.rotation_column(account, enemies, datetime.now(UTC))
+    base = teams_pages.content(enemies, parse_against(query), rotation)
+    never = teams_pages.never_lands(base)
+    offers = Offers(wantable(account, never), gear_options(account, sets, relics, never), relics)
 
-    match parse_teams(query, account, offers, known):
+    match parse_teams(query, account, offers):
         case FormErrors(messages=messages):
             raise HTTPException(400, "; ".join(messages))
         case asked:
-            page = teams_pages.teams_page(account, enemies, known, asked, offers)
+            page = teams_pages.teams_page(account, enemies, base, asked, offers)
 
     return inertia_page(request, "Teams", {"page": page})
 
@@ -389,7 +373,7 @@ def team_gear(request: Request):
     enemies = current.current_enemies()
     target = parse_target_query({"target": (query.get("target") or [""])[-1]}, None)
     picker = target_pages.target_picker(enemies, target)
-    stage = enemies.stages[int(picker.target.split(":")[0])]
+    stage = enemies.stages[picker.stage]
     restriction = team_restriction(stage)
     page = team_gear_pages.gear_page(
         account, asked, rules, picker.picked, picker.title, restriction
