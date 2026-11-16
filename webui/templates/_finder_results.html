@@ -1,6 +1,6 @@
-{% from "_macros.html" import champion, lock_picker %}
-{# The champions the filters match, as cards: on the list each with their lock; in the finder
-   (`picking`) each a pick, carrying what a team slot takes (`data-choice`). #}
+{% from "_macros.html" import champion %}
+{# The champions the filters match, as the finder dialog's cards: each a pick, carrying what a
+   team slot takes (`data-choice`). (The champion list is a Vue page: `Champions.vue`.) #}
 <p class="caps">
   {{ finder.found }} champion{{ "s" if finder.found != 1 }}
   {%- if finder.found > finder.picks | length %}: the first {{ finder.picks | length }}, narrow the search for the rest{% endif %}
@@ -8,11 +8,7 @@
 {% if finder.picks %}
   <div class="champion-grid">
     {% for listed in finder.picks %}
-      {% if picking %}
-        {{ champion(listed.champion, banner=true, card=true, extra="finder-pick", attrs={"data-choice": listed.choice, "title": listed.choice}) }}
-      {% else %}
-        {% call champion(listed.champion, banner=true, card=true) %}{{ lock_picker(listed) }}{% endcall %}
-      {% endif %}
+      {{ champion(listed.champion, banner=true, card=true, extra="finder-pick", attrs={"data-choice": listed.choice, "title": listed.choice}) }}
     {% endfor %}
   </div>
 {% else %}

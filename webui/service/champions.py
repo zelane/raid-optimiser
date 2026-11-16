@@ -7,7 +7,7 @@ the finder's (`service.finder`).
   default champion order
 - `StatOption`, `SetOption`, `RuleOption`, `FormOptions`, `SkillOption`, `FormView`,
   `ChampionPage`: the views
-- `champion_page`: what the page asks for
+- `champion_page`, `shown_run`: what the page asks for
 - `game_order`, `form_options`, `form_views`, `skill_options`, `describe_goal`,
   `current_stats`: what it shares
 """
@@ -22,7 +22,7 @@ from optimiser.reserve import Rule, reservations, reserved_count, rule_key
 from optimiser.stats import build_stats
 from optimiser.store import latest_run
 from webui.service.results import StatCell, stat_cells
-from webui.service.runs import RunEntryView, RunView, run_history, run_view
+from webui.service.runs import RunEntryView, RunView, run_history, run_view, saved_run
 from webui.service.views import ChampionRow, asset_url, champion_row
 
 SUPPORT_CHECK_DEF = 6000  # any DEF will do: whether a skill can be ranked doesn't depend on it
@@ -88,24 +88,32 @@ class FormView:
 
 @dataclass(frozen=True)
 class ChampionPage:
-    """`forms`: one per form, the first first; a toggle on the page picks between them."""
+    """`forms`: one per form, the first first; a toggle on the page picks between them. The
+    run shown (`shown_run`) is the page's other prop: picking one from the history reloads it
+    alone."""
 
     champion: ChampionRow
     forms: list[FormView]
     options: FormOptions
     history: list[RunEntryView]
-    latest: RunView | None  # shown, and its form restored, when the page opens
 
 
 def champion_page(account: Account, rules: tuple[Rule, ...], champion: Champion) -> ChampionPage:
-    latest = latest_run(STORE, champion.id)
     return ChampionPage(
         champion=champion_row(champion),
         forms=form_views(account, champion),
         options=form_options(account, rules),
         history=run_history(champion),
-        latest=run_view(latest, champion) if latest else None,
     )
+
+
+def shown_run(champion: Champion, run_id: int | None) -> RunView | None:
+    """The run asked for, else (none asked, or it's gone) the latest; its form is restored."""
+    if run_id is not None and (asked := saved_run(champion, run_id)) is not None:
+        return asked
+
+    latest = latest_run(STORE, champion.id)
+    return run_view(latest, champion) if latest else None
 
 
 def game_order(champion: Champion) -> tuple[int, ...]:

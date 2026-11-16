@@ -96,6 +96,7 @@ update:
     else echo "HH extractor not found at {{HH_DIR}}: skipped the patch (just configure, then just update)"; fi
     just static
     just assets
+    just frontend-build
 
 # Build the memory reader (Rust, for the game's Wine prefix)
 reader:
@@ -114,6 +115,28 @@ read: reader
 # Start the web UI on http://127.0.0.1:<port> (WEB_PORT or 8000), auto-reloading (--no-reload)
 web port=web_port *args:
     shift; uv run python -m webui --port "{{port}}" "$@"
+
+# The web UI with the front end's dev server (hot reload of Vue pages): both stop together
+web-dev port=web_port:
+    #!/usr/bin/env bash
+    set -eu
+    trap 'kill 0' EXIT
+    just frontend-types
+    npm run --silent dev &
+    VITE_DEV=http://127.0.0.1:5173 uv run python -m webui --port "{{port}}"
+
+# The Vue pages' prop types, from webui/service's dataclasses
+frontend-types:
+    uv run python -m tools.gen_ts_types webui/frontend/src/types/generated
+
+# Build the front end into webui/static/dist (the web UI serves it)
+frontend-build: frontend-types
+    npm run --silent build
+
+# The front end: Prettier's format, and the Vue pages type-checked against the prop types
+frontend-check: frontend-types
+    node_modules/.bin/prettier --check --log-level warn "webui/frontend/**/*.{ts,vue}"
+    npm run --silent typecheck
 
 # Stop the web UI (by port)
 web-stop port=web_port:
@@ -152,7 +175,7 @@ css-fix:
     node_modules/.bin/prettier --write --log-level warn "webui/static/*.css"
 
 # Format, lint and style-check
-check: fmt lint style css
+check: fmt lint style css frontend-check
 
 # Dump the installed game's IL2CPP metadata (offline) into data/dump/<game version>
 dump:

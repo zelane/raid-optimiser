@@ -1157,7 +1157,7 @@ dialog.finder > article {
   overflow-y: auto;
   min-height: 12rem;
 
-  &.htmx-request {
+  &:is(.htmx-request, .busy) {
     opacity: 0.7;
   }
 }
@@ -1403,7 +1403,7 @@ table.limits {
   gap: var(--space-m);
 }
 
-#solving {
+.solving {
   color: var(--primary);
 }
 
@@ -1416,7 +1416,7 @@ table.limits {
   gap: var(--space-l) var(--space-2xl);
   align-items: center;
 
-  &.htmx-request {
+  &:is(.htmx-request, .busy) {
     opacity: 0.8;
   }
 

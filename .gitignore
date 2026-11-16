@@ -17,3 +17,7 @@ webui/static/assets/
 
 # The memory reader's build
 reader/target/
+
+# The front end's build and its generated prop types (just frontend-build)
+webui/static/dist/
+webui/frontend/src/types/generated/

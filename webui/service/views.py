@@ -3,6 +3,7 @@ views.py - views several pages share: a champion as a row, and how pieces and se
 and pictured.
 
 - `ASSETS`: where the extracted game art lives
+- `Choice`: an option of a select
 - `StarView`, `ChampionRow`, `champion_row`, `star_views`, `star_colour`: a champion
 - `choice_label`: a champion as the pickers name them ("Name, 6★ L60 #id": the id decides)
 - `set_name`, `slot_label`, `piece_image_url`: a piece
@@ -15,6 +16,14 @@ from pathlib import Path
 from optimiser.account import Account, Artifact, Champion, Slot
 
 ASSETS = Path(__file__).resolve().parents[1] / "static" / "assets"
+
+
+@dataclass(frozen=True)
+class Choice:
+    """An option of a select: what it sends, and what it shows."""
+
+    value: str
+    label: str
 
 
 @dataclass(frozen=True)

@@ -300,26 +300,54 @@ the game itself.
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
   missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
 - Champion list and finder, one list (`webui/service/finder.py`: `find_champions`,
-  `lock_champion`; `forms/finder.py`; `_champion_filters.html`, `_finder_results.html`,
-  `_finder.html`, `static/finder.js`; routes `/` and `/finder`): name, rarity, faction and
-  fewest stars filter the account's champions (htmx), shown as champion cards. On the list
-  (`/`) each carries their lock; the finder is a dialog a page includes, opened by any button
-  marked `data-finder`, whose form sends `pick=1`: its cards are picks, no lock. A pick goes to
-  the champion's optimiser, or with `data-finder="slot"` fills the field `data-finder-target`
-  names with the pickers' "Name, 6★ L60 #id" (`views.choice_label`) and submits its form.
-  The filters (not the name) are remembered in the browser, shared by the list and the
-  dialog. Used by the champion page's Switch champion and the team slots (+ when open,
+  `lock_champion`; `forms/finder.py`). The list (`/`) is a Vue page (`pages/Champions.vue`,
+  `ChampionFilters`, `ChampionCard`, `LockPicker`): the filters (`q`, `rarity`, `faction`,
+  `grade`) ride in the URL and a change reloads only its `finder` prop; each champion carries
+  their lock (`/champions/{id}/lock` saves it and goes back). The finder dialog is Vue on Vue
+  pages (`components/ChampionFinder.vue`: `/finder` as JSON, `picked` for the page to act on,
+  `only` for a stage's hold) and Jinja + htmx on the rest (`_champion_filters.html`,
+  `_finder_results.html`, `_finder.html`, `static/finder.js`; route `/finder`): opened by any
+  button marked `data-finder`, its cards are picks. A pick goes to the champion's optimiser,
+  or with `data-finder="slot"` fills the field `data-finder-target` names with the pickers'
+  "Name, 6★ L60 #id" (`views.choice_label`) and submits its form. The filters (not the name)
+  are remembered in the browser (`finder-filters` in localStorage), shared by the list and
+  the dialog. Used by the champion page's Switch champion and the team slots (+ when open,
   Change when filled; their `slot` fields are hidden).
-- Target picker (`webui/service/targets.py`, `forms/targets.py`, `_target_picker.html`,
-  `static/target.js`, route `/targets`): a reusable component, top of the champion page. Zone
-  (`ZONES`: Dungeons, Clan Boss from its tiers × affinities, Faction Wars, Hydra, Doom Tower,
-  Grim Forest, Cursed City, co-op Demon Lord, Campaign) → group (region; shared names get what
-  tells their ids apart) → difficulty → stage → wave (the last by default; its select at the
-  right of the enemy's name), then one of its enemies (boss, else most HP). htmx re-renders it on change (`HX-Trigger-Name`: lower levels reset; `for_form`, the
-  form its `target` field belongs to, rides along so a re-render keeps it); a user's pick fires
-  `target:picked` (the champion page sets `enemy_def`); its hidden `target`
-  ("stage:wave:slot", `form="request"`) is saved with runs and restored quietly. The panel dims
-  when `enemy_def` no longer matches it.
+- Target picker (`webui/service/targets.py`, `forms/targets.py`, route `/targets`): a reusable
+  component, top of the champion page and Team gear. Zone (`ZONES`: Dungeons, Clan Boss from its
+  tiers × affinities, Faction Wars, Hydra, Doom Tower, Grim Forest, Cursed City, co-op Demon
+  Lord, Campaign) → group (region; shared names get what tells their ids apart) → difficulty →
+  stage → wave (the last by default; its select at the right of the enemy's name), then one of
+  its enemies (boss, else most HP). Each change asks `/targets` again (`changed`, or htmx's
+  `HX-Trigger-Name`: lower levels reset). In Vue (`components/TargetPicker.vue`) it fetches the
+  view as JSON and emits `picked` (the champion page sets `enemy_def` and keeps the
+  "stage:wave:slot" `target`, saved with runs; the server draws a run's picker from it). The
+  Jinja version (`_target_picker.html`, `static/target.js`: `target:picked`, `for_form`) stays
+  for Team gear until it's Vue. The panel dims when `enemy_def` no longer matches it.
+- Inertia (moving page by page, Vue 3 + TypeScript): `webui/inertia.py` is the server side of
+  Inertia v3's protocol, our own (`respond`: the shell `templates/inertia.html` with the page in
+  its `<script data-page>` on a first load, JSON on the client's visits; partial reloads; props
+  may be callables, evaluated only when sent; 409 on a stale build; `redirect`/`back`, 303).
+  `app.inertia_page` adds what every page gets (`layout`: `service/layout.py`'s nav and sync
+  age; `errors`). `service/layout.py` is the menu for both Jinja's `base.html` and the Vue
+  layout, and `INERTIA_PAGES` the paths Vue serves (patterns): `PageLink` makes a link to one
+  an Inertia visit, any other a full load (an Inertia visit answered with HTML opens Inertia's
+  error dialog). Ported: the champion list (`/`), the champion page (`/champions/{id}`), Config,
+  Info, Empower. A form that fails goes `back` with its errors (`app.back_with`: a one-shot
+  cookie, `inertia.ERRORS_COOKIE`, shown in the layout's alert). A component's own requests
+  (the finder dialog, the target picker, equip/preview/sync) send `Accept: application/json`
+  and get the view as JSON (`app.wants_json`, `view_json`). The champion page: `?run=<id>`
+  names the run shown (`champions.shown_run`: else the latest), its form restored from it;
+  history picks reload `run` and `picker` alone; a solve redirects to its new run. The front end is
+  `webui/frontend/` (Vite; `src/app.ts`, `layouts/AppLayout.vue`, `pages/<Component>.vue`,
+  `components/`, `composables/`), built into `webui/static/dist/` (gitignored); it uses the
+  global stylesheets' classes, no styles of its own. Props are typed:
+  `tools/gen_ts_types.py` writes `src/types/generated/<python module>.ts` (gitignored) from
+  `webui.service`'s dataclasses and those they reach (shared shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against
+  them (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
+  `webui/forms/` parse them as before. Still Jinja + htmx: Teams/Chimera, Team gear,
+  Accessories, the palette; then drop htmx, the Jinja pages and their scripts. `app.js` (filter
+  bars, stat tiles, set grid) is loaded by no page now: the accessories port should redo it.
 - `webui/`: FastAPI + Jinja + htmx, our own CSS (no framework). `service/` is framework-free (frozen
   dataclass view models, ready to serve as JSON if the UI moves to Vue), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
@@ -388,7 +416,9 @@ just read             # the account, from the running game's memory (read-only)
 just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
 just static           # re-export the game's tables (part of update)
 just schema-refresh   # when the export says the dump predates the game: dump, schema, static
-just web              # http://127.0.0.1:8000 (web-restart, web-stop)
+just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs frontend-build
+just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)
+just frontend-build   # prop types + Vite build into webui/static/dist (part of update)
 just assets           # portraits and icons from the game's bundles (part of update)
 just check            # black + ruff over all Python, the house style checker, then stylelint
 just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css

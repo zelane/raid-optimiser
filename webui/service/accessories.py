@@ -4,7 +4,7 @@ the champion types and set fits. Scoring every accessory's potential is the slow
 the potentials are cached per snapshot, types and set fits (not locks), and kept on disk per
 piece (`scores`).
 
-- `WeightCell`, `MainOption`, `MainsCell`, `TypeRow`, `Choice`, `SetColumn`, `TargetRow`,
+- `WeightCell`, `MainOption`, `MainsCell`, `TypeRow`, `SetColumn`, `TargetRow`,
   `TargetGroup`, `SetGrid`, `WeightTable`,
   `AccessoryRow`,
   `DropRow`, `CandidateRow`, `SwapRow`, `SwapGroup`, `SetSummary`, `CleanupView`,
@@ -62,6 +62,7 @@ from webui.service.results import PieceView, piece_view
 from webui.service.scores import keep_potentials, known_potentials
 from webui.service.views import (
     ChampionRow,
+    Choice,
     champion_row,
     set_name,
     slot_label,
@@ -99,12 +100,6 @@ class TypeRow:
     champions: list[str]  # who a seeded faction type was made from
     cells: list[WeightCell]  # per `WeightTable.stats` column
     mains: list[MainsCell]
-
-
-@dataclass(frozen=True)
-class Choice:
-    value: str
-    label: str
 
 
 @dataclass(frozen=True)

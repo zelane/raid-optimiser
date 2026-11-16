@@ -18,29 +18,15 @@
   {% block head %}{% endblock %}
 </head>
 <body>
-  {%- set here = request.url.path %}
-  {#- The menu's sections: (label, link, its tabs as (link, label, open now)). A section
-      with tabs shows them in the bar's second row on its pages. Optimiser: the champion
-      list, the champion last solved for (their optimiser), the settings solves use; Info:
-      the account's progress; Teams: the team finder, the Chimera's trials, a team's gear. #}
-  {%- set sections = [
-        ("Optimiser", "/", [("/", "Champions", here == "/"),
-                            (optimiser_url(), "Optimiser", here.startswith("/champions/")),
-                            ("/config", "Config", here == "/config")]),
-        ("Accessories", "/accessories", [("/accessories", "Accessories", here.startswith("/accessories"))]),
-        ("Teams", "/teams", [("/teams", "Finder", here.startswith("/teams")),
-                             ("/chimera", "Chimera", here.startswith("/chimera")),
-                             ("/team-gear", "Gear", here.startswith("/team-gear"))]),
-        ("Info", "/info", [("/info", "Faction Wars", here == "/info"),
-                           ("/empower", "Empower", here.startswith("/empower"))]),
-      ] %}
+  {#- The menu's sections and their pages (webui/service/layout.py, shared with the Vue
+      layout). A section with tabs shows them in the bar's second row on its pages. #}
+  {%- set sections = nav_sections(request.url.path) %}
   <header class="topbar">
     <nav class="container">
       <ul><li><a href="/" class="wordmark">Raid optimiser</a></li></ul>
       <ul class="menu">
-        {%- for label, link, tabs in sections %}
-        {%- set open = tabs | selectattr(2) | list %}
-        <li><a href="{{ link }}"{% if open %} aria-current="page"{% endif %}>{{ label }}</a></li>
+        {%- for section in sections %}
+        <li><a href="{{ section.link }}"{% if section.current %} aria-current="page"{% endif %}>{{ section.label }}</a></li>
         {%- endfor %}
       </ul>
       <ul class="tools">
@@ -57,12 +43,12 @@
     {%- if own_tabs %}
       <div class="subbar">{{ own_tabs }}</div>
     {%- endif %}
-    {%- for label, link, tabs in sections if not own_tabs and tabs | length > 1 and tabs | selectattr(2) | list %}
+    {%- for section in sections if not own_tabs and section.tabs | length > 1 and section.current %}
       <div class="subbar">
-        <nav class="container tabs" aria-label="{{ label }}">
+        <nav class="container tabs" aria-label="{{ section.label }}">
           <ul>
-            {%- for path, tab, current in tabs %}
-            <li><a href="{{ path }}"{% if current %} aria-current="page"{% endif %}>{{ tab }}</a></li>
+            {%- for tab in section.tabs %}
+            <li><a href="{{ tab.link }}"{% if tab.current %} aria-current="page"{% endif %}>{{ tab.label }}</a></li>
             {%- endfor %}
           </ul>
         </nav>

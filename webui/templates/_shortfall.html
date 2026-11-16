@@ -1,9 +1,0 @@
-<article>
-  <header><strong>No build meets the request</strong></header>
-  {% if shortfall.reason %}
-    <p>{{ shortfall.reason }}</p>
-  {% else %}
-    <ul>{% for text in shortfall.lines %}<li>{{ text }}</li>{% endfor %}</ul>
-    <p><small>Each limit on its own, with the sets asked; together they may still conflict.</small></p>
-  {% endif %}
-</article>

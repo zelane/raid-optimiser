@@ -4,11 +4,15 @@ module and the templates know about HTTP or HTML; a JSON API would sit beside it
 
 - `app`, `templates`: the FastAPI app and its Jinja templates (uncached: edits show at once)
 - `index`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
-  `reserve_rule`, `champion`, `builds`, `run`, `delete_run`, `equip`, `preview`, `accessories`,
+  `reserve_rule`, `champion`, `builds`, `delete_run`, `equip`, `preview`, `accessories`,
   `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
   `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
   `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `sync`: the routes
-- `read_form`, `find_champion`, `find_run`, `send_build`: what they share
+- `wants_json`, `view_json`: a Vue component's own requests, answered with a view
+- `finder_query`: the champion filters in a request's query
+- `back_with`: back to a Vue page's form with its errors
+- `inertia_page`: a Vue page (`webui/frontend/src/pages`), with the props every page gets
+- `read_form`, `find_champion`, `send_build`: what they share
 - `static_url`: a static file's URL, changing whenever the file does (so no stale caches)
 - `optimiser_url`: the nav's Optimiser link: the champion last solved for, else the list
 - `CachedStatic`: the static files, cached by the browser (versioned URLs for good)
@@ -19,8 +23,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.types import Scope
@@ -32,7 +36,7 @@ from optimiser.factionwars import crypts
 from optimiser.reserve import reservations
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
-from webui import extractor, reader
+from webui import extractor, inertia, reader
 from webui.forms.chimera import Unknown, parse_chimera
 from webui.forms.common import FormErrors
 from webui.forms.finder import GRADES as FINDER_GRADES
@@ -56,7 +60,7 @@ from webui.forms.settings import (
     parse_set_value,
     parse_target_free,
 )
-from webui.forms.targets import TargetQuery, parse_target_query
+from webui.forms.targets import parse_target_query
 from webui.forms.team import Offers
 from webui.forms.team_gear import parse_gear_ask
 from webui.forms.teams import parse_teams
@@ -65,7 +69,7 @@ from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
 from webui.service import champions as champion_pages
 from webui.service import chimera as chimera_pages
-from webui.service import current, results, runs
+from webui.service import current, layout, results, runs
 from webui.service import empower as empower_pages
 from webui.service import finder as finder_pages
 from webui.service import info as info_pages
@@ -101,7 +105,6 @@ templates = Jinja2Templates(directory=HERE / "templates")
 # importing `_accessory.html`, which imports `_macros.html`, kept the old macros), so every
 # render compiles afresh. Cheap at this size.
 templates.env.cache = None
-templates.env.globals["lock_levels"] = LOCK_LEVELS
 templates.env.globals["static_url"] = lambda path: static_url(path)
 templates.env.globals["synced_ago"] = reader.synced_ago
 templates.env.globals["finder_rarities"] = FINDER_RARITIES
@@ -110,16 +113,22 @@ templates.env.globals["finder_factions"] = lambda: finder_pages.account_factions
     current.current_account()
 )
 templates.env.globals["optimiser_url"] = lambda: optimiser_url()
+templates.env.globals["nav_sections"] = lambda path: layout.nav_sections(path, optimiser_url())
 templates.env.filters["faction_label"] = faction_label  # a faction's key as the game shows it
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def index(request: Request):
-    """The champion list: the finder's list, unfiltered, each champion with their lock."""
-    view = finder_pages.find_champions(
-        current.current_account(), current.current_locks(), FinderQuery()
-    )
-    return templates.TemplateResponse(request, "index.html", {"finder": view, "picking": False})
+    """The champion list: the finder's list, as the filters in the query ask, each champion with
+    their lock. Changing a filter reloads only `finder`."""
+    query = finder_query(request)
+
+    def finder() -> finder_pages.FinderView:
+        return finder_pages.find_champions(
+            current.current_account(), current.current_locks(), query
+        )
+
+    return inertia_page(request, "Champions", {"finder": finder, "lock_levels": list(LOCK_LEVELS)})
 
 
 @app.get("/palette", response_class=HTMLResponse)
@@ -138,25 +147,26 @@ def palette(request: Request):
     )
 
 
-@app.post("/champions/{champion_id}/lock", response_class=HTMLResponse)
+@app.post("/champions/{champion_id}/lock")
 async def lock(request: Request, champion_id: int):
+    """From the champion list; back to it (the list's own page, filters and all)."""
     champion = find_champion(current.current_account(), champion_id)
     form = await read_form(request)
 
     match parse_lock(form):
-        case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+        case FormErrors(messages=messages):
+            raise HTTPException(422, "; ".join(messages))
 
         case level:
-            listed = finder_pages.lock_champion(champion, level)
-            return templates.TemplateResponse(request, "_lock.html", {"listed": listed})
+            finder_pages.lock_champion(champion, level)
+            return inertia.back(request)
 
 
-@app.get("/config", response_class=HTMLResponse)
+@app.get("/config")
 def config(request: Request):
     """What solves assume and what gear they keep out (the store's settings)."""
     page = assumption_pages.assumptions_page(current.current_account())
-    return templates.TemplateResponse(request, "assumptions.html", {"page": page})
+    return inertia_page(request, "Config", {"page": page})
 
 
 @app.get("/assumptions")
@@ -165,45 +175,45 @@ def old_config():
     return RedirectResponse("/config", status_code=301)
 
 
-@app.post("/assumptions", response_class=HTMLResponse)
+@app.post("/assumptions")
 async def set_assumption(request: Request):
     form = await read_form(request)
 
     match parse_flag(form):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return back_with(request, errors)
 
         case FlagSetting(flag=flag, on=on):
-            view = assumption_pages.set_assumption(flag, on)
-            return templates.TemplateResponse(request, "_flag.html", {"flag": view})
+            assumption_pages.set_assumption(flag, on)
+            return inertia.back(request)
 
 
-@app.post("/glyphs", response_class=HTMLResponse)
+@app.post("/glyphs")
 async def plan_glyph(request: Request):
     account = current.current_account()
     form = await read_form(request)
 
     match parse_glyph(form, account.tables):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return back_with(request, errors)
 
         case GlyphPlan(kind=kind, grade=grade):
-            row = assumption_pages.plan_glyph_for(account, kind, grade)
-            return templates.TemplateResponse(request, "_glyph_row.html", {"row": row})
+            assumption_pages.plan_glyph_for(kind, grade)
+            return inertia.back(request)
 
 
-@app.post("/reserve", response_class=HTMLResponse)
+@app.post("/reserve")
 async def reserve_rule(request: Request):
     account = current.current_account()
     form = await read_form(request)
 
     match parse_reserve_rule(form, account):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return back_with(request, errors)
 
         case ReserveSetting(rule=rule, on=on):
-            section = assumption_pages.change_reserve_rule(account, rule, on)
-            return templates.TemplateResponse(request, "_reserve.html", {"reserve": section})
+            assumption_pages.change_reserve_rule(rule, on)
+            return inertia.back(request)
 
 
 @app.get("/accessories", response_class=HTMLResponse)
@@ -330,14 +340,14 @@ async def sell_accessories(request: Request):
     return templates.TemplateResponse(request, "_equip_result.html", context)
 
 
-@app.get("/empower", response_class=HTMLResponse)
+@app.get("/empower")
 def empower(request: Request, rarity: str = empower_pages.DEFAULT_RARITY):
     account = current.current_account()
     if rarity not in empower_pages.empowerable_rarities(account):
         raise HTTPException(404, f"{rarity} champions can't be empowered")
 
     page = empower_pages.empower_page(account, rarity)
-    return templates.TemplateResponse(request, "empower.html", {"page": page})
+    return inertia_page(request, "Empower", {"page": page})
 
 
 @app.get("/chimera", response_class=HTMLResponse)
@@ -412,29 +422,43 @@ def team_gear(request: Request):
     return templates.TemplateResponse(request, "team_gear.html", context)
 
 
-@app.get("/champions/{champion_id}", response_class=HTMLResponse)
-def champion(request: Request, champion_id: int):
+@app.get("/champions/{champion_id}")
+def champion(request: Request, champion_id: int, run: int | None = None):
+    """The champion's optimiser, showing `run` (else the latest) with the target it was asked
+    against; picking another run reloads `run` and `picker` alone."""
     account = current.current_account()
-    page = champion_pages.champion_page(
-        account, current.current_reserve_rules(), find_champion(account, champion_id)
-    )
-    picker = target_pages.target_picker(current.current_enemies(), TargetQuery())
-    context = {"page": page, "picker": picker, "fill": False}
-    return templates.TemplateResponse(request, "champion.html", context)
+    picked = find_champion(account, champion_id)
+    shown = champion_pages.shown_run(picked, run)
+    target = (shown.form if shown else {}).get("target", "")
+
+    def page() -> champion_pages.ChampionPage:
+        return champion_pages.champion_page(account, current.current_reserve_rules(), picked)
+
+    def picker() -> target_pages.TargetPicker:
+        query = parse_target_query({"target": target}, None)
+        return target_pages.target_picker(current.current_enemies(), query)
+
+    return inertia_page(request, "Champion", {"page": page, "run": shown, "picker": picker})
 
 
-@app.get("/info", response_class=HTMLResponse)
+@app.get("/info")
 def info(request: Request):
     page = info_pages.info_page(current.current_account(), current.current_enemies())
-    return templates.TemplateResponse(request, "info.html", {"page": page})
+    return inertia_page(request, "Info", {"page": page})
 
 
 @app.get("/targets", response_class=HTMLResponse)
 def targets(request: Request):
-    """The target picker after a change (htmx names the field changed); a saved target
-    (`target=`) is shown without filling the page's fields in again."""
-    query = parse_target_query(request.query_params, request.headers.get("HX-Trigger-Name"))
+    """The target picker after a change (`changed`, or htmx's trigger, names the field
+    changed); a saved target (`target=`) is shown without filling the page's fields in again.
+    The Vue picker asks for the view as JSON."""
+    changed = request.query_params.get("changed") or request.headers.get("HX-Trigger-Name")
+    query = parse_target_query(request.query_params, changed)
     picker = target_pages.target_picker(current.current_enemies(), query)
+
+    if wants_json(request):
+        return view_json(picker)
+
     for_form = request.query_params.get("for_form", "")
     context = {
         "picker": picker,
@@ -449,63 +473,53 @@ def finder(request: Request):
     """The champions the filters match, as the list or the finder dialog asks while the user
     types (`_champion_filters.html`); `pick=1`: the dialog's, picks rather than locks."""
     view = finder_pages.find_champions(
-        current.current_account(),
-        current.current_locks(),
-        parse_finder_query(
-            request.query_params,
-            {name: request.query_params.getlist(name) for name in request.query_params},
-        ),
+        current.current_account(), current.current_locks(), finder_query(request)
     )
+
+    if wants_json(request):
+        return view_json(view)
+
     context = {"finder": view, "picking": request.query_params.get("pick") == "1"}
     return templates.TemplateResponse(request, "_finder_results.html", context)
 
 
-@app.post("/champions/{champion_id}/builds", response_class=HTMLResponse)
+@app.post("/champions/{champion_id}/builds")
 async def builds(request: Request, champion_id: int):
+    """Solves, keeps the run, and shows it (a solve takes seconds to minutes)."""
     account = current.current_account()
     form = await read_form(request)
-
     champion = find_champion(account, champion_id)
-
     locks, rules = current.current_locks(), current.current_reserve_rules()
 
     match parse_request(form, champion, account, locks, rules):
         case FormErrors() as errors:
-            return templates.TemplateResponse(request, "_errors.html", {"errors": errors})
+            return back_with(request, errors)
 
         case solve_request:
             outcome = results.solve(account, solve_request, reservations(account, rules))
 
-    # The new run goes in the history too, swapped in beside the results.
-    context = {
-        "run": runs.record_run(account, form, solve_request, outcome),
-        "history": runs.run_history(champion),
-        "champion_id": champion.id,
-        "history_oob": True,
-    }
-    return templates.TemplateResponse(request, "_run.html", context)
+    kept = runs.record_run(account, form, solve_request, outcome)
+    return inertia.redirect(f"/champions/{champion.id}?run={kept.entry.id}")
 
 
-@app.get("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
-def run(request: Request, champion_id: int, run_id: int):
-    champion = find_champion(current.current_account(), champion_id)
-    context = {"run": find_run(champion, run_id)}
-    return templates.TemplateResponse(request, "_run.html", context)
-
-
-@app.delete("/champions/{champion_id}/runs/{run_id}", response_class=HTMLResponse)
+@app.delete("/champions/{champion_id}/runs/{run_id}")
 def delete_run(request: Request, champion_id: int, run_id: int):
     champion = find_champion(current.current_account(), champion_id)
     runs.forget_run(champion, run_id)
-    context = {"history": runs.run_history(champion), "champion_id": champion.id}
-    return templates.TemplateResponse(request, "_history.html", context)
+    return inertia.back(request)
 
 
 @app.post("/sync", response_class=HTMLResponse)
 def sync(request: Request):
-    """Reads the account; on success the page reloads with it (htmx's HX-Refresh)."""
+    """Reads the account; on success the page reloads with it (htmx's HX-Refresh). The Vue
+    layout asks for JSON and reloads its page's props itself."""
     outcome = reader.sync()
-    context = {"error": outcome.reason if failed(outcome) else None, "done": "Synced"}
+    error = outcome.reason if failed(outcome) else None
+
+    if wants_json(request):
+        return JSONResponse({"error": error})
+
+    context = {"error": error, "done": "Synced"}
     response = templates.TemplateResponse(request, "_equip_result.html", context)
 
     if not failed(outcome):
@@ -543,7 +557,7 @@ async def send_build(
     champion_id: int,
     send: Callable[[Account, Champion, list[int]], Result[None]],
     done: str,
-) -> HTMLResponse:
+) -> Response:
     """The build button's pieces, sent to the game by `send`."""
     account = current.current_account()
     champion = find_champion(account, champion_id)
@@ -556,8 +570,41 @@ async def send_build(
         case artifact_ids:
             outcome = send(account, champion, artifact_ids)
 
-    context = {"error": outcome.reason if failed(outcome) else None, "done": done}
+    error = outcome.reason if failed(outcome) else None
+
+    if wants_json(request):
+        return JSONResponse({"error": error, "done": done})
+
+    context = {"error": error, "done": done}
     return templates.TemplateResponse(request, "_equip_result.html", context)
+
+
+def wants_json(request: Request) -> bool:
+    """A Vue component's own request (not a page visit): it takes the view as JSON."""
+    return request.headers.get("Accept") == "application/json"
+
+
+def view_json(view: object) -> Response:
+    return Response(inertia.to_json(view), media_type="application/json")
+
+
+def finder_query(request: Request) -> FinderQuery:
+    lists = {name: request.query_params.getlist(name) for name in request.query_params}
+    return parse_finder_query(request.query_params, lists)
+
+
+def back_with(request: Request, errors: FormErrors) -> Response:
+    """Back to the form's page, its errors shown there (the layout's alert)."""
+    return inertia.back(request, {"form": "; ".join(errors.messages)})
+
+
+def inertia_page(request: Request, component: str, props: inertia.Props) -> Response:
+    """A Vue page, with what every page gets: the frame's nav and sync age."""
+
+    def frame() -> layout.Layout:
+        return layout.layout_view(request.url.path, optimiser_url(), reader.synced_ago())
+
+    return inertia.respond(request, templates, component, {"layout": frame, **props})
 
 
 async def read_form(request: Request) -> dict[str, str]:
@@ -570,13 +617,6 @@ def find_champion(account: Account, champion_id: int) -> Champion:
         raise HTTPException(404, f"no champion {champion_id}")
 
     return champion
-
-
-def find_run(champion: Champion, run_id: int) -> runs.RunView:
-    if (saved := runs.saved_run(champion, run_id)) is None:
-        raise HTTPException(404, f"no run {run_id} for champion {champion.id}")
-
-    return saved
 
 
 def optimiser_url() -> str:

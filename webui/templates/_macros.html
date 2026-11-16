@@ -185,12 +185,3 @@
     {%- endif %}
   </span>
 {% endmacro %}
-
-{% macro lock_picker(listed) %}
-  <select class="lock small{{ ' is-locked' if listed.lock }}" name="level" aria-label="Lock {{ listed.champion.name }}"
-          title="A locked champion's gear is used only by solves allowing their lock level"
-          hx-post="/champions/{{ listed.champion.id }}/lock" hx-trigger="change" hx-swap="outerHTML">
-    <option value="0">Unlocked</option>
-    {% for level in lock_levels %}<option value="{{ level }}" {% if level == listed.lock %}selected{% endif %}>Lock {{ level }}</option>{% endfor %}
-  </select>
-{% endmacro %}

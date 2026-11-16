@@ -101,20 +101,17 @@ def assumptions_page(account: Account) -> AssumptionsPage:
     )
 
 
-def set_assumption(flag: Flag, on: bool) -> FlagView:
+def set_assumption(flag: Flag, on: bool) -> None:
     set_flag(STORE, flag, on)
-    return flag_view(flag, on)
 
 
-def plan_glyph_for(account: Account, kind: GlyphKind, grade: GlyphGrade | None) -> GlyphRow:
+def plan_glyph_for(kind: GlyphKind, grade: GlyphGrade | None) -> None:
     """None stops assuming the kind."""
     plan_glyph(STORE, kind, grade)
-    return glyph_row(account, kind, grade)
 
 
-def change_reserve_rule(account: Account, rule: Rule, on: bool) -> ReserveSection:
+def change_reserve_rule(rule: Rule, on: bool) -> None:
     set_reserve_rule(STORE, rule, on)
-    return reserve_section(account)
 
 
 def flag_view(flag: Flag, on: bool) -> FlagView:

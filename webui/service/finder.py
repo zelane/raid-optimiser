@@ -20,7 +20,7 @@ from optimiser.paths import STORE
 from optimiser.store import write_lock
 from webui.forms.finder import GRADES, RARITIES, FinderQuery
 from webui.service.champions import game_order
-from webui.service.views import ChampionRow, champion_row, choice_label
+from webui.service.views import ChampionRow, Choice, champion_row, choice_label
 
 FINDER_LIMIT = 200
 
@@ -41,7 +41,7 @@ class FinderView:
     picks: list[ListedChampion]  # the first `FINDER_LIMIT`
     found: int
     rarities: tuple[str, ...]
-    factions: tuple[str, ...]
+    factions: tuple[Choice, ...]  # by display name ("DarkElves"), labelled as the game shows it
     grades: tuple[int, ...]
 
 
@@ -61,7 +61,8 @@ def find_champions(account: Account, locks: Locks, query: FinderQuery) -> Finder
     ]
     matches.sort(key=game_order, reverse=True)
     picks = [listed(c, locks.get(c.id, 0)) for c in matches[:FINDER_LIMIT]]
-    return FinderView(query, picks, len(matches), RARITIES, factions, GRADES)
+    choices = tuple(Choice(name, faction_label(name)) for name in factions)
+    return FinderView(query, picks, len(matches), RARITIES, choices, GRADES)
 
 
 def lock_champion(champion: Champion, level: int) -> ListedChampion:
