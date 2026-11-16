@@ -6,6 +6,7 @@ import { computed, onMounted, ref } from "vue";
 import ChampionCard from "../components/ChampionCard.vue";
 import PageHead from "../components/PageHead.vue";
 import PieceCard from "../components/PieceCard.vue";
+import RemoveChip from "../components/RemoveChip.vue";
 import ScorePill from "../components/ScorePill.vue";
 import StatusIcon from "../components/StatusIcon.vue";
 import Tally from "../components/Tally.vue";
@@ -34,6 +35,22 @@ const SURFACES = [
   ["--surface-container", "Spare."],
   ["--surface-container-high", "Hovered and selected rows."],
 ] as const;
+// Asked-for chips (`RemoveChip`), one of each kind.
+const ICONS = "/static/assets/statuses";
+const CHIPS = [
+  { kind: "debuff", icon: `${ICONS}/IncreaseDamageTaken.png`, label: "Weaken" },
+  { kind: "buff", icon: `${ICONS}/StatusIncreaseAttack.png`, label: "Increase ATK" },
+  { kind: "effect", icon: `${ICONS}/IncreaseStamina.png`, label: "Fill Turn Meter" },
+  { kind: "count", icon: null, label: "3 different debuffs" },
+  { kind: "gear", icon: `${ICONS}/IncreasePoisoning.png`, label: "Toxic set" },
+  {
+    kind: "buff",
+    icon: `${ICONS}/StatusCounterattack.png`,
+    label: "Team: Counterattack",
+    assumed: true,
+  },
+];
+
 const RARITIES = ["common", "uncommon", "rare", "epic", "legendary", "mythical"];
 
 // Each swatch's resolved value, for reading off the page.
@@ -272,6 +289,23 @@ const someone = {
     </section>
 
     <section class="page-section stack" style="--space: var(--space-m)">
+      <h2>Asked-for chips</h2>
+      <div class="cluster" style="--space: var(--space-xs)">
+        <RemoveChip
+          v-for="chip in CHIPS"
+          :key="chip.label"
+          href="#"
+          title="Remove"
+          :kind="chip.kind"
+          :class="{ assumed: chip.assumed }"
+        >
+          <StatusIcon v-if="chip.icon" :url="chip.icon" :label="chip.label" size="small" />
+          <span v-else class="count-mark" aria-hidden="true">#</span>{{ chip.label }}
+        </RemoveChip>
+      </div>
+    </section>
+
+    <section class="page-section stack" style="--space: var(--space-m)">
       <h2>Forms</h2>
       <div class="grid" style="--min: 16rem; --space: var(--space-l); --align: start">
         <article class="panel stack" style="--space: var(--space-m)">
@@ -484,6 +518,11 @@ const someone = {
 </template>
 
 <style scoped>
+.count-mark {
+  font-weight: 700;
+  color: var(--warning);
+}
+
 /* The palette's own scaffolding: swatches, the surface ladder, rarity labels. */
 .swatch {
   overflow: hidden;

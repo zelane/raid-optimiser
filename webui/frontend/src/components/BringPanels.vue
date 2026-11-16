@@ -42,6 +42,11 @@ const gearGroups = computed<PickerGroup[]>(() =>
   })),
 );
 
+// A tag's side ("debuff" of "debuff:Stun"), which colours its chip.
+function side(key: string) {
+  return key.split(":")[0] ?? "";
+}
+
 // A chip's link: the page without what it asks.
 function without(key: string) {
   return props.links.without[key] ?? props.links.current;
@@ -83,30 +88,32 @@ function assume() {
         <h2>
           Also bring <small class="muted">{{ subtitle }}</small>
         </h2>
-        <div class="cluster" style="--space: var(--space-xs)">
-          <RemoveChip
-            v-for="want in team.wanted"
-            :key="want.key"
-            :href="without(want.key)"
-            :title="`Stop asking for ${want.label}`"
-          >
-            <StatusIcon :url="want.icon_url" :label="want.label" size="small" />{{
-              want.label
-            }}</RemoveChip
-          >
-          <RemoveChip
-            v-for="count in team.counts"
-            :key="count.key"
-            :href="without(count.key)"
-            :title="`Stop asking for ${count.label}`"
-          >
-            <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}</RemoveChip
-          >
-          <small v-if="!team.wanted.length && !team.counts.length" class="muted">
-            Nothing extra yet
-          </small>
-        </div>
       </header>
+      <div class="cluster" style="--space: var(--space-xs)">
+        <RemoveChip
+          v-for="want in team.wanted"
+          :key="want.key"
+          :href="without(want.key)"
+          :title="`Stop asking for ${want.label}`"
+          :kind="side(want.key)"
+        >
+          <StatusIcon :url="want.icon_url" :label="want.label" size="small" />{{
+            want.label
+          }}</RemoveChip
+        >
+        <RemoveChip
+          v-for="count in team.counts"
+          :key="count.key"
+          :href="without(count.key)"
+          :title="`Stop asking for ${count.label}`"
+          kind="count"
+        >
+          <span class="count-mark" aria-hidden="true">#</span>{{ count.label }}</RemoveChip
+        >
+        <small v-if="!team.wanted.length && !team.counts.length" class="muted">
+          Nothing extra yet
+        </small>
+      </div>
       <TagPicker
         :groups="wantGroups"
         placeholder="Add a buff, debuff or effect…"
@@ -138,37 +145,39 @@ function assume() {
           Gear, relics &amp; assumptions
           <small class="muted">how the team brings it, besides skills</small>
         </h2>
-        <div class="cluster" style="--space: var(--space-xs)">
-          <RemoveChip
-            v-for="gear in team.gear_on"
-            :key="gear.key"
-            :href="without(gear.key)"
-            :title="`Stop allowing ${gear.name}`"
-          >
-            <StatusIcon
-              v-for="icon in gear.brings.slice(0, 3)"
-              :key="icon.label"
-              :url="icon.url"
-              :label="icon.label"
-              size="small"
-            />{{ gear.name }}</RemoveChip
-          >
-          <RemoveChip
-            v-for="assumed in team.assumed"
-            :key="assumed.key"
-            class="assumed"
-            :href="without(assumed.key)"
-            title="Stop assuming it"
-          >
-            <StatusIcon :url="assumed.icon.url" :label="assumed.icon.label" size="small" />{{
-              assumed.champion ?? "Team"
-            }}: {{ assumed.label }}</RemoveChip
-          >
-          <small v-if="!team.gear_on.length && !team.assumed.length" class="muted">
-            Skills only
-          </small>
-        </div>
       </header>
+      <div class="cluster" style="--space: var(--space-xs)">
+        <RemoveChip
+          v-for="gear in team.gear_on"
+          :key="gear.key"
+          :href="without(gear.key)"
+          :title="`Stop allowing ${gear.name}`"
+          kind="gear"
+        >
+          <StatusIcon
+            v-for="icon in gear.brings.slice(0, 3)"
+            :key="icon.label"
+            :url="icon.url"
+            :label="icon.label"
+            size="small"
+          />{{ gear.name }}</RemoveChip
+        >
+        <RemoveChip
+          v-for="assumed in team.assumed"
+          :key="assumed.key"
+          class="assumed"
+          :href="without(assumed.key)"
+          title="Stop assuming it"
+          :kind="side(assumed.key.split('@').pop() ?? '')"
+        >
+          <StatusIcon :url="assumed.icon.url" :label="assumed.icon.label" size="small" />{{
+            assumed.champion ?? "Team"
+          }}: {{ assumed.label }}</RemoveChip
+        >
+        <small v-if="!team.gear_on.length && !team.assumed.length" class="muted">
+          Skills only
+        </small>
+      </div>
       <TagPicker
         :groups="gearGroups"
         placeholder="Add a set or relic…"
@@ -211,6 +220,6 @@ function assume() {
 <style scoped>
 .count-mark {
   font-weight: 700;
-  color: var(--primary);
+  color: var(--warning);
 }
 </style>
