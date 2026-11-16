@@ -49,27 +49,6 @@
   white-space: nowrap;
 }
 
-.stars {
-  color: var(--rarity-legendary);
-  letter-spacing: -0.1em;
-
-  .off {
-    color: var(--outline-variant);
-  }
-}
-
-.star-yellow {
-  color: var(--rarity-legendary);
-}
-
-.star-purple {
-  color: var(--rarity-epic);
-}
-
-.star-red {
-  color: var(--stat-down);
-}
-
 .planned {
   border-bottom: 1px dashed currentcolor;
   color: var(--stat-up);
@@ -78,7 +57,7 @@
 /* --- Ornament ------------------------------------------------------------------ */
 
 /* Section headings: the wordmark's diamond, then a brass rule fading out. */
-:is(.page-section > h2, main > h2, #cleanup > h2, details.section > summary > h2, .section-title) {
+:is(.page-section > h2, main > h2, details.section > summary > h2, .section-title) {
   display: flex;
   gap: var(--space-s);
   align-items: center;
@@ -594,49 +573,6 @@ fieldset.panel {
     flex: none;
     order: 3;
     margin: 0;
-  }
-}
-
-.page-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-l) var(--space-3xl);
-  align-items: flex-end;
-  justify-content: space-between;
-
-  > div:first-child {
-    flex: 1 1 26rem;
-  }
-
-  h1 {
-    margin: 0 0 var(--space-xs);
-  }
-
-  .lede {
-    margin: 0;
-    font-size: var(--text-s);
-  }
-}
-
-.tally {
-  display: grid;
-  grid-template-columns: auto auto;
-  gap: 0 var(--space-s);
-  align-items: center;
-  padding: var(--space-s) var(--space-l);
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-panel);
-  background: var(--surface-container-low);
-
-  strong {
-    grid-row: span 2;
-    font-size: var(--text-3xl);
-    line-height: 1;
-
-    small {
-      font-size: 0.55em;
-      color: var(--on-surface-variant);
-    }
   }
 }
 

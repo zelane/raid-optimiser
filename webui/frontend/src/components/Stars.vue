@@ -37,4 +37,26 @@ const count = props.count ?? 0;
     margin-right: -0.1em;
   }
 }
+
+/* Stars in the legendary gold, those not earned muted; the game's star colours by kind. */
+.stars {
+  color: var(--rarity-legendary);
+  letter-spacing: -0.1em;
+
+  .off {
+    color: var(--outline-variant);
+  }
+}
+
+.star-yellow {
+  color: var(--rarity-legendary);
+}
+
+.star-purple {
+  color: var(--rarity-epic);
+}
+
+.star-red {
+  color: var(--stat-down);
+}
 </style>
