@@ -9,15 +9,15 @@ the types of a faction's own that its champions' scaling gives (`scaling.seed_ty
 
 So are the set fits (`SetTable`): each set's value (a multiplier on its pieces') and the
 types it doesn't target, which still count, at `SetTable.off_target` of their score. They're
-seeded from the set roles and meta tiers below (`seed_set_fits`); sets the table doesn't know
+seeded from the set roles, needs and meta tiers below (`seed_set_fits`); sets the table doesn't know
 are worth 1 and target every type, and so do new types every set.
 
 - `Kind`, `ChampionType`: a type
 - `TYPE_STATS`, `ACCESSORY_MAINS`, `SUPPORT_BALANCE`: what a type can weigh and suit
 - `TypeKey`, `StandardType`, `SUPPORT_WEIGHTS`, `STANDARD_TYPES`: the standard types, as
   the seed has them
-- `SetRole`, `SET_ROLES`, `DEFAULT_ROLE`, `ROLE_KINDS`, `Tier`, `SET_TIERS`, `NO_SET_FACTOR`:
-  who wears each set and what the meta makes of it, as the seed has them
+- `SetRole`, `SET_ROLES`, `DEFAULT_ROLE`, `ROLE_KINDS`, `SET_NEEDS`, `Tier`, `SET_TIERS`,
+  `NO_SET_FACTOR`: who wears each set and what the meta makes of it, as the seed has them
 - `SetFit`, `SetTable`, `DEFAULT_FIT`, `OFF_TARGET`, `seed_set_fits`: the sets as the user
   rates them
 - `LOW_VALUE_SETS`, `NO_SET`: sets apart
@@ -120,7 +120,7 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.HP_DAMAGE: StandardType(
         "HP damage",
         Kind.DAMAGE,
-        {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3, Stat.DEF: 0.5},
+        {Stat.HP: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3},
         (
             (Slot.RING, (Stat.HP,)),
             (Slot.AMULET, (Stat.CD,)),
@@ -130,7 +130,7 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.DEF_DAMAGE: StandardType(
         "DEF damage",
         Kind.DAMAGE,
-        {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3, Stat.HP: 0.5},
+        {Stat.DEF: 5, Stat.CD: 5, Stat.SPD: 4, Stat.ACC: 3},
         (
             (Slot.RING, (Stat.DEF,)),
             (Slot.AMULET, (Stat.CD,)),
@@ -142,7 +142,7 @@ STANDARD_TYPES: dict[TypeKey, StandardType] = {
     TypeKey.DEBUFFER: StandardType(
         "Bomber / poisoner",
         Kind.DAMAGE,
-        {Stat.ACC: 5, Stat.SPD: 5, Stat.ATK: 4, Stat.HP: 1, Stat.DEF: 1},
+        {Stat.ACC: 5, Stat.SPD: 5, Stat.ATK: 4},
         (
             (Slot.RING, (Stat.ATK,)),
             (Slot.AMULET, (Stat.ATK,)),
@@ -216,10 +216,18 @@ class Tier:
 SET_TIERS = {
     66: Tier(1.3, "the top PvP set"),  # Mercurial
     59: Tier(1.3, "the only real damage set on accessories"),  # Merciless
-    35: Tier(1.3, "an outstanding 9-piece bonus"),  # Swift Parry
+    35: Tier(1.5, "an outstanding 9-piece bonus"),  # Swift Parry
     61: Tier(1.15, "an outstanding 1-piece bonus"),  # Feral
     60: Tier(1.15, "an outstanding 1-piece bonus"),  # Slayer
     62: Tier(1.15, "the best 2-piece speed bonus"),  # Pinpoint
+}
+# A set targets only the types (of its role's kinds) that weigh this stat: the crit sets
+# aren't for bombers, Pinpoint isn't for RES supports (the user's call, 2026-11).
+SET_NEEDS = {
+    35: Stat.CD,  # Swift Parry
+    59: Stat.CD,  # Merciless
+    60: Stat.CD,  # Slayer
+    62: Stat.ACC,  # Pinpoint
 }
 NO_SET_FACTOR = 0.6  # set-less pieces are kept only when very good
 LOW_VALUE_SETS = frozenset({NO_SET, 1002, 1004, 1001, 64, 63})  # one of each is enough
@@ -269,8 +277,8 @@ class SetTable:
 
 
 def seed_set_fits(types: tuple[ChampionType, ...]) -> dict[int, SetFit]:
-    """From the set roles and meta tiers: a set doesn't target the types of a kind its role
-    isn't worn by."""
+    """From the set roles, needs and meta tiers: a set doesn't target the types of a kind
+    its role isn't worn by, nor those that don't weigh what it needs."""
     set_ids = sorted({*SET_ROLES, *SET_TIERS})
     return {set_id: seed_fit(set_id, types) for set_id in set_ids}
 
@@ -279,7 +287,9 @@ def seed_fit(set_id: int, types: tuple[ChampionType, ...]) -> SetFit:
     kinds = ROLE_KINDS[SET_ROLES.get(set_id, DEFAULT_ROLE)]
     tier = SET_TIERS.get(set_id)
     factor = NO_SET_FACTOR if set_id == NO_SET else tier.factor if tier else 1.0
-    return SetFit(factor, frozenset(t.key for t in types if t.kind not in kinds))
+    need = SET_NEEDS.get(set_id)
+    off = (t.key for t in types if t.kind not in kinds or (need and not t.weight(need)))
+    return SetFit(factor, frozenset(off))
 
 
 def crit_amulet_exception(

@@ -154,6 +154,11 @@ frontend-check: frontend-types
     node_modules/.bin/prettier --check --log-level warn "webui/frontend/**/*.{ts,vue}"
     npm run --silent typecheck
 
+# The accessory seeds (champion types, set fits): seed what isn't, and list them; --reset backs
+# the store up and seeds both again, losing the Weights tab's changes
+seed *args:
+    uv run python -m tools.seed "$@"
+
 # Stop the web UI (by port)
 web-stop port=web_port:
     -fuser -k "{{port}}/tcp"

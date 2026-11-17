@@ -10,6 +10,7 @@ optimiser besides the store that touches the file; the model takes what this ret
   the champion types, seeded on first read (`type_record`, `parse_type`)
 - `OFF_TARGET_NAME`, `read_set_table`, `save_set_fit`, `set_off_target`: the set fits,
   seeded on first read (`fit_record`, `parse_fit`)
+- `reseed_accessories`: both seeded again, from scratch
 - `read_reserve_rules`, `set_reserve_rule`: what reserves gear
 """
 
@@ -39,6 +40,7 @@ from optimiser.store import (
     read_old_weights,
     read_set_fits,
     read_types,
+    unseed,
     write_flag,
     write_glyph,
     write_number,
@@ -177,6 +179,14 @@ def parse_fit(record: dict) -> SetFit | None:
         return None
 
     return SetFit(float(factor), frozenset(str(key) for key in record.get("off", ())))
+
+
+def reseed_accessories(store: Path, account: Account) -> tuple[tuple[ChampionType, ...], SetTable]:
+    """Forgets the user's champion types and set fits (the off-target share stays) and seeds
+    both again, from the code's seeds and `account`'s roster."""
+    unseed(store)
+    types = read_champion_types(store, account)
+    return types, read_set_table(store, types)
 
 
 def read_reserve_rules(store: Path) -> tuple[Rule, ...]:

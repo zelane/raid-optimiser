@@ -280,8 +280,9 @@ the game itself.
     stat is what makes a piece glyphable. Each type's score is weighed by its set fit.
   - `assess.py`: each piece's value: max(+16, rework) potential × shortage factor (good
     pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's value (the set fits;
-    seeded from `roles.SET_TIERS`: Mercurial, Merciless, Swift Parry 1.3; Feral, Slayer, Pinpoint
-    1.15; set-less 0.6).
+    seeded from `roles.SET_TIERS`: Swift Parry 1.5; Mercurial, Merciless 1.3; Feral, Slayer,
+    Pinpoint 1.15; set-less 0.6; `SET_NEEDS`: the crit sets only target types weighing C.DMG,
+    Pinpoint those weighing ACC).
   - `cleanup.py`: inventory + mailbox planned together; the lowest values go until
     `target_free` spaces are left (sold, or left unclaimed). Special variants
     (`VariantId` "Corrupted": unusual stats, a border) are left alone everywhere. Never dropped: protected pieces, reserved pieces (swaps may still move them),
@@ -424,6 +425,7 @@ just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs fro
 just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)
 just frontend-build   # prop types + Vite build into webui/static/dist (part of update)
 just assets           # portraits and icons from the game's bundles (part of update)
+just seed [--reset]   # list the accessory seeds (types, set fits); --reset backs up the store, reseeds both
 just check            # black + ruff over all Python, the house style checker, stylelint, then Prettier + vue-tsc over the front end
 just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css
 uv run --group dev pytest   # tests/ (not part of just check)

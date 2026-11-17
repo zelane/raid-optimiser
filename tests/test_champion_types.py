@@ -6,6 +6,7 @@ seeded once, edits kept, the old per-stat weights taken over.
 - `test_seeds_only_once`: deleting every type doesn't bring them back
 - `test_edits_round_trip`: a saved type reads back as saved, a new one is added
 - `test_old_weights_carry_into_the_seed`: `type_weights` rows go over the defaults, then go
+- `test_reseed_starts_over`: a reset brings the seed back, set fits with it, edits gone
 """
 
 import sqlite3
@@ -20,8 +21,13 @@ from optimiser.settings import (
     add_champion_type,
     delete_champion_type,
     read_champion_types,
+    read_set_table,
+    reseed_accessories,
     save_champion_type,
+    save_set_fit,
+    set_off_target,
 )
+from optimiser.store import backup
 
 NO_ROSTER = cast(Account, SimpleNamespace(champions={}))  # no 6★ champions: standard types only
 
@@ -79,3 +85,21 @@ def test_old_weights_carry_into_the_seed(tmp_path: Path):
         tables = {name for (name,) in db.execute("SELECT name FROM sqlite_master")}
 
     assert "type_weights" not in tables
+
+
+def test_reseed_starts_over(tmp_path: Path):
+    store = tmp_path / "store.sqlite"
+    seeded = read_champion_types(store, NO_ROSTER)
+    sets = read_set_table(store, seeded)
+    delete_champion_type(store, seeded[0].key)
+    set_id, fit = sets.fits[0]
+    save_set_fit(store, set_id, replace(fit, factor=9.0))
+    set_off_target(store, 0.25)
+    backup(store, tmp_path / "copy.sqlite")
+
+    types, table = reseed_accessories(store, NO_ROSTER)
+
+    assert [t.label for t in types] == [t.label for t in seeded]
+    assert table.factor(set_id) == fit.factor and table.off_target == 0.25
+    assert set().union(*(f.off for _, f in table.fits)) <= {t.key for t in types}
+    assert len(read_champion_types(tmp_path / "copy.sqlite", NO_ROSTER)) == len(seeded) - 1

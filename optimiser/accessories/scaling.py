@@ -127,44 +127,40 @@ KUROSA = Weigh(
     mains=(
         (Slot.RING, (Stat.ATK,)),
         (Slot.AMULET, (Stat.ATK,)),
-        (Slot.BANNER, (Stat.ACC, Stat.ATK)),
+        (Slot.BANNER, (Stat.ATK,)),
     ),
     reason="heals and shields off ATK and needs ACC for her debuffs; HP, DEF and RES do"
     " nothing for her (the user's call)",
 )
 
-JOAN_MAINS: Mains = (
-    (Slot.RING, (Stat.ATK,)),
-    (Slot.AMULET, (Stat.CD, Stat.ATK)),
-    (Slot.BANNER, (Stat.RES, Stat.ATK)),
-)
-JOAN_REASON = (
-    "always wants RES (her hits add a little RES, and a high-RES support or damage dealer is"
-    " strong in arena: stacking it costs her nothing; the user's call)"
-)
-JOAN_SUPPORT = Weigh(
-    label="ATK+RES support",
-    kind=Kind.SUPPORT,
-    weights={Stat.SPD: 5, Stat.ATK: 4, Stat.RES: 4, Stat.CD: 3},
-    mains=JOAN_MAINS,
-    reason=JOAN_REASON,
-)
 JOAN_DAMAGE = Weigh(
     label="ATK+RES damage",
     kind=Kind.DAMAGE,
     weights={Stat.ATK: 5, Stat.CD: 5, Stat.SPD: 4, Stat.RES: 4, Stat.ACC: 2},
-    mains=JOAN_MAINS,
-    reason=JOAN_REASON,
+    mains=(
+        (Slot.RING, (Stat.ATK,)),
+        (Slot.AMULET, (Stat.CD,)),
+        (Slot.BANNER, (Stat.RES,)),
+    ),
+    reason="always wants RES (her hits add a little RES, and a high-RES damage dealer is"
+    " strong in arena: stacking it costs her nothing; the user's call)",
 )
+STANDARD = Skip("the standard types cover them well enough (the user's call)")
 
 OVERRIDES: dict[tuple[str, int], Override] = {
     ("Gharol Bloodmaul", 1): GHAROL,
     ("Gharol Bloodmaul", 2): GHAROL,
-    ("Joan the Luminant", 1): JOAN_SUPPORT,
+    ("Joan the Luminant", 1): Skip("geared for form 2 (ATK+RES damage; the user's call)"),
     ("Joan the Luminant", 2): JOAN_DAMAGE,
     ("Kurosa the Covetous", 1): KUROSA,
     ("Nais the Shadowthief", 1): Skip("geared for form 2 (HP); form 1's HP+ATK mix doesn't count"),
     ("Toshiro the Bloody", 2): Skip("geared for form 1 (ATK+HP); form 2 is standard HP anyway"),
+    ("Sentinel", 1): STANDARD,
+    ("Valkyrie", 1): STANDARD,
+    ("Pain Keeper", 1): STANDARD,
+    ("Fellhound", 1): STANDARD,
+    ("Mortu-Macaab", 1): STANDARD,
+    ("Husk", 1): STANDARD,
 }
 
 
@@ -192,8 +188,10 @@ def seed_types(
 
 
 def faction_types(account: Account) -> tuple[ChampionType, ...]:
-    """Types of a faction's own, from its 6★ champions' forms; forms alike share one."""
+    """Types of a faction's own, from its 6★ champions' forms; forms alike share one. A type
+    made from one champion (in any of its forms) is named after them, else by its stats."""
     by_key: dict[str, ChampionType] = {}
+    names: dict[str, set[str]] = {}
 
     for wearer in wearers(account):
         if (own := wearer_type(wearer, account)) is None:
@@ -203,8 +201,12 @@ def faction_types(account: Account) -> tuple[ChampionType, ...]:
             own = replace(known, champions=(*known.champions, *own.champions))
 
         by_key[own.key] = own
+        names.setdefault(own.key, set()).add(wearer.champion.name)
 
-    return tuple(by_key.values())
+    return tuple(
+        replace(it, label=next(iter(names[key]))) if len(names[key]) == 1 else it
+        for key, it in by_key.items()
+    )
 
 
 def wearers(account: Account) -> list[Wearer]:
@@ -357,7 +359,7 @@ def damage_type(wearer: Wearer, pull: dict[Stat, float]) -> ChampionType | None:
     if len(body) <= 1 and not other:
         return None
 
-    weights = {Stat.CD: 5.0, Stat.SPD: 4.0, Stat.ACC: 1.0}
+    weights = {Stat.CD: 5.0, Stat.SPD: 4.0, Stat.ACC: 3.0}  # as the standard damage types
     weights |= {s: round_weight(5 * share) for s, share in pull.items() if share >= MINOR}
     suiting = tuple(s for s in BODY if pull.get(s, 0) >= MIXED * 1.5) or tuple(body)
     mains = (

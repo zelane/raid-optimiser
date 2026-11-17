@@ -36,6 +36,8 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `CHAMPION_TYPES`, `read_types`, `seed_types`, `add_type`, `write_type`, `delete_type`:
   champion types; `WeightKey`, `read_old_weights`: what the seed takes over
 - `SET_FITS`, `read_set_fits`, `seed_set_fits`, `write_set_fit`: set fits
+- `unseed`: forgets the champion types and set fits, so they're seeded again
+- `backup`: a copy of the whole file
 - `read_reserve_rules`, `write_reserve_rule`: reserve rules
 - `read_protected`, `write_protected`: protected accessories
 - `read_number`, `write_number`: numeric settings
@@ -46,7 +48,7 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 import json
 import sqlite3
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -260,6 +262,21 @@ def write_set_fit(path: Path, set_id: int, record: dict) -> None:
             " ON CONFLICT (set_id) DO UPDATE SET record = excluded.record",
             (set_id, json.dumps(record)),
         )
+
+
+def unseed(path: Path) -> None:
+    """Drops every champion type and set fit and forgets they were seeded: the next read
+    seeds them again. Together, since set fits name types by id."""
+    with connect(path) as db:
+        db.execute("DELETE FROM champion_types")
+        db.execute("DELETE FROM set_fits")
+        db.execute("DELETE FROM seeded WHERE name IN (?, ?)", (CHAMPION_TYPES, SET_FITS))
+
+
+def backup(path: Path, to: Path) -> None:
+    """A consistent copy, even with the web server writing."""
+    with connect(path) as db, closing(sqlite3.connect(to)) as copy:
+        db.backup(copy)
 
 
 def read_old_weights(path: Path) -> dict[WeightKey, float]:
