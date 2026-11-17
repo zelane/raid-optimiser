@@ -107,6 +107,14 @@ const starsTitle = computed(() => {
   border: 3px solid black;
 }
 
+.tile-frame::before {
+  content: '';
+  position: absolute;
+  background: transparent;
+  inset: 0;
+  box-shadow: inset 0 0 20px 5px black;
+}
+
 .tile-missing {
   display: grid;
   place-items: center;
