@@ -1,23 +1,25 @@
 """
 accessories.py - the accessories pages: swaps, the roll and rework lists, the clean-up, and
-the champion types and set fits. Scoring every accessory's potential is the slow part, so
-the potentials are cached per snapshot, types and set fits (not locks), and kept on disk per
-piece (`scores`).
+the champion types, set fits and rules. Scoring every accessory's potential is the slow
+part, so the potentials are cached per snapshot, types and set fits (not locks, nor rules:
+scoring doesn't read them), and kept on disk per piece (`scores`).
 
 - `WeightCell`, `MainOption`, `MainsCell`, `TypeRow`, `SetColumn`, `TargetRow`,
-  `TargetGroup`, `SetGrid`, `WeightTable`,
+  `TargetGroup`, `SetGrid`, `RuleField`, `RuleRow`, `WeightTable`,
   `AccessoryRow`,
   `DropRow`, `CandidateRow`, `SwapRow`, `SwapGroup`, `SetSummary`, `CleanupView`,
   `EnhanceView`, `AccessoriesPage`, `RowContext`: the views
-- `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`, `TARGET_LABELS`: their shape
+- `ACCESSORY_TABS`, `ENHANCE_SHOWN`, `TARGET_FREE`, `TARGET_LABELS`, `KEEP_LABELS`: their
+  shape
 - `accessories_page`, `set_target_free`, `protect_accessory`,
   `save_type`, `add_type`, `copy_type`, `delete_type`, `save_set_value`, `save_set_target`,
-  `save_off_target`,
+  `save_set_rule`, `save_off_target`, `save_rule`,
   `pieces_to_sell`: what the pages ask for
-- `current_types`, `current_sets`, `current_assessment` (`potentials_for`, cached),
+- `current_types`, `current_sets`, `current_rules`, `current_assessment` (`potentials_for`,
+  cached),
   `current_plan`, `current_target_free`: the state they're made from
-- `cleanup_view`, `enhance_view`, `weight_table` (`set_grid`, `listed_sets`), `set_summaries`,
-  `targets_label`,
+- `cleanup_view`, `keep_label`, `enhance_view`, `weight_table` (`set_grid`, `listed_sets`,
+  `rule_rows`, `rule_field`), `set_summaries`, `targets_label`,
   `swap_groups`, `swap_row`, `drop_row`, `row_context`, `accessory_row`, `type_labels`,
   `find_type`, `type_factions`, `ordinal`: what they share
 """
@@ -27,7 +29,14 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 
 from optimiser.accessories.assess import Assessed, Assessment, assess_accessories, potentials_of
-from optimiser.accessories.cleanup import DEFAULT_TARGET_FREE, Placed, Plan, Swap, plan_cleanup
+from optimiser.accessories.cleanup import (
+    DEFAULT_TARGET_FREE,
+    Keep,
+    Placed,
+    Plan,
+    Swap,
+    plan_cleanup,
+)
 from optimiser.accessories.enhance import Candidate, finish_list, rework_list, roll_list
 from optimiser.accessories.potential import ACCESSORIES, Piece, Potential, Scorer, make_scorer
 from optimiser.accessories.roles import (
@@ -37,6 +46,7 @@ from optimiser.accessories.roles import (
     Kind,
     SetTable,
 )
+from optimiser.accessories.rules import SET_RULE_BOUNDS, Rules, rule_bounds
 from optimiser.account import Account, Champion, faction_label
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import POTENTIALS, STORE
@@ -45,11 +55,13 @@ from optimiser.settings import (
     add_champion_type,
     delete_champion_type,
     read_champion_types,
+    read_rules,
     read_set_table,
     save_champion_type,
-    save_set_fit,
+    save_set,
     set_off_target,
 )
+from optimiser.settings import save_rule as store_rule
 from optimiser.store import read_number, read_protected, write_number, write_protected
 from webui.forms.settings import TypeEdit
 from webui.service.current import (
@@ -104,9 +116,13 @@ class TypeRow:
 
 @dataclass(frozen=True)
 class SetColumn:
+    """A set, its value and its own rules (`rules.SetRules`)."""
+
     set_id: int
     set_name: str
     factor: float
+    keep: int
+    res_speed: int
 
 
 @dataclass(frozen=True)
@@ -132,17 +148,43 @@ class SetGrid:
     columns: list[SetColumn]
     groups: list[TargetGroup]
     off_target: float
+    keep_high: int  # the most a set's `keep` and `res_speed` may be
+    res_speed_high: int
+
+
+@dataclass(frozen=True)
+class RuleField:
+    """A rule's number or switch (`low` and `high` None), posted as `rule` (its name) and
+    `value` (1 or 0 for a switch)."""
+
+    name: str
+    label: str
+    value: float
+    low: float | None = None
+    high: float | None = None
+    step: float = 1
+
+
+@dataclass(frozen=True)
+class RuleRow:
+    """A rule: its switch, if it can be switched off, and its numbers."""
+
+    label: str
+    note: str
+    switch: RuleField | None
+    numbers: list[RuleField]
 
 
 @dataclass(frozen=True)
 class WeightTable:
-    """The champion types and the set fits, editable."""
+    """The champion types, the set fits and the rules, editable."""
 
     stats: list[str]  # the columns' labels
     rows: list[TypeRow]
     kinds: list[Choice]
     factions: list[Choice]  # those a type may be for, by display name
     sets: SetGrid
+    rules: list[RuleRow]
 
 
 @dataclass(frozen=True)
@@ -237,6 +279,7 @@ class EnhanceView:
 @dataclass(frozen=True)
 class AccessoriesPage:
     tab: str  # one of `ACCESSORY_TABS`
+    swap_margin: str  # how much better a loose piece must be to swap: "10%"
     swaps: list[SwapGroup]
     cleanup: CleanupView
     enhance: EnhanceView
@@ -260,6 +303,7 @@ TARGET_LABELS = {  # what a set targets, by its types' kinds
     frozenset({Kind.DAMAGE}): "Damage",
     frozenset({Kind.SUPPORT}): "Support",
 }
+KEEP_LABELS = {Keep.SPEED: "SPD rolled {rolls}+"}  # those that say a rule's number
 
 
 def accessories_page(account: Account, tab: str) -> AccessoriesPage:
@@ -267,8 +311,9 @@ def accessories_page(account: Account, tab: str) -> AccessoriesPage:
     plan = current_plan(account, assessment)
     return AccessoriesPage(
         tab=tab,
+        swap_margin=f"{assessment.rules.swap_margin - 1:.0%}",
         swaps=swap_groups(account, plan),
-        cleanup=cleanup_view(account, plan),
+        cleanup=cleanup_view(account, plan, assessment.rules),
         enhance=enhance_view(account, assessment, plan),
         weights=weight_table(account),
     )
@@ -312,29 +357,41 @@ def copy_type(account: Account, key: str) -> None:
     if (known := find_type(account, key)) is None:
         return
 
-    sets = current_sets(account)
+    sets, rules = current_sets(account), current_rules(account)
     copy = str(
         add_champion_type(STORE, replace(known, label=f"{known.label} (copy)", champions=()))
     )
 
     for set_id, fit in sets.fits:
         if key in fit.off:
-            save_set_fit(STORE, set_id, replace(fit, off=fit.off | {copy}))
+            save_set(STORE, set_id, replace(fit, off=fit.off | {copy}), rules.set_rules(set_id))
 
 
 def save_set_value(account: Account, set_id: int, factor: float) -> None:
     fit = current_sets(account).fit(set_id)
-    save_set_fit(STORE, set_id, replace(fit, factor=factor))
+    save_set(STORE, set_id, replace(fit, factor=factor), current_rules(account).set_rules(set_id))
 
 
 def save_set_target(account: Account, set_id: int, type_key: str, on: bool) -> None:
     fit = current_sets(account).fit(set_id)
     off = fit.off - {type_key} if on else fit.off | {type_key}
-    save_set_fit(STORE, set_id, replace(fit, off=off))
+    save_set(STORE, set_id, replace(fit, off=off), current_rules(account).set_rules(set_id))
+
+
+def save_set_rule(account: Account, set_id: int, name: str, value: int) -> None:
+    """`name`: a `SetRules` field's."""
+    rules = current_rules(account).set_rules(set_id)
+    fit = current_sets(account).fit(set_id)
+    save_set(STORE, set_id, fit, replace(rules, **{name: value}))
 
 
 def save_off_target(share: float) -> None:
     set_off_target(STORE, share)
+
+
+def save_rule(name: str, value: float) -> None:
+    """`name`: a `Rules` field's."""
+    store_rule(STORE, name, value)
 
 
 def delete_type(key: str) -> None:
@@ -362,7 +419,7 @@ def current_assessment(account: Account) -> Assessment:
     cheaply, so only the potentials are cached."""
     types = current_types(account)
     scorer, potentials = potentials_for(snapshot_mtime(), types, current_sets(account))
-    return assess_accessories(account, potentials, current_locks(), scorer)
+    return assess_accessories(account, potentials, current_locks(), scorer, current_rules(account))
 
 
 def current_types(account: Account) -> tuple[ChampionType, ...]:
@@ -373,6 +430,12 @@ def current_types(account: Account) -> tuple[ChampionType, ...]:
 def current_sets(account: Account) -> SetTable:
     """Seeded from the set roles and tiers, against the types, the first time."""
     return read_set_table(STORE, current_types(account))
+
+
+def current_rules(account: Account) -> Rules:
+    """Each set's seeded, against the types and set fits, the first time."""
+    types = current_types(account)
+    return read_rules(STORE, types, read_set_table(STORE, types))
 
 
 @lru_cache(maxsize=4)
@@ -403,9 +466,9 @@ def current_target_free() -> int:
     return DEFAULT_TARGET_FREE if stored is None else int(stored)
 
 
-def cleanup_view(account: Account, plan: Plan) -> CleanupView:
+def cleanup_view(account: Account, plan: Plan, rules: Rules) -> CleanupView:
     context = row_context(account)
-    reasons = Counter(reason.value for placed in plan.kept for reason in placed.keep)
+    reasons = Counter(keep_label(reason, rules) for placed in plan.kept for reason in placed.keep)
 
     return CleanupView(
         space=plan.space,
@@ -424,6 +487,10 @@ def cleanup_view(account: Account, plan: Plan) -> CleanupView:
         swaps=len(plan.swaps),
         sold_after_swaps=plan.sold_after_swaps(),
     )
+
+
+def keep_label(reason: Keep, rules: Rules) -> str:
+    return KEEP_LABELS.get(reason, reason.value).format(rolls=rules.speed_rolls)
 
 
 def enhance_view(account: Account, assessment: Assessment, plan: Plan) -> EnhanceView:
@@ -449,7 +516,7 @@ def enhance_view(account: Account, assessment: Assessment, plan: Plan) -> Enhanc
 
 
 def weight_table(account: Account) -> WeightTable:
-    types, sets = current_types(account), current_sets(account)
+    types, sets, rules = current_types(account), current_sets(account), current_rules(account)
 
     def type_row(champion_type: ChampionType) -> TypeRow:
         suits = dict(champion_type.mains)
@@ -491,17 +558,23 @@ def weight_table(account: Account) -> WeightTable:
             (Choice(faction, faction_label(faction)) for faction in type_factions(account)),
             key=lambda choice: choice.label,
         ),
-        sets=set_grid(account, types, sets),
+        sets=set_grid(account, types, sets, rules),
+        rules=rule_rows(rules),
     )
 
 
-def set_grid(account: Account, types: tuple[ChampionType, ...], sets: SetTable) -> SetGrid:
+def set_grid(
+    account: Account, types: tuple[ChampionType, ...], sets: SetTable, rules: Rules
+) -> SetGrid:
     """Types in the type table's order: any faction's first."""
+
+    def column(set_id: int) -> SetColumn:
+        own = rules.set_rules(set_id)
+        name = set_name(account, set_id)
+        return SetColumn(set_id, name, sets.factor(set_id), own.keep, own.res_speed)
+
     columns = sorted(
-        (
-            SetColumn(set_id, set_name(account, set_id), sets.factor(set_id))
-            for set_id in listed_sets(account, sets)
-        ),
+        (column(set_id) for set_id in listed_sets(account, sets)),
         key=lambda column: (-column.factor, column.set_name),
     )
     ordered = sorted(types, key=lambda t: t.faction or "")
@@ -518,7 +591,100 @@ def set_grid(account: Account, types: tuple[ChampionType, ...], sets: SetTable) 
         TargetGroup(kind.value.capitalize(), [row(t) for t in ordered if t.kind is kind])
         for kind in Kind
     ]
-    return SetGrid(columns, groups, sets.off_target)
+    return SetGrid(
+        columns,
+        groups,
+        sets.off_target,
+        int(SET_RULE_BOUNDS["keep"].high),
+        int(SET_RULE_BOUNDS["res_speed"].high),
+    )
+
+
+def rule_rows(rules: Rules) -> list[RuleRow]:
+    """The rules not of a set, as the Weights tab lists them; each set's are in the set grid."""
+
+    def field(name: str, label: str = "") -> RuleField:
+        return rule_field(rules, name, label)
+
+    return [
+        RuleRow(
+            "SPD banners",
+            "A banner whose SPD has rolled this often (the first roll included) is kept.",
+            field("keep_speed"),
+            [field("speed_rolls", "rolls")],
+        ),
+        RuleRow(
+            "RES/SPD banners",
+            "Each set's best RES banners with SPD are kept, as many as its RES/SPD row says.",
+            field("keep_res_speed"),
+            [],
+        ),
+        RuleRow(
+            "Good potential",
+            "A piece in its slot's top share by potential (its set's value counted) is good: "
+            "kept, listed to +16, and counted for its shelf's shortage.",
+            field("keep_potential"),
+            [field("good_share", "top share")],
+        ),
+        RuleRow(
+            "Faction Wars",
+            "Each faction's best pieces of each slot, for supports and for damage, worn ones "
+            "counting.",
+            field("keep_faction_wars"),
+            [field("faction_wars_support", "support"), field("faction_wars_damage", "damage")],
+        ),
+        RuleRow(
+            "Could rework to C.DMG",
+            "Amulets of a damage-only set not yet reworked, of this rank and up.",
+            field("keep_crit_rework"),
+            [field("crit_rework_rank", "rank")],
+        ),
+        RuleRow(
+            "C.DMG amulets of other sets",
+            "A set for no damage type keeps this many C.DMG amulets of each group, in place "
+            "of its own keep.",
+            None,
+            [field("crit_amulet_keep", "keep")],
+        ),
+        RuleRow(
+            "Shortage",
+            "Each piece's value, by the good pieces of its set, faction and slot, worn or not.",
+            None,
+            [
+                field("scarcity_none", "none ×"),
+                field("scarcity_one", "1 ×"),
+                field("scarcity_two", "2 ×"),
+                field("scarcity_plenty", "3+ ×"),
+            ],
+        ),
+        RuleRow(
+            "Surplus",
+            "Pieces past their group's keep go first, as if worth this share of their value.",
+            None,
+            [field("surplus_factor", "×")],
+        ),
+        RuleRow(
+            "Swaps",
+            "A loose piece replaces a worn one when it scores this many times as much now.",
+            None,
+            [field("swap_margin", "×")],
+        ),
+        RuleRow(
+            "Reworks",
+            "A rework is listed when it scores this many times what the piece would at +16.",
+            None,
+            [field("rework_margin", "×")],
+        ),
+    ]
+
+
+def rule_field(rules: Rules, name: str, label: str) -> RuleField:
+    value = getattr(rules, name)
+
+    if (bounds := rule_bounds()[name]) is None:
+        return RuleField(name, label, float(value))
+
+    return RuleField(name, label, value, bounds.low, bounds.high, 1 if bounds.whole else 0.05)
 
 
 def listed_sets(account: Account, sets: SetTable) -> set[int]:

@@ -40,7 +40,7 @@ found, both JSON the front end writes and reads (opaque here), with a summary fo
 - `backup`: a copy of the whole file
 - `read_reserve_rules`, `write_reserve_rule`: reserve rules
 - `read_protected`, `write_protected`: protected accessories
-- `read_number`, `write_number`: numeric settings
+- `read_number`, `read_numbers`, `write_number`: numeric settings
 - `save_run`, `list_runs`, `read_run`, `latest_run`, `latest_champion`, `delete_run`: runs
 - `write_member`, `connect`, `run_from_row`: what they share
 """
@@ -335,6 +335,17 @@ def read_number(path: Path, name: str) -> float | None:
         row = db.execute("SELECT value FROM numbers WHERE name = ?", (name,)).fetchone()
 
     return row[0] if row else None
+
+
+def read_numbers(path: Path, prefix: str) -> dict[str, float]:
+    """Those whose names start with `prefix`, by the rest of their name."""
+    if not path.exists():
+        return {}
+
+    with connect(path) as db:
+        rows = db.execute("SELECT name, value FROM numbers").fetchall()
+
+    return {name.removeprefix(prefix): value for name, value in rows if name.startswith(prefix)}
 
 
 def write_number(path: Path, name: str, value: float) -> None:

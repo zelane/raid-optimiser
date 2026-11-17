@@ -13,7 +13,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
   piece count
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
-- `HeroForm`, `HeroType`, `LoreOfSteel`, `EmpowerSubstitute`, `Tables`: the game's fixed tables
+- `HeroForm`, `HeroType`, `LoreOfSteel`, `MasteryType`, `EmpowerSubstitute`, `Tables`: the game's
+  fixed tables
 - `Relic`: a relic the account has
 - `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
   the Chimera's current raid, and progress on a stage
@@ -152,6 +153,9 @@ class Champion:
     relics: tuple[Bonus, ...]  # the stats of the relics it wears
     great_hall: tuple[Bonus, ...]  # the account's Great Hall, for the champion's affinity
     skill_levels: dict[int, int]  # skill id -> level (1 + books used)
+    # Unspent mastery scrolls: the game's `MasteryPointType` (Bronze, Silver, Gold: Basic,
+    # Advanced, Divine) -> how many; empty in snapshots from before the reader read them.
+    scrolls: Mapping[str, int] = field(default_factory=dict)
     marker: str = "None"  # its tag in game (`HeroMarker`: Favorite, ArenaFirst, …), at most one
     # Which of its forms (`Tables.hero_forms`) it's taken in, 0 first: mythicals have two, and
     # each has its own base stats and skills. A playable form never changes affinity, so the
@@ -369,6 +373,15 @@ class HeroType:
 
 
 @dataclass(frozen=True)
+class MasteryType:
+    """A mastery's place in its tree, 1 (the top) to 6 (Helmsmasher's), and its price in scrolls:
+    the game's `MasteryPointType` (Bronze, Silver, Gold) -> how many."""
+
+    row: int
+    price: Mapping[str, int]
+
+
+@dataclass(frozen=True)
 class LoreOfSteel:
     """The mastery that scales artifact set stat bonuses."""
 
@@ -396,6 +409,7 @@ class Tables:
     empower_substitutes: dict[int, EmpowerSubstitute]
     awakening: dict[str, list[tuple[Bonus, ...]]]
     masteries: dict[int, Bonus]
+    mastery_types: dict[int, MasteryType]
     lore_of_steel: LoreOfSteel
     sets: dict[int, ArtifactSet]
     skills: dict[int, Skill]
@@ -649,6 +663,7 @@ def parse_champion(
         awakening=raw["awakened_grade"],
         empower=raw["empower"],
         masteries=frozenset(raw["masteries"]),
+        scrolls={kind: count for kind, count in raw.get("scrolls", {}).items() if count},
         artifact_ids=tuple(artifact_ids),
         relics=relics,
         great_hall=great_hall.get(kind.element, ()),
@@ -819,6 +834,10 @@ def parse_tables(static: Path, schema: Path, league: str) -> Tables:
             int(mastery_id): bonus
             for mastery_id, m in bonuses["masteries"].items()
             if "stat" in m and (bonus := parse_bonus(m["stat"], m["value"], m["absolute"]))
+        },
+        mastery_types={
+            int(mastery_id): MasteryType(m["row"], m["price"])
+            for mastery_id, m in bonuses["mastery_types"].items()
         },
         lore_of_steel=LoreOfSteel(*lore),
         sets=parse_sets(static, {name: int(number) for number, name in set_kinds.items()}),

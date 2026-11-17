@@ -1,19 +1,24 @@
 """
 settings.py - what the user has set, read from the store as the model's types and written
-back by the store's names: the assumptions solves make (flags and glyphs), the champion types
-and set fits accessories are valued by, and the rules that reserve gear. The only part of the
-optimiser besides the store that touches the file; the model takes what this returns.
+back by the store's names: the assumptions solves make (flags and glyphs), the champion types,
+set fits and rules accessories are valued and kept by, and the rules that reserve gear. The
+only part of the optimiser besides the store that touches the file; the model takes what this
+returns.
 
 - `read_assumptions`, `set_flag`: what solves assume
 - `read_planned`, `plan_glyph`: the glyphs assumed on gear
 - `read_champion_types`, `add_champion_type`, `save_champion_type`, `delete_champion_type`:
   the champion types, seeded on first read (`type_record`, `parse_type`)
-- `OFF_TARGET_NAME`, `read_set_table`, `save_set_fit`, `set_off_target`: the set fits,
+- `OFF_TARGET_NAME`, `read_set_table`, `save_set`, `set_off_target`: the set fits,
   seeded on first read (`fit_record`, `parse_fit`)
+- `RULE_PREFIX`, `read_rules`, `save_rule`: the accessory rules; each set's are kept in its
+  set fit's record, filled in from the seed where missing (`set_rules_record`,
+  `parse_set_rules`)
 - `reseed_accessories`: both seeded again, from scratch
 - `read_reserve_rules`, `set_reserve_rule`: what reserves gear
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 from optimiser.accessories.roles import (
@@ -26,6 +31,7 @@ from optimiser.accessories.roles import (
     TypeKey,
     seed_set_fits,
 )
+from optimiser.accessories.rules import DEFAULT_RULES, Rules, SetRules, seed_set_rules
 from optimiser.accessories.scaling import seed_types
 from optimiser.account import Account, GlyphGrade, GlyphKind, Slot, Stat, Tables
 from optimiser.assume import Assumptions, Flag
@@ -37,6 +43,7 @@ from optimiser.store import (
     read_flags,
     read_glyphs,
     read_number,
+    read_numbers,
     read_old_weights,
     read_set_fits,
     read_types,
@@ -53,6 +60,7 @@ from optimiser.store import seed_set_fits as seed_fits_store
 from optimiser.store import seed_types as seed_store
 
 OFF_TARGET_NAME = "off_target"  # the store's number for `SetTable.off_target`
+RULE_PREFIX = "accessory_rule:"  # the store's numbers for `Rules`, by field name
 
 
 def read_assumptions(store: Path, account: Account) -> Assumptions:
@@ -160,8 +168,8 @@ def read_set_table(store: Path, types: tuple[ChampionType, ...]) -> SetTable:
     return SetTable(fits, OFF_TARGET if stored is None else stored)
 
 
-def save_set_fit(store: Path, set_id: int, fit: SetFit) -> None:
-    write_set_fit(store, set_id, fit_record(fit))
+def save_set(store: Path, set_id: int, fit: SetFit, rules: SetRules) -> None:
+    write_set_fit(store, set_id, fit_record(fit) | set_rules_record(rules))
 
 
 def set_off_target(store: Path, share: float) -> None:
@@ -179,6 +187,47 @@ def parse_fit(record: dict) -> SetFit | None:
         return None
 
     return SetFit(float(factor), frozenset(str(key) for key in record.get("off", ())))
+
+
+def read_rules(store: Path, types: tuple[ChampionType, ...], sets: SetTable) -> Rules:
+    """The code's defaults where the user hasn't set one (a switch is stored as 0 or 1).
+    Set records without rules of their own get the seed's, against `types` and `sets`, and
+    keep them."""
+    stored = read_numbers(store, RULE_PREFIX)
+    numbers = {
+        name: type(default)(value)
+        for name, value in stored.items()
+        if name != "sets" and isinstance(default := getattr(DEFAULT_RULES, name, None), int | float)
+    }
+    records = read_set_fits(store) or {}
+    by_set = []
+
+    for set_id, record in records.items():
+        if (rules := parse_set_rules(record)) is None:
+            rules = seed_set_rules(set_id, sets, types)
+            write_set_fit(store, set_id, record | set_rules_record(rules))
+
+        by_set.append((set_id, rules))
+
+    return replace(DEFAULT_RULES, **numbers, sets=tuple(by_set))
+
+
+def save_rule(store: Path, name: str, value: float) -> None:
+    """`name`: a `Rules` field's."""
+    write_number(store, RULE_PREFIX + name, value)
+
+
+def set_rules_record(rules: SetRules) -> dict:
+    return {"keep": rules.keep, "res_speed": rules.res_speed}
+
+
+def parse_set_rules(record: dict) -> SetRules | None:
+    keep, res_speed = record.get("keep"), record.get("res_speed")
+
+    if not (isinstance(keep, int) and isinstance(res_speed, int)):
+        return None
+
+    return SetRules(keep, res_speed)
 
 
 def reseed_accessories(store: Path, account: Account) -> tuple[tuple[ChampionType, ...], SetTable]:

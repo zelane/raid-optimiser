@@ -401,6 +401,9 @@ def build_bonuses(data, strings):
     champions only obtainable once (hero type id, ascension 0), the type whose copies empower
     them instead of duplicates (`StaticAcademyEmpowerData.HeroRecipes`). Empower stacking was
     verified against the game's CalcEmpowerBonus; awakening stacking confirmed by the user.
+    mastery_types[id]: each mastery's row in its tree, 1 (the top) to 6 (Helmsmasher's), by its
+    depth under `MasteryTypes`' parents, and its price in scrolls (`MasteryPointType` -> how
+    many, kinds it doesn't take left out).
     Ascension (0-6) is not here: it is the last digit of TypeId, and each ascended
     type has its own base stats (see base_stats_6_60.json).
     """
@@ -431,6 +434,15 @@ def build_bonuses(data, strings):
         if b["StatKindId"] == -1:  # Lore of Steel: scales artifact set stat bonuses
             m = {"name": name, "set_bonus_multiplier": round(1 + b["Value"], 6)}
         masteries[mid] = m
+    parents = {t["Id"]: t["ParentIds"] or [] for t in data["MasteryData"]["MasteryTypes"]}
+
+    def row(mid):
+        return 1 + max((row(parent) for parent in parents[mid]), default=0)
+
+    mastery_types = {
+        t["Id"]: {"row": row(t["Id"]), "price": {k: n for k, n in t["Price"].items() if n}}
+        for t in data["MasteryData"]["MasteryTypes"]
+    }
     arena = {
         league["Id"]: {
             k: {"value": round(v, 6), "absolute": False}
@@ -460,6 +472,7 @@ def build_bonuses(data, strings):
         "awakening": awakening,
         "empower_substitutes": substitutes,
         "masteries": masteries,
+        "mastery_types": mastery_types,
     }
 
 

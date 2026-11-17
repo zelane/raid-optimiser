@@ -1,13 +1,14 @@
 <script setup lang="ts">
-// The set fits: what off-target types count for, each set's value, and which types each set is
-// for (the types down, grouped by kind; the sets across, most valued first, the column under
-// the pointer lit). Each change is saved at once; what it says goes to the page (`saved`).
-import { ref } from "vue";
+// The set fits: what off-target types count for, each set's value and its own rules (pieces of
+// each group to keep, RES/SPD banners to keep), and which types each set is for (the types
+// down, grouped by kind; the sets across, most valued first, the column under the pointer lit).
+// Each change is saved at once; what it says goes to the page (`saved`).
+import { computed, ref } from "vue";
 import { checkedOf, valueOf } from "../composables/format";
 import { sendToGame, type Sent } from "../composables/send";
 import type { SetGrid } from "../types/generated/webui.service.accessories";
 
-defineProps<{ grid: SetGrid }>();
+const props = defineProps<{ grid: SetGrid }>();
 const emit = defineEmits<{ saved: [sent: Sent] }>();
 const lit = ref<number | null>(null);
 
@@ -17,6 +18,29 @@ async function store(url: string, fields: Record<string, string>) {
 
 function tone(factor: number) {
   return factor > 1 ? "high" : factor < 1 ? "low" : "";
+}
+
+// A set's own rules, a row each under its value.
+const setRules = computed(
+  () =>
+    [
+      {
+        key: "keep",
+        label: "Keep",
+        what: "pieces of each group to keep",
+        high: props.grid.keep_high,
+      },
+      {
+        key: "res_speed",
+        label: "RES/SPD",
+        what: "RES banners with SPD to keep",
+        high: props.grid.res_speed_high,
+      },
+    ] as const,
+);
+
+function setRule(set: number, rule: string, event: Event) {
+  store("/accessories/sets/rule", { set: String(set), rule, value: valueOf(event) });
 }
 
 function target(set: number, type: string, event: Event) {
@@ -84,6 +108,27 @@ function target(set: number, type: string, event: Event) {
                     factor: valueOf($event),
                   })
                 "
+              />
+            </td>
+          </tr>
+          <tr v-for="rule in setRules" :key="rule.key" class="set-values set-rules">
+            <th scope="row" :title="rule.what">{{ rule.label }}</th>
+            <td
+              v-for="(column, n) in grid.columns"
+              :key="column.set_id"
+              :class="{ lit: lit === n }"
+              @mouseover="lit = n"
+            >
+              <input
+                type="number"
+                class="bare"
+                :value="column[rule.key]"
+                min="0"
+                :max="rule.high"
+                step="1"
+                autocomplete="off"
+                :aria-label="`${column.set_name}: ${rule.what}`"
+                @change="setRule(column.set_id, rule.key, $event)"
               />
             </td>
           </tr>

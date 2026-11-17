@@ -9,6 +9,7 @@ import CleanupPlan from "../components/CleanupPlan.vue";
 import GearCard from "../components/GearCard.vue";
 import PageHead from "../components/PageHead.vue";
 import SentNote from "../components/SentNote.vue";
+import AccessoryRules from "../components/AccessoryRules.vue";
 import SetFits from "../components/SetFits.vue";
 import TypeCard from "../components/TypeCard.vue";
 import { plural } from "../composables/format";
@@ -99,6 +100,7 @@ const shownTypes = computed(() => {
 
 const typeSaved = ref<Sent | null>(null);
 const setSaved = ref<Sent | null>(null);
+const ruleSaved = ref<Sent | null>(null);
 
 function addType() {
   router.post("/accessories/types/add");
@@ -112,13 +114,13 @@ function addType() {
 
   <template v-if="page.tab === 'swaps'">
     <p class="lede">
-      Champions wearing an accessory that a loose one clearly beats as it is now (by 10% or more;
-      not counting what rolling or a rework might make of it), of the same slot, main stat, set and
-      faction, so the set bonus and main stat stay. A set-less piece gives way to any set piece of
-      its slot, main stat and faction with better stats, however slightly. Only unlocked champions:
-      lock a champion to leave their gear alone. Substats change, so mind speed tunes and ACC/RES
-      thresholds. Equip, then roll, then clean up: the clean-up already counts these as done, and
-      sells what comes off where it's not worth keeping.
+      Champions wearing an accessory that a loose one clearly beats as it is now (by
+      {{ page.swap_margin }} or more; not counting what rolling or a rework might make of it), of
+      the same slot, main stat, set and faction, so the set bonus and main stat stay. A set-less
+      piece gives way to any set piece of its slot, main stat and faction with better stats, however
+      slightly. Only unlocked champions: lock a champion to leave their gear alone. Substats change,
+      so mind speed tunes and ACC/RES thresholds. Equip, then roll, then clean up: the clean-up
+      already counts these as done, and sells what comes off where it's not worth keeping.
     </p>
     <!-- A row per champion: who; the swaps, each the piece to equip beside the one it
          replaces; the gain and Equip. -->
@@ -271,15 +273,29 @@ function addType() {
 
     <h2>Sets</h2>
     <p class="lede">
-      A set's value multiplies what its pieces are worth: 1 is an average set. Tick the types each
-      set is for. A type a set isn't for still counts, at a share of its score. A set for no damage
-      type still keeps a C.DMG amulet. New types and new sets start ticked everywhere.
+      A set's value multiplies what its pieces are worth: 1 is an average set. Keep is how many
+      pieces of each of its groups (slot, main stat, set, faction) the clean-up keeps before the
+      rest go first; RES/SPD, how many of its best RES banners with SPD it always keeps. Tick the
+      types each set is for. A type a set isn't for still counts, at a share of its score. A set for
+      no damage type still keeps a C.DMG amulet (Rules, below). New types and new sets start ticked
+      everywhere.
     </p>
     <SetFits :grid="weights.sets" @saved="(sent) => (setSaved = sent)">
       <p class="note">
         <SentNote :sent="setSaved" done="Saved: the lists re-plan with it." />
       </p>
     </SetFits>
+
+    <h2>Rules</h2>
+    <p class="lede">
+      What the clean-up always keeps, and how pieces are valued and ranked beyond their scores.
+      Protected and reserved pieces and special variants are always kept. None of these rescore
+      anything.
+    </p>
+    <p class="note">
+      <SentNote :sent="ruleSaved" done="Saved: the lists re-plan with it." />
+    </p>
+    <AccessoryRules :rows="weights.rules" @saved="(sent) => (ruleSaved = sent)" />
   </template>
 </template>
 

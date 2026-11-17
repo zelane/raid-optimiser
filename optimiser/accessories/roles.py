@@ -20,10 +20,9 @@ are worth 1 and target every type, and so do new types every set.
   `NO_SET_FACTOR`: who wears each set and what the meta makes of it, as the seed has them
 - `SetFit`, `SetTable`, `DEFAULT_FIT`, `OFF_TARGET`, `seed_set_fits`: the sets as the user
   rates them
-- `LOW_VALUE_SETS`, `NO_SET`: sets apart
+- `NO_SET`: set-less pieces' set id
 - `crit_amulet_exception`: the one exception to a set's targets
 - `type_fits`: what each type counts for on an accessory
-- `group_quota`: how many of a group to keep
 """
 
 from dataclasses import dataclass
@@ -230,7 +229,6 @@ SET_NEEDS = {
     62: Stat.ACC,  # Pinpoint
 }
 NO_SET_FACTOR = 0.6  # set-less pieces are kept only when very good
-LOW_VALUE_SETS = frozenset({NO_SET, 1002, 1004, 1001, 64, 63})  # one of each is enough
 
 ROLE_KINDS = {
     SetRole.DAMAGE: (Kind.DAMAGE,),
@@ -239,7 +237,6 @@ ROLE_KINDS = {
     SetRole.ANY: (Kind.DAMAGE, Kind.SUPPORT),
 }
 OFF_TARGET = 0.5  # until the user sets it
-KEEP = 2  # of each group, unless `group_quota` says less
 
 
 @dataclass(frozen=True)
@@ -323,12 +320,3 @@ def type_fits(
         return sets.off_target
 
     return tuple(fit(t) for t in types)
-
-
-def group_quota(
-    sets: SetTable, types: tuple[ChampionType, ...], set_id: int, slot: Slot, main: Stat
-) -> int:
-    if set_id in LOW_VALUE_SETS or crit_amulet_exception(sets, types, set_id, slot, main):
-        return 1
-
-    return KEEP

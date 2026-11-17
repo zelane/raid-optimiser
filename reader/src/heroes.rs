@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::collections::{dict_refs, list_i32, list_refs};
+use crate::collections::{dict_i32, dict_refs, list_i32, list_refs};
 use crate::layout::{offsets, Layout};
 use crate::process::Process;
 
@@ -35,6 +35,9 @@ pub struct Hero {
     /// skill type id → level
     pub skills: BTreeMap<i32, i32>,
     pub masteries: Vec<i32>,
+    /// unspent mastery scrolls (`HeroMasteryData.CurrentAmount`): `MasteryPointType` (Bronze,
+    /// Silver, Gold) → how many
+    pub scrolls: BTreeMap<String, i32>,
     /// the champion's tag (`HeroMarker`: None, Favorite, First … ArenaSecond)
     pub marker: String,
 }
@@ -43,6 +46,7 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
     let hero = HeroFields::new(layout)?;
     let skill = SkillFields::new(layout)?;
     let masteries = layout.field("HeroMasteryData.Masteries")?;
+    let scrolls = layout.field("HeroMasteryData.CurrentAmount")?;
     let awakened = layout.field("HeroDoubleAscendData.Grade")?;
     let by_id = layout.follow(process, user, &PATH)?;
 
@@ -59,9 +63,15 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
                     ))
                 })
                 .collect::<Result<_, String>>()?;
-            let masteries = match b.ptr(hero.mastery) {
-                0 => Vec::new(),
-                data => list_i32(process, process.read(data + masteries)?)?,
+            let (masteries, scrolls) = match b.ptr(hero.mastery) {
+                0 => (Vec::new(), BTreeMap::new()),
+                data => (
+                    list_i32(process, process.read(data + masteries)?)?,
+                    dict_i32(process, process.read(data + scrolls)?)?
+                        .into_iter()
+                        .map(|(kind, count)| Ok((layout.name("MasteryPointType", kind)?, count)))
+                        .collect::<Result<_, String>>()?,
+                ),
             };
             let awakened_grade = match b.ptr(hero.double_ascend) {
                 0 => 0,
@@ -77,6 +87,7 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
                 awakened_grade,
                 skills,
                 masteries,
+                scrolls,
                 marker: layout.name("HeroMarker", b.i32(hero.marker))?,
             })
         })

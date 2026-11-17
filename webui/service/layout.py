@@ -70,6 +70,7 @@ def nav_sections(path: str, optimiser_link: str) -> tuple[NavSection, ...]:
             (
                 ("/info", "Faction Wars", path == "/info"),
                 ("/empower", "Empower", path.startswith("/empower")),
+                ("/masteries", "Masteries", path.startswith("/masteries")),
             ),
         ),
     )

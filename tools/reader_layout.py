@@ -51,7 +51,7 @@ CLASSES = {
         "Marker",
     ),
     ("SharedModel.Meta.Skills", "Skill"): ("TypeId", "Level"),
-    ("SharedModel.Meta.Masteries", "HeroMasteryData"): ("Masteries",),
+    ("SharedModel.Meta.Masteries", "HeroMasteryData"): ("Masteries", "CurrentAmount"),
     ("SharedModel.Meta.DoubleAscend.User", "HeroDoubleAscendData"): ("Grade",),
     ("Client.Model.Gameplay.Artifacts", "EquipmentWrapperReadonly"): ("ArtifactData",),
     ("SharedModel.Meta.Artifacts", "UserArtifactData"): (
@@ -140,6 +140,7 @@ ENUMS = {
     ("SharedModel.Meta.Inbox", "InboxTypeId"),
     ("SharedModel.Meta.Heroes", "HeroesAiPresetType"),
     ("SharedModel.Meta.Heroes", "HeroMarker"),
+    ("SharedModel.Meta.Masteries", "MasteryPointType"),
 }
 
 NAMESPACE = re.compile(r"^// Namespace: ?(.*)$")

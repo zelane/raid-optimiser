@@ -1,12 +1,11 @@
 """
 enhance.py - which accessories to spend on first, for gear enhancement events. Rolling to +12
 is cheap and shows most of a piece, so pieces below +12 rank by their potential there (or
-reworked once there, whichever is better); +16 is
-dear, so only pieces already good once +16 is reached are listed for it; a rework is worth it
-where its potential beats the piece's own by `REWORK_MARGIN`. All rank by value (scarcity
-counted) and leave out what the clean-up drops.
+reworked once there, whichever is better); +16 is dear, so only pieces already good once +16
+is reached are listed for it; a rework is worth it where its potential beats the piece's own
+by the rules' `rework_margin`. All rank by value (scarcity counted) and leave out what the
+clean-up drops.
 
-- `REWORK_MARGIN`: how much better a rework has to look
 - `Step`, `Candidate`: what to do to a piece, and why it's listed
 - `roll_list`, `finish_list`, `rework_list`: the lists
 - `rolled_value`, `owned`: what they share
@@ -17,8 +16,6 @@ from enum import StrEnum
 
 from optimiser.accessories.assess import Assessed, Assessment, Where
 from optimiser.accessories.potential import ROLL_TO, UPGRADE_LEVELS
-
-REWORK_MARGIN = 1.1
 
 
 class Step(StrEnum):
@@ -85,7 +82,7 @@ def rework_list(assessment: Assessment, dropped: set[int]) -> list[Candidate]:
         for piece in owned(assessment, dropped)
         if (rework := piece.potential.rework) is not None
         and piece.artifact.level >= ROLL_TO
-        and rework.best > piece.potential.natural.best * REWORK_MARGIN
+        and rework.best > piece.potential.natural.best * assessment.rules.rework_margin
     ]
     return sorted(candidates, key=lambda c: c.priority, reverse=True)
 

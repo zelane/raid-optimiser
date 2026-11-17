@@ -1,11 +1,11 @@
 """
 scores.py - accessory potentials kept on disk, so a piece is scored once: a new snapshot
 rescores only the pieces that changed, and a restarted server none. Kept per scorer (the
-types, their weights and the gear tables) and per version of the scoring code; the latest
-`KEPT` scorers' scores are kept.
+types, their weights, the set fits and the gear tables) and per version of the scoring
+code; the latest `KEPT` scorers' scores are kept.
 
 - `KEPT`, `SCORING_CODE`: what's kept, and what invalidates it
-- `known_potentials`: a scorer's scores (`read_kept`, `scorer_key`)
+- `known_potentials`: a scorer's scores (`read_kept`, `scorer_key`, `sets_key`)
 - `keep_potentials`: keeps them (`write_kept`)
 """
 
@@ -15,6 +15,7 @@ from pathlib import Path
 
 from optimiser.accessories import potential, roles
 from optimiser.accessories.potential import Piece, Potential, Scorer
+from optimiser.accessories.roles import SetTable
 
 KEPT = 4
 SCORING_CODE = (Path(potential.__file__), Path(roles.__file__))
@@ -57,9 +58,17 @@ def write_kept(path: Path, kept: Kept) -> None:
 
 
 def scorer_key(scorer: Scorer) -> str:
-    digest = hashlib.sha256(repr((scorer.types, scorer.gear, scorer.glyphs)).encode())
+    key = (scorer.types, sets_key(scorer.sets), scorer.gear, scorer.glyphs)
+    digest = hashlib.sha256(repr(key).encode())
 
     for source in SCORING_CODE:
         digest.update(source.read_bytes())
 
     return digest.hexdigest()
+
+
+def sets_key(sets: SetTable) -> tuple:
+    """The set fits in a fixed order: a frozenset's repr changes with the hash seed, so from
+    one server to the next."""
+    fits = tuple((set_id, fit.factor, sorted(fit.off)) for set_id, fit in sorted(sets.fits))
+    return fits, sets.off_target

@@ -7,9 +7,10 @@ a champion type whole: `type` (its key), `label`, `kind` (a `Kind`), `faction` (
 name, empty for any), `weight:<stat>` per stat and `main:<slot>:<stat>` (present when ticked)
 per main stat that suits it, by the game's names; a set's value (`set`, its id, and
 `factor`) or whether it targets a type (`set`, `type`, the type's key, and `on`, present
-when ticked); `off_target`, the share an off-target type counts for; then `target_free` for
-the spaces to leave, `on` (present when ticked) to protect a piece, and `artifact_id`
-(repeated) for the pieces to sell.
+when ticked); `off_target`, the share an off-target type counts for; a rule (`rule`, a
+`Rules` field's name, and `value`, 1 or 0 for a switch) or a set's own (`set`, `rule`, a
+`SetRules` field's name, and `value`); then `target_free` for the spaces to leave, `on`
+(present when ticked) to protect a piece, and `artifact_id` (repeated) for the pieces to sell.
 
 - `parse_lock`: the lock picker's level
 - `GlyphPlan`, `parse_glyph`: a glyph kind and the grade to assume for it
@@ -19,6 +20,8 @@ the spaces to leave, `on` (present when ticked) to protect a piece, and `artifac
 - `MAX_SET_FACTOR`, `SetValue`, `parse_set_value`: a set's value
 - `SetTarget`, `parse_set_target`: whether a set targets a type
 - `parse_off_target`: what off-target types count for
+- `RuleValue`, `parse_rule_value`: an accessory rule
+- `SetRuleValue`, `parse_set_rule`: a set's own rule
 - `MAX_TARGET_FREE`, `parse_target_free`: the inventory spaces to leave free
 - `parse_protect`: a piece protected from the clean-up, or not
 - `parse_sell`: the pieces to select for selling
@@ -29,6 +32,7 @@ from dataclasses import dataclass
 
 from optimiser.accessories.cleanup import ACCESSORY_SPACE
 from optimiser.accessories.roles import ACCESSORY_MAINS, TYPE_STATS, Kind, Mains
+from optimiser.accessories.rules import SET_RULE_BOUNDS, RuleBounds, rule_bounds
 from optimiser.account import LOCK_LEVELS, Account, GlyphGrade, GlyphKind, Stat, Tables
 from optimiser.assume import Flag
 from optimiser.glyphs import parse_grade, parse_kind
@@ -218,6 +222,56 @@ def parse_off_target(form: Mapping[str, str]) -> float | FormErrors:
         return FormErrors(errors or ["the off-target share is 0 to 1"])
 
     return share
+
+
+@dataclass(frozen=True)
+class RuleValue:
+    name: str  # a `Rules` field's
+    value: float
+
+
+@dataclass(frozen=True)
+class SetRuleValue:
+    set_id: int
+    name: str  # a `SetRules` field's
+    value: int
+
+
+def parse_rule_value(form: Mapping[str, str]) -> RuleValue | FormErrors:
+    """A switch is 1 or 0; a whole number's rule takes whole numbers."""
+    name = form.get("rule", "")
+
+    if name not in (bounds := rule_bounds()):
+        return FormErrors(["no such rule"])
+
+    errors: list[str] = []
+    value = parse_number(form, "value", "the rule", errors, default=-1)
+    within = bounds[name] or RuleBounds(0, 1)
+
+    if errors or not within.low <= value <= within.high:
+        return FormErrors(errors or [f"the rule is {within.low:g} to {within.high:g}"])
+
+    if within.whole or bounds[name] is None:
+        return RuleValue(name, round(value))
+
+    return RuleValue(name, value)
+
+
+def parse_set_rule(form: Mapping[str, str]) -> SetRuleValue | FormErrors:
+    text, name = form.get("set", ""), form.get("rule", "")
+
+    if not text.isdigit():
+        return FormErrors(["no such set"])
+
+    if (bounds := SET_RULE_BOUNDS.get(name)) is None:
+        return FormErrors(["no such rule"])
+
+    value = form.get("value", "").strip()
+
+    if not (value.isdigit() and bounds.low <= int(value) <= bounds.high):
+        return FormErrors([f"a whole number, {bounds.low:g} to {bounds.high:g}"])
+
+    return SetRuleValue(int(text), name, int(value))
 
 
 def parse_target_free(form: Mapping[str, str]) -> int | FormErrors:

@@ -8,7 +8,7 @@ app.py - the web entry point: routes that hand the service's views to Vue pages 
   `reserve_rule`, `champion`, `builds`, `stop_solve`, `delete_run`, `equip`, `preview`,
   `accessories`, `accessory_type`, `add_accessory_type`, `copy_accessory_type`,
   `delete_accessory_type`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `sync`: the routes
+  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `masteries`, `sync`: the routes
 - `sent`, `saved`, `view_json`: a Vue component's own requests, answered as JSON
 - `finder_query`: the champion filters in a request's query
 - `back_with`: back to a Vue page's form with its errors
@@ -53,7 +53,9 @@ from webui.forms.settings import (
     parse_off_target,
     parse_protect,
     parse_reserve_rule,
+    parse_rule_value,
     parse_sell,
+    parse_set_rule,
     parse_set_target,
     parse_set_value,
     parse_target_free,
@@ -71,6 +73,7 @@ from webui.service import current, layout, results, runs
 from webui.service import empower as empower_pages
 from webui.service import finder as finder_pages
 from webui.service import info as info_pages
+from webui.service import masteries as mastery_pages
 from webui.service import targets as target_pages
 from webui.service import team_gear as team_gear_pages
 from webui.service import teams as teams_pages
@@ -272,6 +275,30 @@ async def accessory_set_target(request: Request):
             return saved(None)
 
 
+@app.post("/accessories/sets/rule")
+async def accessory_set_rule(request: Request):
+    match parse_set_rule(await read_form(request)):
+        case FormErrors() as errors:
+            return saved(errors)
+
+        case rule:
+            accessory_pages.save_set_rule(
+                current.current_account(), rule.set_id, rule.name, rule.value
+            )
+            return saved(None)
+
+
+@app.post("/accessories/rule")
+async def accessory_rule(request: Request):
+    match parse_rule_value(await read_form(request)):
+        case FormErrors() as errors:
+            return saved(errors)
+
+        case rule:
+            accessory_pages.save_rule(rule.name, rule.value)
+            return saved(None)
+
+
 @app.post("/accessories/off-target")
 async def accessory_off_target(request: Request):
     match parse_off_target(await read_form(request)):
@@ -407,6 +434,12 @@ def champion(request: Request, champion_id: int, run: int | None = None):
 def info(request: Request):
     page = info_pages.info_page(current.current_account(), current.current_enemies())
     return inertia_page(request, "Info", {"page": page})
+
+
+@app.get("/masteries")
+def masteries(request: Request):
+    page = mastery_pages.masteries_page(current.current_account())
+    return inertia_page(request, "Masteries", {"page": page})
 
 
 @app.get("/targets")

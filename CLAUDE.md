@@ -30,7 +30,8 @@ the game itself.
   `plarium-umu`, into `data/captures/snapshot.json` (`paths.SNAPSHOT`, `account.load_account`
   parses it; the web UI reloads when it changes; the nav's Sync button runs `just read` through
   `webui/reader.py`, and a successful Equip syncs after). Only what the optimiser uses:
-  champions (static facts come from `hero_types.json`), pieces, who wears what, relics, Great
+  champions (static facts come from `hero_types.json`; their unspent mastery scrolls,
+  `scrolls`: `HeroMasteryData.CurrentAmount`), pieces, who wears what, relics, Great
   Hall, arena league, inbox pieces, champion tags (`marker`: `HeroMarker`, one per champion;
   ArenaFirst is "Arena Build I"), gear presets (`gear_presets`: `ExternalArtifactsStorage._presets`,
   per champion or global (`hero_id` null, the game's key -1), artifact or accessory), saved teams (`teams`: presets with their area, from
@@ -278,8 +279,13 @@ the game itself.
     main stat and substats; once only: `RerollsCount`), scored in average 6★ rolls, quantile 75.
     Each substat counts the best glyph its rank can take, never the glyph it has: having the
     stat is what makes a piece glyphable. Each type's score is weighed by its set fit.
+  - `rules.py`: the user's rules (`Rules`, the store's `accessory_rule:<field>` numbers, the
+    code's defaults until set; each set's `SetRules`, keep and RES/SPD banners, in its set fit's
+    record, seeded on first read): the keep rules' switches and numbers, good share, shortage
+    factors, surplus, swap and rework margins. Edited on the Weights tab (Rules; the set grid's
+    Keep and RES/SPD rows). Scoring doesn't read them: changing one rescores nothing.
   - `assess.py`: each piece's value: max(+16, rework) potential × shortage factor (good
-    pieces on its set/faction/slot: ×1.15 none … ×0.9 three+) × the set's value (the set fits;
+    pieces on its set/faction/slot: ×1.15 none … ×0.9 three+, `Rules`) × the set's value (the set fits;
     seeded from `roles.SET_TIERS`: Swift Parry 1.5; Mercurial, Merciless 1.3; Feral, Slayer,
     Pinpoint 1.15; set-less 0.6; `SET_NEEDS`: the crit sets only target types weighing C.DMG,
     Pinpoint those weighing ACC).
@@ -289,7 +295,8 @@ the game itself.
     banners with SPD rolled 3+, each set's best RES banners with SPD (2 for a set targeting
     support types, else 1: RES breakpoints), good potential (slot's top quarter), each faction's Faction
     Wars reserve, 6★ damage-set amulets not yet reworked (may rework to C.DMG). Group quotas
-    (2, 1 for low-value sets) make the surplus go first. Swaps (own tab, by champion): a loose
+    (each set's keep: seeded 2, 1 for low-value sets) make the surplus go first. Each keep rule
+    but protected, reserved and special can be switched off (`cleanup.SWITCHED`). Swaps (own tab, by champion): a loose
     piece clearly better than one an unlocked champion wears in the same group is planned as
     equipped (Equip button; the piece coming off may then be sold). Lock champions whose gear must stay.
   - `enhance.py`: roll to +12 (cheap, informative), to +16 (only good pieces), rework lists.
@@ -298,11 +305,18 @@ the game itself.
   bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
   the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the champion list, the champion last solved for
   (`store.latest_champion`), Config. Teams: Finder (`/teams`, the Chimera's trials too), Gear (`/team-gear`). Info: Faction Wars
-  (`/info`), Empower (`/empower`).
+  (`/info`), Empower (`/empower`), Masteries (`/masteries`).
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
   missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
+- Masteries page (`/masteries`, `webui/service/masteries.py`): the 6★ champions with no mastery
+  in a tree's last row (Helmsmasher's), split into those holding enough scrolls to reach it and
+  those still to farm for (fewest Divine short first). Per kind (Divine, Advanced, Basic: the
+  game's Gold, Silver, Bronze): had (held + spent on masteries) against needed (spent + a
+  mastery in each row below their furthest: 550 Divine from one row 5, 750 from two). Rows and
+  prices from `bonuses.json` `mastery_types` (`Tables.mastery_types`: each mastery's depth under
+  `MasteryTypes`' parents and its `Price`; ids read `500<tree><row><column>`).
 - Champion list and finder, one list (`webui/service/finder.py`: `find_champions`,
   `lock_champion`; `forms/finder.py`). The list (`/`, `pages/Champions.vue`, `ChampionFilters`,
   `ChampionCard`, `LockPicker`): the filters (`q`, `rarity`, `faction`, `grade`) ride in the
