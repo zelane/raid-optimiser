@@ -92,7 +92,7 @@ const starsTitle = computed(() => {
   position: relative;
   overflow: hidden;
   aspect-ratio: 140 / 182;
-  border: 1px solid var(--rarity);
+  border: .1em solid var(--rarity);
   background: var(--art-backdrop);
 
   /* The frame, as the game's: a band of the rarity's colour, its outer edge lit. */

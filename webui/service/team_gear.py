@@ -32,6 +32,7 @@ from optimiser.solve import (
     Request,
     SetsRuleOut,
     Shortfall,
+    Stopped,
     Unmet,
     find_team_builds,
 )
@@ -152,6 +153,7 @@ class GearPage:
     rotating: bool  # the stage's restriction rotates, unknown which is active
     result: TeamResult | None
     shortfall: TeamShortfall | None
+    stopped: bool  # the solve was stopped (`/stop`) before it found the team's gear
 
 
 def gear_page(
@@ -205,6 +207,7 @@ def gear_page(
         rotating=isinstance(restriction, Rotating),
         result=outcome if isinstance(outcome, TeamResult) else None,
         shortfall=outcome if isinstance(outcome, TeamShortfall) else None,
+        stopped=isinstance(outcome, Stopped),
     )
 
 
@@ -348,7 +351,7 @@ def solve_team(
     champions: list[Champion],
     rows: list[RowView],
     target: EnemyCard,
-) -> TeamResult | TeamShortfall:
+) -> TeamResult | TeamShortfall | Stopped:
     assumptions = read_assumptions(STORE, account)
     members = []
     requests = []
@@ -372,6 +375,9 @@ def solve_team(
     reserved = reservations(account, ask.gear.rules)
 
     match outcome:
+        case Stopped():
+            return outcome
+
         case Clash():
             return TeamShortfall(clash=True, members=[])
 

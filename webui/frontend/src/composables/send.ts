@@ -38,6 +38,12 @@ export async function equipInGame(
   return sent;
 }
 
+// Stops the solve running (the champion page's or Team gear's): its own request then answers
+// with what was found by then.
+export function stopSolve(): Promise<Sent> {
+  return sendToGame("/stop");
+}
+
 // A view as JSON, or null when the server couldn't give it.
 export async function getJson<View>(url: string): Promise<View | null> {
   const response = await fetch(url, { headers: { Accept: "application/json" } });

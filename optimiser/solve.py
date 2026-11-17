@@ -15,9 +15,14 @@ multiplier). The first three are concave, held under tangent lines (the bonus's 
 it can reach, so exact); the last depends only on the DEF the sets ignore, which comes in 5 %
 steps, so it's exact with a binary per step.
 
+A solve can be stopped (`stop`, from another thread, even before it reaches its first HiGHS
+solve): the running HiGHS solve is interrupted and no more start. One champion's builds
+found by then are kept; else the outcome is `Stopped`.
+
 - `GearFilter`, `Goal`, `Request`, `Member`: what's asked
-- `Build`, `SetsRuleOut`, `Shortfall`, `Unmet`, `Clash`: the outcomes
+- `Build`, `SetsRuleOut`, `Shortfall`, `Unmet`, `Clash`, `Stopped`: the outcomes
 - `find_builds` (one champion), `find_team_builds` (several): the workflows
+- `stop`, `Interrupted`, `STOPPING`, `interrupt`, `check_stopped`: stopping a solve
 - `frame` (`wearable`, `prune`, `directions`), `check_sets`, `best_build`
   (`maximise_ranking`, `solved_build`), `explain_shortfall` (`best_alone`): one champion's
   steps, in the order they're called
@@ -29,6 +34,7 @@ steps, so it's exact with a binary per step.
 """
 
 import math
+import threading
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -77,6 +83,7 @@ IGNORE_STEP = 0.05  # every set's ignore DEF is a multiple of this
 TANGENTS = 20
 SET_HEADROOM = 1.5  # sets can add to what the best piece per slot gives
 LEAVING_TRIES = 3  # a team member's builds tried alone before solving with the rest
+STOPPING = threading.Event()  # set by `stop`, cleared as a workflow ends
 
 
 @dataclass(frozen=True)
@@ -167,6 +174,11 @@ class Clash:
 
 
 @dataclass(frozen=True)
+class Stopped:
+    """The solve was stopped before it found anything."""
+
+
+@dataclass(frozen=True)
 class Unmet:
     """No team build: per member, why they can't be geared even alone (None: they can)."""
 
@@ -187,8 +199,22 @@ class Problem:
     set_multiplier: float
 
 
-def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut | Shortfall:
-    """Up to `request.builds` builds, best first, no two alike."""
+def find_builds(
+    account: Account, request: Request
+) -> list[Build] | SetsRuleOut | Shortfall | Stopped:
+    """Up to `request.builds` builds, best first, no two alike; if stopped, those found."""
+    try:
+        return builds_for(account, request)
+
+    except Interrupted as stopped:
+        return stopped.builds or Stopped()
+
+    finally:
+        STOPPING.clear()
+
+
+def builds_for(account: Account, request: Request) -> list[Build] | SetsRuleOut | Shortfall:
+    """`find_builds`' steps; `Interrupted` carries the builds found if stopped."""
     # 1. What the champion can wear, and what each piece adds.
     problem = frame(account, request, frozenset({request.champion.id}), request.builds)
 
@@ -198,8 +224,13 @@ def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut
 
     # 3. The best build, then the best unlike any found so far, until enough or none left.
     builds: list[Build] = []
-    while len(builds) < request.builds and (build := best_build(problem, request, builds)):
-        builds.append(build)
+
+    try:
+        while len(builds) < request.builds and (build := best_build(problem, request, builds)):
+            builds.append(build)
+
+    except Interrupted:
+        raise Interrupted(builds) from None
 
     # 4. None meets the limits: how close each limited stat can get.
     if not builds:
@@ -208,11 +239,23 @@ def find_builds(account: Account, request: Request) -> list[Build] | SetsRuleOut
     return builds
 
 
-def find_team_builds(members: Sequence[Member]) -> tuple[Build, ...] | Unmet | Clash:
+def find_team_builds(members: Sequence[Member]) -> tuple[Build, ...] | Unmet | Clash | Stopped:
     """A build per member, in order, no piece in two: each member's best of what the earlier
     ones left that still leaves the later ones their limits. (Solving the team as one model,
     each goal held before the next, gave much the same and took minutes: proving each step
     optimal over every champion's pieces at once.)"""
+    try:
+        return team_builds(members)
+
+    except Interrupted:
+        return Stopped()
+
+    finally:
+        STOPPING.clear()
+
+
+def team_builds(members: Sequence[Member]) -> tuple[Build, ...] | Unmet | Clash:
+    """`find_team_builds`' steps."""
     team = frozenset(member.request.champion.id for member in members)
 
     # 1. Can they all meet their limits at once? If not, who can't even alone.
@@ -244,6 +287,7 @@ def feasible(members: Sequence[Member], team: frozenset[int], taken: frozenset[i
         add_limits(milp, member.request)
 
     milps[0].highs.run()
+    check_stopped()
     return milps[0].highs.getModelStatus() == highspy.HighsModelStatus.kOptimal
 
 
@@ -509,6 +553,7 @@ def formulate(problems: Sequence[Problem], set_minimums: Sequence[dict[int, int]
     """One model, a member per problem; no piece worn twice."""
     highs = highspy.Highs()
     highs.silent()
+    highs.cbMipInterrupt += interrupt
     milps = [
         add_member(highs, problem, minimums)
         for problem, minimums in zip(problems, set_minimums, strict=True)
@@ -812,8 +857,34 @@ def ignore_total(milp: Milp, goal: DamageGoal) -> Expression:
 def maximise(milp: Milp, goal) -> float | None:
     """The best value of `goal`, leaving its solution in the model; None if infeasible."""
     milp.highs.maximize(goal)
+    check_stopped()
 
     if milp.highs.getModelStatus() != highspy.HighsModelStatus.kOptimal:
         return None
 
     return milp.highs.val(goal)
+
+
+def stop() -> None:
+    """Stops the solve running (if any): see the module's docstring."""
+    STOPPING.set()
+
+
+class Interrupted(Exception):
+    """A HiGHS solve was stopped: unwinds a workflow's steps, with the builds found so far."""
+
+    def __init__(self, builds: Sequence[Build] = ()):
+        super().__init__("stopped")
+        self.builds = list(builds)
+
+
+def interrupt(event) -> None:
+    """HiGHS's MIP interrupt callback: stop once `stop` was called."""
+    if STOPPING.is_set():
+        event.interrupt()
+
+
+def check_stopped() -> None:
+    """After a HiGHS solve: raise `Interrupted` if it (or the workflow) was stopped."""
+    if STOPPING.is_set():
+        raise Interrupted()

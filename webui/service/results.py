@@ -4,7 +4,7 @@ current gear, or why there are none.
 
 - `StatCell`, `LineView`, `PieceView`, `BuildView`, `ResultsView`, `ShortfallView`,
   `Outcome`: the views (saved with runs, so fields added later have defaults)
-- `solve`: the workflow
+- `solve`: the workflow (`Stopped` if stopped before a build was found)
 - `results_view`, `shortfall_view`: its outcomes
 - `build_view`, `piece_view`, `line_view`, `stat_cells`, `damage_cell`: what they share
 """
@@ -29,7 +29,7 @@ from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label, 
 from optimiser.paths import STORE
 from optimiser.reserve import Reservations, Worn
 from optimiser.settings import read_assumptions
-from optimiser.solve import Build, Request, SetsRuleOut, Shortfall, find_builds
+from optimiser.solve import Build, Request, SetsRuleOut, Shortfall, Stopped, find_builds
 from optimiser.stats import build_stats, set_multiplier
 from webui.service.views import (
     ChampionRow,
@@ -133,7 +133,7 @@ class ShortfallView:
 type Outcome = ResultsView | ShortfallView
 
 
-def solve(account: Account, request: Request, reserved: Reservations) -> Outcome:
+def solve(account: Account, request: Request, reserved: Reservations) -> Outcome | Stopped:
     """`reserved`: what every reserve rule keeps, to note on pieces (whichever the request
     keeps out)."""
     assumed, request = assume(account, request, read_assumptions(STORE, account))
@@ -142,6 +142,9 @@ def solve(account: Account, request: Request, reserved: Reservations) -> Outcome
     seconds = time.monotonic() - started
 
     match outcome:
+        case Stopped():
+            return outcome
+
         case SetsRuleOut(reason=reason):
             return ShortfallView(reason, [])
 

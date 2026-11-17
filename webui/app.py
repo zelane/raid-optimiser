@@ -5,9 +5,9 @@ app.py - the web entry point: routes that hand the service's views to Vue pages 
 
 - `app`, `templates`: the FastAPI app and the shell's Jinja templates
 - `index`, `lock`, `config`, `old_config`, `set_assumption`, `plan_glyph`,
-  `reserve_rule`, `champion`, `builds`, `delete_run`, `equip`, `preview`, `accessories`,
-  `accessory_type`, `add_accessory_type`, `copy_accessory_type`, `delete_accessory_type`,
-  `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
+  `reserve_rule`, `champion`, `builds`, `stop_solve`, `delete_run`, `equip`, `preview`,
+  `accessories`, `accessory_type`, `add_accessory_type`, `copy_accessory_type`,
+  `delete_accessory_type`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
   `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `sync`: the routes
 - `sent`, `saved`, `view_json`: a Vue component's own requests, answered as JSON
 - `finder_query`: the champion filters in a request's query
@@ -28,11 +28,13 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.enemies import Restriction, team_restriction
 from optimiser.reserve import reservations
+from optimiser.solve import Stopped, stop
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
@@ -438,10 +440,23 @@ async def builds(request: Request, champion_id: int):
             return back_with(request, errors)
 
         case solve_request:
-            outcome = results.solve(account, solve_request, reservations(account, rules))
+            # In a thread: the loop stays free to answer `/stop` meanwhile.
+            reserved = reservations(account, rules)
+            outcome = await run_in_threadpool(results.solve, account, solve_request, reserved)
+
+    if isinstance(outcome, Stopped):
+        return back_with(request, FormErrors(["Stopped before a build was found."]))
 
     kept = runs.record_run(account, form, solve_request, outcome)
     return inertia.redirect(f"/champions/{champion.id}?run={kept.entry.id}")
+
+
+@app.post("/stop")
+def stop_solve():
+    """Stops the solve running (the champion page's or Team gear's): the champion page keeps
+    the builds found by then."""
+    stop()
+    return JSONResponse({"error": None})
 
 
 @app.delete("/champions/{champion_id}/runs/{run_id}")

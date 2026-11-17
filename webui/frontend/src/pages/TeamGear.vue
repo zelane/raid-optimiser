@@ -11,6 +11,7 @@ import PageHead from "../components/PageHead.vue";
 import TargetPicker from "../components/TargetPicker.vue";
 import TeamSlots from "../components/TeamSlots.vue";
 import { useKeptQuery } from "../composables/keptQuery";
+import { stopSolve } from "../composables/send";
 import { trimmed } from "../composables/teamQuery";
 import type { OnlyView } from "../types/generated/webui.service.finder";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
@@ -85,6 +86,12 @@ function query(slots: string[], target: string, run: boolean): URLSearchParams {
 }
 
 const solving = ref(false);
+const stopping = ref(false);
+
+function stop() {
+  stopping.value = true;
+  stopSolve();
+}
 
 function send(changes: { slots?: string[]; target?: string; run?: boolean } = {}) {
   const slots = changes.slots ?? props.page.slots.map((slot) => slot.choice);
@@ -95,7 +102,10 @@ function send(changes: { slots?: string[]; target?: string; run?: boolean } = {}
     {
       preserveState: true,
       preserveScroll: true,
-      onStart: () => (solving.value = Boolean(changes.run)),
+      onStart: () => {
+        solving.value = Boolean(changes.run);
+        stopping.value = false;
+      },
       onFinish: () => (solving.value = false),
     },
   );
@@ -285,9 +295,26 @@ function minimumTitle(placeholder: string) {
 
       <div class="panel cluster" style="--space: var(--space-m) var(--space-2xl)">
         <span class="note">
-          {{ solving ? "Solving…" : "Solving takes a few seconds per champion." }}
+          {{
+            stopping
+              ? "Stopping…"
+              : solving
+                ? "Solving…"
+                : page.stopped
+                  ? "Stopped before the team was geared."
+                  : "Solving takes a few seconds per champion."
+          }}
         </span>
-        <button type="button" class="cta push" :disabled="solving" @click="send({ run: true })">
+        <button
+          v-if="solving"
+          type="button"
+          class="quiet cta push"
+          :disabled="stopping"
+          @click="stop"
+        >
+          Stop
+        </button>
+        <button v-else type="button" class="cta push" @click="send({ run: true })">
           Find gear
         </button>
       </div>

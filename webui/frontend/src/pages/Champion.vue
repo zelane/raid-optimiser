@@ -10,6 +10,7 @@ import RunHistory from "../components/RunHistory.vue";
 import RunResults from "../components/RunResults.vue";
 import TargetPicker from "../components/TargetPicker.vue";
 import { checkedOf } from "../composables/format";
+import { stopSolve } from "../composables/send";
 import type { ChampionPage, FormView } from "../types/generated/webui.service.champions";
 import type { RunView } from "../types/generated/webui.service.runs";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
@@ -125,8 +126,9 @@ function setIcon(id: string) {
 }
 
 // Solving: the form posted, the run it keeps shown (the page's URL names it); timed while it
-// runs, which can take minutes.
+// runs, which can take minutes. Stop keeps the builds found by then.
 const solving = ref(false);
+const stopping = ref(false);
 const elapsed = ref(0);
 let ticking: ReturnType<typeof setInterval> | undefined;
 
@@ -145,6 +147,7 @@ function solve() {
     onStart: () => {
       const started = performance.now();
       solving.value = true;
+      stopping.value = false;
       elapsed.value = 0;
       ticking = setInterval(() => (elapsed.value = (performance.now() - started) / 1000), 100);
     },
@@ -156,6 +159,11 @@ function solve() {
 }
 
 onUnmounted(() => clearInterval(ticking));
+
+function stop() {
+  stopping.value = true;
+  stopSolve();
+}
 
 const finder = ref<InstanceType<typeof ChampionFinder>>();
 </script>
@@ -423,8 +431,13 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
               <button type="submit" class="cta" :disabled="solving">Find builds</button>
               <button type="reset" class="quiet cta">Reset</button>
             </div>
-            <span v-if="solving" class="note solving" aria-busy="true">
-              Solving… {{ elapsed.toFixed(1) }}s
+            <span v-if="solving" class="cluster" style="--space: var(--space-s); --align: center">
+              <span class="note solving" aria-busy="true">
+                {{ stopping ? "Stopping…" : "Solving…" }} {{ elapsed.toFixed(1) }}s
+              </span>
+              <button type="button" class="quiet small" :disabled="stopping" @click="stop">
+                Stop
+              </button>
             </span>
           </div>
         </fieldset>
