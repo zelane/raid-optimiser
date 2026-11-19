@@ -8,7 +8,7 @@ The cache (`LocalLow/Plarium/Raid_ Shadow Legends/static-data`) is decoded by
 Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and
 out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
-older than the game version: run `just schema-refresh`.
+older than the game version: run `just update`.
 """
 
 import ast
@@ -1126,7 +1126,7 @@ def main(static_data: Path, schema_path: str, out_dir: str, full: bool) -> None:
     if conv.unknown_keys:
         top = ", ".join(f"{c}.{k}" for (c, k), _ in conv.unknown_keys.most_common(8))
         print(f"note: {len(conv.unknown_keys)} keys not in schema (kept as '?key'), e.g. {top}")
-        print("      (the dump predates this game version: just schema-refresh)")
+        print("      (the dump predates this game version: just update)")
     for s in sets:
         if s["placeholder_text"]:
             print(f"note: set {s['id']} has placeholder text (unreleased?)")

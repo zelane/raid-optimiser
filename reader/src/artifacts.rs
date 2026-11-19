@@ -154,9 +154,11 @@ pub fn read(
     let (addrs, source) = match class == EXTERNAL {
         true => {
             let cache = layout.follow(process, storage, &CACHE)?;
+            // pieces gone since (sold, used) stay in the cache as null (11.95.0)
             let addrs: Vec<u64> = dict_refs(process, cache)?
                 .into_iter()
                 .map(|(_, a)| a)
+                .filter(|&a| a != 0)
                 .collect();
             let source = format!("external storage ({} in the account's list)", list.len());
             (addrs, source)

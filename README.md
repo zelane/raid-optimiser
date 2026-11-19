@@ -36,11 +36,12 @@ With the game running and logged in, `just read` writes the account to
 `data/captures/snapshot.json` (about 2.5 s); the web UI picks it up. For the equip, preview and
 sell buttons, run `just proxy`, then start the extractor.
 
-After a pull, a game update or an extractor update, run `just update` (Raid can stay open): it
-syncs Python deps, re-applies the HH patch, re-exports the game data and
-re-extracts the assets. After a game update also run `just dump` and `just reader-layout`, so
-the reader finds the game's fields. Restart the extractor afterwards if the patch changed. Set
-`HH_DIR` in `.env` if the extractor install moves.
+After a pull, a game update or an extractor update, run `just update` (Raid can stay open;
+after a game update, launch it once first so it writes its static data): it syncs the deps,
+re-applies the HH patch, re-dumps the game when its code changed (by hash), rebuilds the
+reader's layout, the schema and the game's tables, and re-extracts the assets. Restart the
+extractor afterwards if the patch changed. Set `HH_DIR` in `.env` if the extractor install
+moves.
 
 ## Game static data (sets, hero types)
 
@@ -53,9 +54,8 @@ Lz4BlockArray, `tools/static_decode.py`) and writes:
 - `data/game/hero_types.json` – names, faction, rarity, and per-form element/role/unscaled base stats
 
 Key names and types come from `schema/schema.json`, generated from an IL2CPP dump:
-`just dump` (Il2CppDumper over the installed game, offline), then `just schema`;
-`just schema-refresh` does both and re-exports. Run it when the export says the dump predates
-the game version.
+`just dump` (Il2CppDumper over the installed game, offline), then `just schema`; both are
+part of `just update`.
 The export validates itself (e.g. set bonuses must match the in-game description text) and
 exits non-zero if the schema no longer fits; notes about unknown keys elsewhere are harmless.
 

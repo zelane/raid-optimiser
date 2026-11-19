@@ -1,5 +1,6 @@
 """reader_layout.py - what the memory reader (`reader/`) needs to know about the game's types,
-looked up by name in an Il2CppDumper dump, so a game update only needs `just dump` and a rerun.
+looked up by name in an Il2CppDumper dump, so a game update only needs a new dump and a rerun
+(`just update` does both).
 
 - `CLASSES`: per class, the fields the reader reads (instance or static), as `Class.Field`
 - `ROOTS`: the classes whose type info the reader starts from

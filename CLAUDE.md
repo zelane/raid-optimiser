@@ -46,7 +46,7 @@ the game itself.
   (`AppModel` via its type info → parent `SingleInstance<AppModel>`'s statics; pieces live in
   `ArtifactStorageResolver._implementation`'s `ExternalArtifactsStorage` cache, not
   `UserArtifactData.Artifacts`, which is empty). Offsets and enum names come by name from the
-  dump: `tools/reader_layout.py` (`just reader-layout`, rerun after `just dump`) writes
+  dump: `tools/reader_layout.py` (`just reader-layout`, part of `just update`) writes
   `data/cache/reader-layout.json`; modules resolve theirs once with `offsets!`. Checked
   against HH's capture: the same account, but HH rounds Corrupted pieces' damage-modifier
   lines to two decimals.
@@ -224,8 +224,11 @@ the game itself.
   `team-option`, `accent-panel` with `--accent`, `trial`). Icons: `statuses/`
   (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g. DecreaseDefence
   → StatusReduceDefence).
-- `just dump`: Il2CppDumper over the installed game into `data/dump/<game version>`
-  (`dump.cs`, `script.json`): `just schema`'s input and the source of RVAs to disassemble.
+- `just dump` (part of `just update`): Il2CppDumper over the installed game into
+  `data/dump/<game version>` (`dump.cs`, `script.json`), the version the code's own
+  `StableManifestVersion` (the static data's lags until the game runs); skipped when a dump's
+  `source.sha256` matches GameAssembly.dll + metadata. `just schema`'s input and the source of
+  RVAs to disassemble.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
   (UnityPy) into `webui/static/assets/`.
 - `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
@@ -429,21 +432,22 @@ Use the `justfile` (`just` lists every recipe). It is the only place that knows 
 (`.env` overrides its defaults) and passes them to the tools as arguments.
 
 ```
-just install          # set a machine up (paths, mitmproxy's CA, then update)
-just update           # after a pull, game update or HH update: deps, HH patch, static, assets
+just install          # a fresh checkout: paths, Il2CppDumper, the Rust target, mitmproxy's CA, then update
+just update           # after a pull, game update (launch it once first) or HH update: deps, HH patch,
+                      # dump (when the code changed), reader layout + build, schema, static, assets, front end
 just read             # the account, from the running game's memory (read-only)
 just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
-just static           # re-export the game's tables (part of update)
-just schema-refresh   # when the export says the dump predates the game: dump, schema, static
 just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs frontend-build
 just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)
 just frontend-build   # prop types + Vite build into webui/static/dist (part of update)
-just assets           # portraits and icons from the game's bundles (part of update)
 just seed [--reset]   # list the accessory seeds (types, set fits); --reset backs up the store, reseeds both
 just check            # black + ruff over all Python, the house style checker, stylelint, then Prettier + vue-tsc over the front end
 just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css
 uv run --group dev pytest   # tests/ (not part of just check)
 ```
+
+The steps install and update run (`tools`, `ca`, `hh-patch`, `dump`, `reader-layout`, `reader`,
+`schema`, `static`, `assets`) are `[private]`: `just --list` hides them, `just <name>` still runs one.
 
 The web server reloads itself when Python under `optimiser/` or `webui/` changes
 (watchfiles; `--no-reload` turns it off); static files are read fresh anyway. Vue pages need
@@ -567,10 +571,11 @@ pass value types to `il2cpp_runtime_invoke` by pointer (`Nullable<int>` as
 {bool hasValue; int value}), unbox struct enumerators for `this`, and release the
 `AppModel.ReadUser` guard.
 
-IL2CPP dump for the current game (11.85.5, metadata v39): `just dump` into `data/dump/11.85.5`,
+IL2CPP dump for the current game (11.95.0, metadata v39): `just dump` into `data/dump/11.95.0`,
 with the roytu fork of Il2CppDumper (`~/repo/Il2CppDumper` from github.com/roytu/Il2CppDumper,
 built with `dotnet build Il2CppDumper/Il2CppDumper.csproj -c Release -f net8.0
--p:RollForward=Major`; set `RequireAnyKey: false` in the output's `config.json`). Method bodies:
+-p:RollForward=Major`; set `RequireAnyKey: false` in the output's `config.json`: `just install`
+does all of it, `IL2CPP_DUMPER_DIR` moves the checkout). Method bodies:
 disassemble `GameAssembly.dll` at the dump's RVAs (capstone), labelling calls from
 `script.json`. Static array initialisers (`<PrivateImplementationDetails>` fields) show their
 data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.cs`.

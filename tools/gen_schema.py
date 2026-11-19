@@ -5,7 +5,7 @@ Extracts, for every type reachable from the root `StaticData` class:
   - enum value -> name tables
 so the raw static-data JSON can be renamed/typed by static_export.py.
 
-Re-run after re-dumping the game (`just schema`, or `just schema-refresh` for all of it):
+Re-run after re-dumping the game (`just update` does both):
     uv run python -m tools.gen_schema data/dump/<version>/dump.cs schema/schema.json
 """
 

@@ -22,8 +22,10 @@ static_cache := appdata / "LocalLow/Plarium/Raid_ Shadow Legends/static-data"
 web_port := env("WEB_PORT", "8000")
 oracle_out := "/tmp/raider-oracle.json"
 oracle_request_file := "/tmp/raider-oracle-request.txt"
-# The roytu fork of Il2CppDumper (metadata v39+), built for net8.0
-dumper := env("IL2CPP_DUMPER", env("HOME") / "repo/Il2CppDumper/Il2CppDumper/bin/Release/net8.0/Il2CppDumper.dll")
+# The roytu fork of Il2CppDumper (metadata v39+): its checkout (override in .env:
+# IL2CPP_DUMPER_DIR; just install clones and builds it there) and its net8.0 build
+dumper_dir := env("IL2CPP_DUMPER_DIR", env("HOME") / "repo/Il2CppDumper")
+dumper := dumper_dir / "Il2CppDumper/bin/Release/net8.0/Il2CppDumper.dll"
 # Every Python source fmt, lint and style cover
 py := "optimiser webui capture tools"
 
@@ -39,15 +41,25 @@ proxy *args:
         --allow-hosts 'hellhades\.com(:\d+)?$' -s capture/hh_capture.py --flow-detail 0 "$@"
 
 # Re-apply the HellHades sell/equip fix (after a HellHades update) in its install (-q: quiet)
+[private]
 hh-patch *args:
     uv run python -m tools.hh_patch "{{HH_DIR}}" "$@"
 
-# Then checks the level multipliers base stats are computed from (optimiser/levels.py) are the game's.
-# Re-export the game's static data after a game update (--full for the whole static.json)
+# Export the game's tables from its static-data cache (--full for the whole static.json), then
+# check the level multipliers base stats are computed from (optimiser/levels.py) are the game's.
+# The game writes that cache when it runs, so after an update it lags until the game is launched.
+[private]
 static *args:
+    #!/usr/bin/env bash
+    set -eu
     mkdir -p data/game
     uv run python -m tools.static_export "{{static_cache}}" schema/schema.json data/game "$@"
     uv run python -m tools.check_levels metadata "{{metadata}}"
+    data=$(ls "{{static_cache}}" | sort -V | tail -1)
+    code=$(basename "$(ls -d data/dump/*/ | sort -V | tail -1)")
+    if [ "$data" != "$code" ]; then
+        echo "note: the game's static data is $data, its code $code: launch the game once, then just update" >&2
+    fi
 
 # Ask for this machine's paths (Raid's Proton prefix, the HH extractor) and save them in .env
 configure:
@@ -74,6 +86,7 @@ configure:
     echo "saved .env"
 
 # Create mitmproxy's CA (~/.mitmproxy) if missing and trust it in Raid's prefix (Wine stopped)
+[private]
 ca:
     #!/usr/bin/env bash
     set -eu
@@ -85,27 +98,55 @@ ca:
     fi
     uv run python -m tools.wine_trust_ca "{{RAID_PREFIX}}" "$cert"
 
-# Setup: paths (if no .env), mitmproxy's CA (Raid closed the first time only), then update
+# A fresh checkout: paths (if no .env), the tools (Il2CppDumper, the reader's Rust target),
+# mitmproxy's CA (Raid closed the first time only), then update
+[doc("Set up a fresh checkout (Raid closed the first time), then update")]
 install:
     @[ -f .env ] || just configure
+    just tools
     just ca
     just update
 
-# After a pull/game/HH update (Raid can run): deps, HH patch, game data, assets
+# After a pull, a game update or an HH update (Raid can run; launch it once after a game
+# update first, so it writes its static data): deps, the HH patch, the game's dump (when its
+# code changed), the reader's layout and build, the schema and tables, assets, the front end
+[doc("After a pull, a game update (launch the game once first) or an HH update")]
 update:
     uv sync --all-groups
     npm ci --silent
     @if [ -d "{{HH_DIR}}" ]; then just hh-patch -q; \
     else echo "HH extractor not found at {{HH_DIR}}: skipped the patch (just configure, then just update)"; fi
+    just dump
+    just reader-layout
+    just reader
+    just schema
     just static
     just assets
     just frontend-build
 
+# What install needs besides the project's own deps: Il2CppDumper (cloned and built if
+# missing) and the reader's Rust target; the target's linker (mingw-w64) is checked only
+[private]
+tools:
+    #!/usr/bin/env bash
+    set -eu
+    if [ ! -f "{{dumper}}" ]; then
+        [ -d "{{dumper_dir}}" ] || git clone https://github.com/roytu/Il2CppDumper "{{dumper_dir}}"
+        dotnet build "{{dumper_dir}}/Il2CppDumper/Il2CppDumper.csproj" -c Release -f net8.0 \
+            -p:RollForward=Major
+    fi
+    sed -i 's/"RequireAnyKey": true/"RequireAnyKey": false/' "$(dirname "{{dumper}}")/config.json"
+    rustup target add x86_64-pc-windows-gnu
+    command -v x86_64-w64-mingw32-gcc >/dev/null \
+        || echo "warning: no x86_64-w64-mingw32-gcc: install mingw-w64-gcc to build the reader" >&2
+
 # Build the memory reader (Rust, for the game's Wine prefix)
+[private]
 reader:
     cd reader && cargo build --release
 
-# The reader's layout (offsets, enums), from the newest dump (just dump after a game update)
+# The reader's layout (offsets, enums), from the newest dump
+[private]
 reader-layout:
     uv run python -m tools.reader_layout "$(ls -d data/dump/*/ | sort -V | tail -1)" data/cache/reader-layout.json
 
@@ -168,6 +209,7 @@ web-restart port=web_port: (web-stop port)
     just web "{{port}}"
 
 # Extract portraits, set icons and piece art from the game's Unity bundles
+[private]
 assets:
     uv run --group assets python -m tools.extract_assets "{{game_install}}"
 
@@ -198,26 +240,38 @@ css-fix:
 # Format, lint and style-check
 check: fmt lint style css frontend-check
 
-# Dump the installed game's IL2CPP metadata (offline) into data/dump/<game version>
+# Dump the installed game's IL2CPP metadata (offline) into data/dump/<game version>, unless a
+# dump of this code exists (source.sha256: its GameAssembly.dll and metadata). The version is
+# the code's own (StableManifestVersion), not the static data's, which lags until the game runs.
+[private]
 dump:
     #!/usr/bin/env bash
     set -eu
-    version=$(ls "{{static_cache}}" | sort -V | tail -1)
+    hash=$(cat "{{game}}/GameAssembly.dll" "{{metadata}}" | sha256sum | cut -d' ' -f1)
+    if cat data/dump/*/source.sha256 2>/dev/null | grep -qxF "$hash"; then
+        echo "dump up to date"
+        exit 0
+    fi
+    tmp=data/dump/.new
+    rm -rf "$tmp"
+    mkdir -p "$tmp"
+    dotnet "{{dumper}}" "{{game}}/GameAssembly.dll" "{{metadata}}" "$tmp"
+    version=$(sed -n 's/.*const string StableManifestVersion = "\(.*\)";/\1/p' "$tmp/dump.cs")
+    [ -n "$version" ] || { echo "no StableManifestVersion in the dump" >&2; exit 1; }
     out=data/dump/$version
-    mkdir -p "$out"
-    dotnet "{{dumper}}" "{{game}}/GameAssembly.dll" "{{metadata}}" "$out"
+    rm -rf "$out"
+    mv "$tmp" "$out"
+    echo "$hash" > "$out/source.sha256"
     echo "dumped $version -> $out"
 
 # Regenerate schema/schema.json from an IL2CPP dump (default: the newest in data/dump)
+[private]
 schema dump_cs="":
     #!/usr/bin/env bash
     set -eu
     dump_cs="{{dump_cs}}"
     [ -n "$dump_cs" ] || dump_cs=$(ls -d data/dump/*/ | sort -V | tail -1)dump.cs
     uv run python -m tools.gen_schema "$dump_cs" schema/schema.json
-
-# After a game update changes the data's shape: re-dump the game, regenerate the schema, re-export
-schema-refresh: dump schema static
 
 # Compare the computed base stats (optimiser/levels.py) with a raider oracle table
 check-levels oracle="data/game/base_stats_6_60.json":
