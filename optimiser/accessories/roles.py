@@ -21,6 +21,7 @@ are worth 1 and target every type, and so do new types every set.
 - `SetFit`, `SetTable`, `DEFAULT_FIT`, `OFF_TARGET`, `seed_set_fits`: the sets as the user
   rates them
 - `NO_SET`: set-less pieces' set id
+- `Group`: the accessory a fit is asked about
 - `crit_amulet_exception`: the one exception to a set's targets
 - `type_fits`: what each type counts for on an accessory
 """
@@ -289,32 +290,43 @@ def seed_fit(set_id: int, types: tuple[ChampionType, ...]) -> SetFit:
     return SetFit(factor, frozenset(off))
 
 
-def crit_amulet_exception(
-    sets: SetTable, types: tuple[ChampionType, ...], set_id: int, slot: Slot, main: Stat
-) -> bool:
+@dataclass(frozen=True)
+class Group:
+    """The accessory a fit is asked about: slot, main stat, set and faction — the four
+    things every champion type's view of a piece turns on. A clean-up group: pieces alike
+    to a type in all four."""
+
+    slot: Slot
+    main: Stat
+    set_id: int
+    faction: str | None
+
+
+def crit_amulet_exception(sets: SetTable, types: tuple[ChampionType, ...], group: Group) -> bool:
     """A set that targets no damage type still keeps a C.DMG amulet, counted in full for
     damage types: some bosses' mechanics turn on crits."""
-    return slot is Slot.AMULET and main is Stat.CD and Kind.DAMAGE not in sets.kinds(set_id, types)
+    return (
+        group.slot is Slot.AMULET
+        and group.main is Stat.CD
+        and Kind.DAMAGE not in sets.kinds(group.set_id, types)
+    )
 
 
-def type_fits(
-    sets: SetTable,
-    types: tuple[ChampionType, ...],
-    set_id: int,
-    slot: Slot,
-    main: Stat,
-    faction: str | None,
-) -> tuple[float, ...]:
+def type_fits(sets: SetTable, types: tuple[ChampionType, ...], group: Group) -> tuple[float, ...]:
     """Per type (in `types` order), the share of its score it counts for on an accessory: 0
     unless it's of everyone or the piece's faction and the main stat suits it; then 1 if the
     set targets it, else the table's `off_target`."""
-    crit = crit_amulet_exception(sets, types, set_id, slot, main)
+    crit = crit_amulet_exception(sets, types, group)
 
     def fit(champion_type: ChampionType) -> float:
-        if champion_type.faction not in (None, faction) or not champion_type.suits(slot, main):
+        if champion_type.faction not in (None, group.faction) or not champion_type.suits(
+            group.slot, group.main
+        ):
             return 0.0
 
-        if sets.targets(set_id, champion_type) or (crit and champion_type.kind is Kind.DAMAGE):
+        if sets.targets(group.set_id, champion_type) or (
+            crit and champion_type.kind is Kind.DAMAGE
+        ):
             return 1.0
 
         return sets.off_target

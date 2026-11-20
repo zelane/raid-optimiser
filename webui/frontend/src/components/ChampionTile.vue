@@ -76,15 +76,16 @@ const starsTitle = computed(() => {
   .champion-stars {
     display: flex;
     justify-content: center;
-    margin-top: .3em;
+    margin-top: 0.3em;
   }
 }
 
 /* The stars are Stars' root (reached); each a sixth of the tile across. (A :deep() only
    compiles right in a rule of its own, not nested.) */
 .tile .champion-stars :deep(.star) {
-  width: calc(100% / 6 + 0.1em);
   gap: 1px;
+  width: calc(100% / 6 + 0.1em);
+
   /* margin: 0 -0.05em; */
 }
 
@@ -92,10 +93,11 @@ const starsTitle = computed(() => {
   position: relative;
   overflow: hidden;
   aspect-ratio: 140 / 182;
-  border: .1em solid var(--rarity);
+  border: 0.1em solid var(--rarity);
   background: var(--art-backdrop);
 
   /* The frame, as the game's: a band of the rarity's colour, its outer edge lit. */
+
   /* outline: 1px solid var(--rarity-light); */
 }
 
@@ -103,15 +105,15 @@ const starsTitle = computed(() => {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border: 3px solid black;
+  object-fit: cover;
 }
 
 .tile-frame::before {
-  content: '';
+  content: "";
   position: absolute;
-  background: transparent;
   inset: 0;
+  background: transparent;
   box-shadow: inset 0 0 20px 5px black;
 }
 

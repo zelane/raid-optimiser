@@ -21,10 +21,11 @@ from optimiser.settings import (
     add_champion_type,
     delete_champion_type,
     read_champion_types,
+    read_rules,
     read_set_table,
     reseed_accessories,
     save_champion_type,
-    save_set_fit,
+    save_set,
     set_off_target,
 )
 from optimiser.store import backup
@@ -93,7 +94,8 @@ def test_reseed_starts_over(tmp_path: Path):
     sets = read_set_table(store, seeded)
     delete_champion_type(store, seeded[0].key)
     set_id, fit = sets.fits[0]
-    save_set_fit(store, set_id, replace(fit, factor=9.0))
+    rules = read_rules(store, seeded, sets).set_rules(set_id)
+    save_set(store, set_id, replace(fit, factor=9.0), rules)
     set_off_target(store, 0.25)
     backup(store, tmp_path / "copy.sqlite")
 

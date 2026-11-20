@@ -17,7 +17,8 @@ number of rolls, the set and the faction, and re-picks the main stat and which s
 is, alike among what the slot can roll.
 
 - `ROLL_6`, `RANK_ROLL`, `REFERENCE_BASE`, `MAIN_ROLLS`, `UPGRADE_LEVELS`, `ROLL_TO`,
-  `MAX_SUBSTATS`, `QUANTILE`, `ACCESSORIES`, `MAIN_STATS`, `SUBSTATS`: the game, and units
+  `MAX_SUBSTATS`, `QUANTILE`, `ACCESSORIES`, `MAIN_STATS`, `Substat`, `SUBSTATS`: the game,
+  and units
 - `Scorer`, `make_scorer`: the types, the set fits and the glyphs' best rolls, as scoring
   needs them
 - `Scores`, `Potential`: a piece's scores
@@ -34,10 +35,11 @@ from dataclasses import dataclass
 from functools import lru_cache
 from itertools import combinations, permutations
 from math import comb, factorial
+from typing import NamedTuple
 
 import numpy as np
 
-from optimiser.accessories.roles import ChampionType, Kind, SetTable, type_fits
+from optimiser.accessories.roles import ChampionType, Group, Kind, SetTable, type_fits
 from optimiser.account import Artifact, GearLine, GearTables, GlyphGrade, GlyphKind, Slot, Stat
 
 ACCESSORIES = (Slot.RING, Slot.AMULET, Slot.BANNER)
@@ -46,35 +48,44 @@ MAIN_STATS = {
     Slot.AMULET: (Stat.ATK, Stat.CD, Stat.HP, Stat.DEF),
     Slot.BANNER: (Stat.ATK, Stat.HP, Stat.DEF, Stat.ACC, Stat.RES),
 }
+
+
+class Substat(NamedTuple):
+    """One line a slot can roll: a stat, flat or %."""
+
+    stat: Stat
+    absolute: bool
+
+
 BODY_LINES = tuple(
-    (s, absolute) for s in (Stat.ATK, Stat.HP, Stat.DEF) for absolute in (True, False)
+    Substat(s, absolute) for s in (Stat.ATK, Stat.HP, Stat.DEF) for absolute in (True, False)
 )
-SUBSTATS = {  # each line a slot can roll: (stat, absolute)
+SUBSTATS = {  # each line a slot can roll
     Slot.RING: BODY_LINES,
     Slot.AMULET: (
-        (Stat.ATK, True),
-        (Stat.HP, True),
-        (Stat.DEF, True),
-        (Stat.ACC, True),
-        (Stat.RES, True),
-        (Stat.CD, False),
+        Substat(Stat.ATK, True),
+        Substat(Stat.HP, True),
+        Substat(Stat.DEF, True),
+        Substat(Stat.ACC, True),
+        Substat(Stat.RES, True),
+        Substat(Stat.CD, False),
     ),
-    Slot.BANNER: ((Stat.SPD, True), *BODY_LINES),
+    Slot.BANNER: (Substat(Stat.SPD, True), *BODY_LINES),
 }
 
-# An average 6★ substat roll (measured on the account's gear): the unit scores count in.
+# An average 6★ roll of each line (measured on the account's gear): the unit scores count in.
 ROLL_6 = {
-    (Stat.HP, False): 0.06,
-    (Stat.ATK, False): 0.06,
-    (Stat.DEF, False): 0.06,
-    (Stat.CR, False): 0.06,
-    (Stat.CD, False): 0.06,
-    (Stat.SPD, True): 5.5,
-    (Stat.ACC, True): 10.5,
-    (Stat.RES, True): 10.5,
-    (Stat.HP, True): 380,
-    (Stat.ATK, True): 22.5,
-    (Stat.DEF, True): 22.8,
+    Substat(Stat.HP, False): 0.06,
+    Substat(Stat.ATK, False): 0.06,
+    Substat(Stat.DEF, False): 0.06,
+    Substat(Stat.CR, False): 0.06,
+    Substat(Stat.CD, False): 0.06,
+    Substat(Stat.SPD, True): 5.5,
+    Substat(Stat.ACC, True): 10.5,
+    Substat(Stat.RES, True): 10.5,
+    Substat(Stat.HP, True): 380,
+    Substat(Stat.ATK, True): 22.5,
+    Substat(Stat.DEF, True): 22.8,
 }
 RANK_ROLL = {6: 1.0, 5: 0.82}  # a roll's size against 6★; lower ranks scale by stars
 REFERENCE_BASE = {Stat.HP: 17010, Stat.ATK: 1035, Stat.DEF: 1035}  # median 6★ L60 base
@@ -188,23 +199,19 @@ class Piece:
 
 def piece_fits(scorer: Scorer, piece: Piece, main: Stat) -> tuple[float, ...]:
     """What each of the scorer's types counts for on the piece with `main`."""
-    return type_fits(scorer.sets, scorer.types, piece.set_id, piece.slot, main, piece.faction)
+    return type_fits(
+        scorer.sets, scorer.types, Group(piece.slot, main, piece.set_id, piece.faction)
+    )
 
 
 def assess(piece: Piece, scorer: Scorer) -> Potential:
-    lines = tuple(
-        Line(line.stat, line.absolute, line_units(line.stat, line.absolute, line.value))
-        for line in piece.substats
-    )
+    lines = tuple(Line(line.stat, line.absolute, line_units(line)) for line in piece.substats)
     main = piece.main
     fits = piece_fits(scorer, piece, main)
     roll = roll_size(piece.rank)
     main_rolls = main_units(scorer.gear, piece.slot, main, piece.rank)
 
-    glyphs = {
-        (stat, absolute): glyph_units(scorer, stat, absolute, piece.rank)
-        for stat, absolute in SUBSTATS[piece.slot]
-    }
+    glyphs = {sub: glyph_units(scorer, sub, piece.rank) for sub in SUBSTATS[piece.slot]}
 
     def natural_to(level: int) -> Scores:
         upgrades = upgrades_left(piece.level, level)
@@ -259,7 +266,7 @@ def natural(
     """Each way the upgrades can land. New substats come first, any combination alike; the
     rest spread over the four lines multinomially. Every line counts its best glyph
     (`glyphs`, in average rolls, by line)."""
-    held = {(line.stat, line.absolute) for line in lines}
+    held = {Substat(line.stat, line.absolute) for line in lines if line.stat is not None}
     candidates = [c for c in SUBSTATS[slot] if c not in held and c != main_line(main)]
     new_count = min(upgrades, MAX_SUBSTATS - len(lines), len(candidates))
     spread, spread_chances = spread_table(upgrades - new_count, len(lines) + new_count)
@@ -269,15 +276,16 @@ def natural(
     totals_by_outcome: list[np.ndarray] = []
 
     for added in combinations(candidates, new_count):
-        all_lines = [*lines, *(Line(stat, absolute, 0.0) for stat, absolute in added)]
+        all_lines = [*lines, *(Line(sub.stat, sub.absolute, 0.0) for sub in added)]
         totals = np.zeros((len(spread), len(STATS)))
 
         for column, line in enumerate(all_lines):
             if line.stat is None:
                 continue
 
-            one = one_roll(line.stat, line.absolute, roll)
-            glyph = glyphs.get((line.stat, line.absolute), 0.0)
+            sub = Substat(line.stat, line.absolute)
+            one = one_roll(sub, roll)
+            glyph = glyphs.get(sub, 0.0)
             totals[:, STATS.index(line.stat)] += line.units + glyph + rolls_added[:, column] * one
 
         chances.append(added_weight * spread_chances)
@@ -363,9 +371,9 @@ def rework_outcomes(
 
     for main_index, main in enumerate(MAIN_STATS[slot]):
         candidates = [c for c in SUBSTATS[slot] if c != main_line(main)]
-        rolls_of = np.array([one_roll(s, a, roll) for s, a in candidates])
-        glyph_of = np.array([glyph_units(scorer, s, a, rank) for s, a in candidates])
-        stat_index = np.array([STATS.index(s) for s, _ in candidates])
+        rolls_of = np.array([one_roll(sub, roll) for sub in candidates])
+        glyph_of = np.array([glyph_units(scorer, sub, rank) for sub in candidates])
+        stat_index = np.array([STATS.index(sub.stat) for sub in candidates])
         picks = np.array(list(permutations(range(len(candidates)), len(counts))))
         rolls = np.array(counts) + upgrades / max(len(counts), 1)
 
@@ -470,34 +478,34 @@ def roll_size(rank: int) -> float:
     return RANK_ROLL.get(rank, rank / 6)
 
 
-def one_roll(stat: Stat, absolute: bool, size: float) -> float:
+def one_roll(sub: Substat, size: float) -> float:
     """An average roll of a rank whose rolls are `size` of 6★ ones, in average 6★ rolls."""
-    return roll_units(stat, absolute, ROLL_6.get((stat, absolute), 0)) * size
+    return roll_units(sub, ROLL_6.get(sub, 0)) * size
 
 
-def main_line(main: Stat) -> tuple[Stat, bool]:
+def main_line(main: Stat) -> Substat:
     """A main stat as a line: flat, but for C.DMG (always a %)."""
-    return main, main is not Stat.CD
+    return Substat(main, main is not Stat.CD)
 
 
-def roll_units(stat: Stat, absolute: bool, value: float) -> float:
+def roll_units(sub: Substat, value: float) -> float:
     """`value` in average 6★ rolls of the stat; flat HP/ATK/DEF as a share of base, so it
     counts with the % line."""
-    if absolute and stat in REFERENCE_BASE:
-        return value / REFERENCE_BASE[stat] / ROLL_6[(stat, False)]
+    if sub.absolute and sub.stat in REFERENCE_BASE:
+        return value / REFERENCE_BASE[sub.stat] / ROLL_6[Substat(sub.stat, False)]
 
-    return value / ROLL_6.get((stat, absolute), 1)
-
-
-def line_units(stat: Stat | None, absolute: bool, value: float) -> float:
-    return roll_units(stat, absolute, value) if stat is not None else 0.0
+    return value / ROLL_6.get(sub, 1)
 
 
-def glyph_units(scorer: Scorer, stat: Stat, absolute: bool, rank: int) -> float:
+def line_units(line: PieceLine) -> float:
+    return roll_units(Substat(line.stat, line.absolute), line.value) if line.stat else 0.0
+
+
+def glyph_units(scorer: Scorer, sub: Substat, rank: int) -> float:
     """The best glyph a piece of `rank` can take on a line, in average rolls (0: no glyph
     for it)."""
-    top = scorer.glyphs.get(GlyphKind(stat, absolute), {}).get(rank, 0)
-    return roll_units(stat, absolute, top)
+    top = scorer.glyphs.get(GlyphKind(sub.stat, sub.absolute), {}).get(rank, 0)
+    return roll_units(sub, top)
 
 
 def main_units(gear: GearTables, slot: Slot, main: Stat, rank: int) -> float:
