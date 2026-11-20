@@ -13,7 +13,7 @@ scoring doesn't read them), and kept on disk per piece (`scores`).
   shape
 - `accessories_page`, `set_target_free`, `protect_accessory`,
   `save_type`, `add_type`, `copy_type`, `delete_type`, `save_set_value`, `save_set_target`,
-  `save_set_rule`, `save_off_target`, `save_rule`,
+  `save_set_rule` (`write_set`), `save_off_target`, `save_rule`,
   `pieces_to_sell`: what the pages ask for
 - `current_types`, `current_sets`, `current_rules`, `current_assessment` (`potentials_for`,
   cached),
@@ -44,9 +44,10 @@ from optimiser.accessories.roles import (
     TYPE_STATS,
     ChampionType,
     Kind,
+    SetFit,
     SetTable,
 )
-from optimiser.accessories.rules import SET_RULE_BOUNDS, Rules, rule_bounds
+from optimiser.accessories.rules import SET_RULE_BOUNDS, Rules, SetRules, rule_bounds
 from optimiser.account import Account, Champion, faction_label
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import POTENTIALS, STORE
@@ -369,20 +370,25 @@ def copy_type(account: Account, key: str) -> None:
 
 def save_set_value(account: Account, set_id: int, factor: float) -> None:
     fit = current_sets(account).fit(set_id)
-    save_set(STORE, set_id, replace(fit, factor=factor), current_rules(account).set_rules(set_id))
+    write_set(account, set_id, replace(fit, factor=factor))
 
 
 def save_set_target(account: Account, set_id: int, type_key: str, on: bool) -> None:
     fit = current_sets(account).fit(set_id)
     off = fit.off - {type_key} if on else fit.off | {type_key}
-    save_set(STORE, set_id, replace(fit, off=off), current_rules(account).set_rules(set_id))
+    write_set(account, set_id, replace(fit, off=off))
 
 
 def save_set_rule(account: Account, set_id: int, name: str, value: int) -> None:
     """`name`: a `SetRules` field's."""
     rules = current_rules(account).set_rules(set_id)
-    fit = current_sets(account).fit(set_id)
-    save_set(STORE, set_id, fit, replace(rules, **{name: value}))
+    write_set(account, set_id, current_sets(account).fit(set_id), replace(rules, **{name: value}))
+
+
+def write_set(account: Account, set_id: int, fit: SetFit, rules: SetRules | None = None) -> None:
+    """Stores the set's new fit with the rules given, or with its current ones."""
+    own = current_rules(account).set_rules(set_id) if rules is None else rules
+    save_set(STORE, set_id, fit, own)
 
 
 def save_off_target(share: float) -> None:
@@ -726,7 +732,7 @@ def swap_groups(account: Account, plan: Plan) -> list[SwapGroup]:
     by_champion: dict[int, list[Swap]] = {}
 
     for swap in plan.swaps:
-        by_champion.setdefault(swap.champion_id, []).append(swap)
+        by_champion.setdefault(swap.pairing.champion_id, []).append(swap)
 
     def gain(swaps: list[Swap]) -> float:
         return sum(swap.pairing.gain() for swap in swaps)

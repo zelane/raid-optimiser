@@ -31,7 +31,7 @@ import ast
 import re
 from dataclasses import dataclass, replace
 
-from optimiser.accessories.potential import ROLL_6
+from optimiser.accessories.potential import ROLL_6, Substat
 from optimiser.accessories.roles import (
     STANDARD_TYPES,
     SUPPORT_WEIGHTS,
@@ -54,7 +54,6 @@ MIXED = 0.3  # a second stat pulling this much of the first makes a mixed type
 MINOR = 0.1  # pulls below this are left out
 DAMAGE_KINDS = {"ApplyDebuff"}  # bombs
 SUPPORT_KINDS = {"Heal", "ApplyBuff", "Revive"}
-GRADE = 6
 
 
 @dataclass(frozen=True)
@@ -194,7 +193,7 @@ def faction_types(account: Account) -> tuple[ChampionType, ...]:
     names: dict[str, set[str]] = {}
 
     for wearer in wearers(account):
-        if (own := wearer_type(wearer, account)) is None:
+        if (own := wearer_type(wearer, wearer_pull(wearer, account))) is None:
             continue
 
         if (known := by_key.get(own.key)) is not None:
@@ -215,7 +214,7 @@ def wearers(account: Account) -> list[Wearer]:
     found = []
 
     for champion in sorted(account.champions.values(), key=lambda c: c.name):
-        if champion.grade < GRADE or champion.type_id in seen:
+        if champion.grade < MAX_GRADE or champion.type_id in seen:
             continue
 
         seen.add(champion.type_id)
@@ -225,8 +224,8 @@ def wearers(account: Account) -> list[Wearer]:
     return found
 
 
-def wearer_type(wearer: Wearer, account: Account) -> ChampionType | None:
-    """Its exception if it has one, else what its formulas give."""
+def wearer_type(wearer: Wearer, pull: Pull) -> ChampionType | None:
+    """Its exception if it has one, else what `pull` gives."""
     match OVERRIDES.get(wearer.key()):
         case Skip():
             return None
@@ -235,7 +234,7 @@ def wearer_type(wearer: Wearer, account: Account) -> ChampionType | None:
             return build_type(wearer, kind, weights, mains, label)
 
         case None:
-            return own_type(wearer, wearer_pull(wearer, account))
+            return own_type(wearer, pull)
 
 
 def wearer_pull(wearer: Wearer, account: Account) -> Pull:
@@ -280,8 +279,8 @@ def formula_pull(formula: str, base: dict[Stat, float]) -> dict[Stat, float]:
     """How much one roll of each stat the formula reads adds to it; {} if it can't be read."""
     stats = {stat: base.get(stat, 0) * GEARED for stat in BODY} | TYPICAL
     # An average roll: a % one of base for ATK/HP/DEF, a flat one for the rest.
-    rolls = {stat: base.get(stat, 0) * ROLL_6[(stat, False)] for stat in BODY}
-    rolls |= {stat: ROLL_6[(stat, True)] for stat in TYPICAL}
+    rolls = {stat: base.get(stat, 0) * ROLL_6[Substat(stat, False)] for stat in BODY}
+    rolls |= {stat: ROLL_6[Substat(stat, True)] for stat in TYPICAL}
 
     if (now := evaluate(formula, stats)) is None:
         return {}

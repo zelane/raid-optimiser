@@ -21,7 +21,7 @@ from enum import StrEnum
 from optimiser.accessories.roles import ChampionType
 from optimiser.accessories.scaling import (
     OVERRIDES,
-    STAT_NAMES,
+    Pull,
     Wearer,
     evaluate,
     wearer_pull,
@@ -29,6 +29,7 @@ from optimiser.accessories.scaling import (
     wearers,
 )
 from optimiser.account import Account, Stat, load_account
+from optimiser.damage import STAT_NAMES
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 
@@ -71,12 +72,13 @@ class Row:
 
 def report(account: Account) -> list[Row]:
     forms = wearers(account)
-    types = {w.key(): wearer_type(w, account) for w in forms}
+    pulls = {wearer.key(): wearer_pull(wearer, account) for wearer in forms}
+    types = {wearer.key(): wearer_type(wearer, pulls[wearer.key()]) for wearer in forms}
     rows = []
 
     for wearer in forms:
         own = types[wearer.key()]
-        pull = wearer_pull(wearer, account)
+        pull = pulls[wearer.key()]
         rows.append(
             Row(
                 name=wearer.name(),
@@ -85,7 +87,7 @@ def report(account: Account) -> list[Row]:
                 damage=describe_pull(pull.damage),
                 support=describe_pull(pull.support),
                 type_label=own.label if own else "standard",
-                flags=flags_for(wearer, account, pull.support, own is not None, types),
+                flags=flags_for(wearer, account, pull, own, types),
                 formulas=tuple(
                     dict.fromkeys(f"{label}: {f}" for label, f in formulas_of(wearer, account))
                 ),
@@ -98,8 +100,8 @@ def report(account: Account) -> list[Row]:
 def flags_for(
     wearer: Wearer,
     account: Account,
-    support: dict[Stat, float],
-    has_own: bool,
+    pull: Pull,
+    own: ChampionType | None,
     types: dict[tuple[str, int], ChampionType | None],
 ) -> tuple[Flag, ...]:
     formulas = [formula for _, formula in formulas_of(wearer, account)]
@@ -112,9 +114,9 @@ def flags_for(
         (Flag.UNREADABLE, any(evaluate(f, stats) is None for f in formulas)),
         (Flag.TARGET, any(TARGET_TERMS.search(f) for f in formulas)),
         (Flag.UTILITY, any(token in UTILITY for token in tokens)),
-        (Flag.NO_SUPPORT_FORMULA, wearer.form.role == "Support" and not support),
+        (Flag.NO_SUPPORT_FORMULA, wearer.form.role == "Support" and not pull.support),
         (Flag.FORMS_DIFFER, wearer.forms > 1 and len(siblings) > 1),
-        (Flag.OWN_TYPE, has_own),
+        (Flag.OWN_TYPE, own is not None),
         (Flag.OVERRIDDEN, wearer.key() in OVERRIDES),
     )
     return tuple(flag for flag, applies in checks if applies)
