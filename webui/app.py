@@ -8,7 +8,8 @@ app.py - the web entry point: routes that hand the service's views to Vue pages 
   `reserve_rule`, `champion`, `builds`, `stop_solve`, `delete_run`, `equip`, `preview`,
   `accessories`, `accessory_type`, `add_accessory_type`, `copy_accessory_type`,
   `delete_accessory_type`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `masteries`, `sync`: the routes
+  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `masteries`, `books`, `sync`:
+  the routes
 - `sent`, `saved`, `view_json`: a Vue component's own requests, answered as JSON
 - `finder_query`: the champion filters in a request's query
 - `back_with`: back to a Vue page's form with its errors
@@ -38,6 +39,7 @@ from optimiser.solve import Stopped, stop
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
+from webui.forms.books import parse_books_query
 from webui.forms.common import FormErrors
 from webui.forms.finder import FinderQuery, parse_finder_query
 from webui.forms.request import parse_equip, parse_request
@@ -67,6 +69,7 @@ from webui.forms.teams import parse_against, parse_teams
 from webui.result import Err, Result, failed
 from webui.service import accessories as accessory_pages
 from webui.service import assumptions as assumption_pages
+from webui.service import books as book_pages
 from webui.service import champions as champion_pages
 from webui.service import chimera as chimera_pages
 from webui.service import current, layout, results, runs
@@ -440,6 +443,15 @@ def info(request: Request):
 def masteries(request: Request):
     page = mastery_pages.masteries_page(current.current_account())
     return inertia_page(request, "Masteries", {"page": page})
+
+
+@app.get("/books")
+def books(request: Request):
+    """The champions short of skill books, as the champion filter bar narrows them:
+    rarity and stars start at their `forms.books` defaults, the rest of the bar at any."""
+    query = parse_books_query(request.query_params)
+    page = book_pages.books_page(current.current_account(), query)
+    return inertia_page(request, "Books", {"page": page})
 
 
 @app.get("/targets")

@@ -24,10 +24,11 @@ of pieces each (`Rules.quota`), worn ones on unlocked champions counting; pieces
 first, as if worth the rules' `surplus_factor` of their value.
 
 - `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`: the inventory
-- `Keep`, `SWITCHED`, `Group`, `Placed`, `Pairing`, `Place`, `Swap`, `Plan`: the plan
+- `Keep`, `SWITCHED`, `Placed`, `Pairing`, `Place`, `Swap`, `Plan`: the plan
 - `plan_cleanup`: the workflow
-- `find_swaps` (`set_upgrades`, `worn_score`), `res_speed_reserve`, `faction_wars_reserve`,
-  `places_in_groups`, `keep_reasons` (`could_rework_to_crit`), `place_piece`: its steps
+- `find_swaps` (`set_upgrades`, `pairing`, `worn_score`), `res_speed_reserve`,
+  `faction_wars_reserve`, `places_in_groups`, `keep_reasons` (`could_rework_to_crit`),
+  `place_piece`: its steps
 - `Reserves`: what the plan's own reserves keep
 - `kind_score`, `group_of`, `speed_value`, `speed_rolls`: what they share
 """
@@ -37,7 +38,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from optimiser.accessories.assess import Assessed, Assessment, Where
-from optimiser.accessories.roles import NO_SET, Kind
+from optimiser.accessories.roles import NO_SET, Group, Kind
 from optimiser.accessories.rules import Rules
 from optimiser.account import Slot, Stat
 
@@ -66,14 +67,6 @@ SWITCHED = {  # the keep rules the user may switch off, by their `Rules` switch
 
 
 @dataclass(frozen=True)
-class Group:
-    slot: Slot
-    main: Stat
-    set_id: int
-    faction: str | None
-
-
-@dataclass(frozen=True)
 class Placed:
     """A loose piece (inventory or mailbox): its place in its group (1 the best), and the
     value drops go by."""
@@ -91,10 +84,12 @@ class Placed:
 
 @dataclass(frozen=True)
 class Pairing:
-    """A loose piece that should replace one worn: same slot, main stat and faction."""
+    """A loose piece that should replace one worn: same slot, main stat and faction.
+    `champion_id`: the champion wearing the `worn` one."""
 
     better: Assessed
     worn: Assessed
+    champion_id: int
 
     def gain(self) -> float:
         """What wearing the better piece gives over the worn one, as they are now."""
@@ -111,12 +106,11 @@ class Place:
 
 @dataclass(frozen=True)
 class Swap:
-    """Equip the pairing's `better` (loose) on `champion_id`, in place of its `worn`: the same
+    """Equip the pairing's `better` (loose) on its champion, in place of its `worn`: the same
     set too (so the set bonus stays) unless `worn` has none. `then_sell`: `worn`, once off, is
     among what the plan drops."""
 
     pairing: Pairing
-    champion_id: int
     then_sell: bool
 
 
@@ -200,9 +194,7 @@ def plan_cleanup(
             if p.piece.where is Where.MAILBOX and p.piece.artifact.id not in dropped
         ),
         leave_unclaimed=dropped_from(Where.MAILBOX),
-        swaps=tuple(
-            Swap(pair, pair.worn.wearer or 0, pair.worn.artifact.id in dropped) for pair in pairs
-        ),
+        swaps=tuple(Swap(pair, pair.worn.artifact.id in dropped) for pair in pairs),
         short=to_drop - len(dropping),
     )
 
@@ -237,7 +229,7 @@ def find_swaps(pieces: tuple[Assessed, ...], rules: Rules) -> list[Pairing]:
         best_first = sorted(loose.get(group, ()), key=worn_score, reverse=True)
         weakest_first = sorted(wearing, key=worn_score)
         pairs += [
-            Pairing(better, current)
+            pairing(better, current)
             for better, current in zip(best_first, weakest_first, strict=False)
             if worn_score(better) > worn_score(current) * rules.swap_margin
         ]
@@ -282,9 +274,16 @@ def set_upgrades(
 
         better = max(candidates, key=lambda p: (worn_score(p), p.set_factor))
         used |= {better.artifact.id, current.artifact.id}
-        pairs.append(Pairing(better, current))
+        pairs.append(pairing(better, current))
 
     return pairs
+
+
+def pairing(better: Assessed, worn: Assessed) -> Pairing:
+    """`better` in place of `worn`, on the champion wearing it (`find_swaps` only pairs pieces
+    a champion wears)."""
+    assert worn.wearer is not None
+    return Pairing(better, worn, worn.wearer)
 
 
 def worn_score(piece: Assessed) -> float:
@@ -405,9 +404,7 @@ def places_in_groups(assessment: Assessment) -> dict[int, Place]:
     places = {}
 
     for group, members in groups.items():
-        quota = assessment.rules.quota(
-            assessment.sets, assessment.types, group.set_id, group.slot, group.main
-        )
+        quota = assessment.rules.quota(assessment.sets, assessment.types, group)
         ranked = sorted(members, key=lambda p: p.value, reverse=True)
         places |= {p.artifact.id: Place(place, quota) for place, p in enumerate(ranked, start=1)}
 

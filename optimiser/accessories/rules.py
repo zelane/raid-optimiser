@@ -21,8 +21,14 @@ be switched off; the rest can.
 
 from dataclasses import dataclass, fields
 
-from optimiser.accessories.roles import NO_SET, ChampionType, Kind, SetTable, crit_amulet_exception
-from optimiser.account import Slot, Stat
+from optimiser.accessories.roles import (
+    NO_SET,
+    ChampionType,
+    Group,
+    Kind,
+    SetTable,
+    crit_amulet_exception,
+)
 
 
 @dataclass(frozen=True)
@@ -88,14 +94,12 @@ class Rules:
         """Per faction and slot."""
         return {Kind.SUPPORT: self.faction_wars_support, Kind.DAMAGE: self.faction_wars_damage}
 
-    def quota(
-        self, sets: SetTable, types: tuple[ChampionType, ...], set_id: int, slot: Slot, main: Stat
-    ) -> int:
+    def quota(self, sets: SetTable, types: tuple[ChampionType, ...], group: Group) -> int:
         """How many of a group to keep."""
-        if crit_amulet_exception(sets, types, set_id, slot, main):
+        if crit_amulet_exception(sets, types, group):
             return self.crit_amulet_keep
 
-        return self.set_rules(set_id).keep
+        return self.set_rules(group.set_id).keep
 
 
 DEFAULT_RULES = Rules()

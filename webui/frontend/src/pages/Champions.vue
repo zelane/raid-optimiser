@@ -70,7 +70,7 @@ onMounted(() => {
   <div class="stack">
     <div class="cluster" style="--space: var(--space-s) var(--space-2xl); --basis: 24rem">
       <h1>Champions</h1>
-      <ChampionFilters v-model="filters" :finder="finder" autofocus />
+      <ChampionFilters v-model="filters" :choices="finder" autofocus />
     </div>
     <div class="stack" style="--space: var(--space-s)">
       <p class="caps">{{ count }}</p>

@@ -1,9 +1,11 @@
 <script lang="ts">
 // The champion filters: name, rarity, faction, fewest stars, as the query `/finder` and the
 // champion list read (`q`, `rarity`, `faction`, `grade`; empty: any). The filters (not the
-// name) are remembered in this browser, the same for the list and the finder dialog.
+// name) are remembered in this browser, the same for the list and the finder dialog, unless a
+// page keeps its own state (`watchFilters`'s `keep`).
 import { watch, type Ref } from "vue";
 import { writeKept } from "../composables/kept";
+import type { FilterChoices } from "../types/generated/webui.service.finder";
 
 export interface Filters {
   q: string;
@@ -16,12 +18,18 @@ export const KEPT = "finder-filters";
 export const REMEMBERED = ["rarity", "faction", "grade"] as const;
 
 // Searches again on each change (typing in the name waits for a pause), remembering the
-// filters as they go.
-export function watchFilters(filters: Ref<Filters>, search: () => void) {
+// filters as they go — or not at all, for a page that keeps them itself (`keep: null`).
+export function watchFilters(
+  filters: Ref<Filters>,
+  search: () => void,
+  keep: string | null = KEPT,
+) {
   let pending: ReturnType<typeof setTimeout> | undefined;
 
   watch(filters, (now, before) => {
-    writeKept(KEPT, Object.fromEntries(REMEMBERED.map((name) => [name, now[name]])));
+    if (keep !== null) {
+      writeKept(keep, Object.fromEntries(REMEMBERED.map((name) => [name, now[name]])));
+    }
     clearTimeout(pending);
     pending = setTimeout(search, now.q !== before.q ? 200 : 0);
   });
@@ -30,9 +38,8 @@ export function watchFilters(filters: Ref<Filters>, search: () => void) {
 
 <script setup lang="ts">
 import { valueOf } from "../composables/format";
-import type { FinderView } from "../types/generated/webui.service.finder";
 
-defineProps<{ finder: FinderView; placeholder?: string; autofocus?: boolean }>();
+defineProps<{ choices: FilterChoices; placeholder?: string; autofocus?: boolean }>();
 const filters = defineModel<Filters>({ required: true });
 
 function set(name: keyof Filters, event: Event) {
@@ -53,17 +60,17 @@ function set(name: keyof Filters, event: Event) {
     />
     <select :value="filters.rarity" aria-label="Rarity" @change="set('rarity', $event)">
       <option value="">Any rarity</option>
-      <option v-for="rarity in finder.rarities" :key="rarity" :value="rarity">{{ rarity }}</option>
+      <option v-for="rarity in choices.rarities" :key="rarity" :value="rarity">{{ rarity }}</option>
     </select>
     <select :value="filters.faction" aria-label="Faction" @change="set('faction', $event)">
       <option value="">Any faction</option>
-      <option v-for="faction in finder.factions" :key="faction.value" :value="faction.value">
+      <option v-for="faction in choices.factions" :key="faction.value" :value="faction.value">
         {{ faction.label }}
       </option>
     </select>
     <select :value="filters.grade" aria-label="Fewest stars" @change="set('grade', $event)">
       <option value="">Any stars</option>
-      <option v-for="grade in finder.grades" :key="grade" :value="String(grade)">
+      <option v-for="grade in choices.grades" :key="grade" :value="String(grade)">
         {{ grade }}★{{ grade < 6 ? " and up" : "" }}
       </option>
     </select>

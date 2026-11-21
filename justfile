@@ -34,10 +34,10 @@ default:
     @just --list --unsorted
 
 # Only TLS to hellhades.com is intercepted; everything else is tunnelled untouched.
-# ~/scripts/hh.sh finds the proxy by `mitmdump .*--listen-port 8080 .*hh_capture.py`: keep the order.
+# ~/scripts/hh.sh finds the proxy and its port by `mitmdump .*--listen-port <port> .*hh_capture.py`: keep the order.
 # The web UI's game commands (equip, preview, sell) through the HH extractor (extractor + game running)
 proxy *args:
-    uv run --group capture mitmdump --listen-host 127.0.0.1 --listen-port 8080 \
+    uv run --group capture mitmdump --listen-host 127.0.0.1 --listen-port 8089 \
         --allow-hosts 'hellhades\.com(:\d+)?$' -s capture/hh_capture.py --flow-detail 0 "$@"
 
 # Re-apply the HellHades sell/equip fix (after a HellHades update) in its install (-q: quiet)
