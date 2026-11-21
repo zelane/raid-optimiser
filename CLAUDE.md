@@ -1,10 +1,9 @@
 # raid-optimiser
 
 An experimental, personal gear optimiser for Raid: Shadow Legends: cruder and faster than
-HellHades' (HH) optimiser rather than a copy of it. The user pays for HH and keeps using it;
-**don't use or port HH's source or algorithms**. Nothing of HH's is used any more but its
-extractor, driven for in-game commands (below). The account and the game's tables come from
-the game itself.
+HellHades' (HH) optimiser, not a copy of it. The user pays for HH and keeps using it;
+**don't use or port HH's source or algorithms**. Only HH's extractor is still used, driven for the
+in-game commands below; the account and the game's tables come from the game itself.
 
 ## Layout
 
@@ -16,8 +15,9 @@ the game itself.
   below. The extractor's account uploads pass through untouched; the account comes from the
   reader.
 - In game: the addon serves `POST 127.0.0.1:8081/equip` (`{"hero_id", "artifact_ids"}`,
-  `EquipArtifacts`) and `/preview` (`{"account_id", "hero_id", "artifact_ids"}`, `PreviewBuild`,
-  the game's build preview: nothing changes, no sync follows). It injects the SignalR
+  `EquipArtifacts`; a successful Equip syncs the account after) and `/preview`
+  (`{"account_id", "hero_id", "artifact_ids"}`, `PreviewBuild`: the game's build preview, so
+  nothing changes and no sync follows). It injects the SignalR
   invocation into the extractor's `/reader` hub WebSocket, as if HH's server sent it, then
   waits for (and swallows) the extractor's `HelperRequestResult`. `account_id` is the
   account's user id. `webui/extractor.py` is the client; each build has both buttons.
@@ -29,19 +29,19 @@ the game itself.
   `ReadProcessMemory`; nothing injected or written), run in the game's prefix via
   `plarium-umu`, into `data/captures/snapshot.json` (`paths.SNAPSHOT`, `account.load_account`
   parses it; the web UI reloads when it changes; the nav's Sync button runs `just read` through
-  `webui/reader.py`, and a successful Equip syncs after). Only what the optimiser uses:
-  champions (static facts come from `hero_types.json`; their unspent mastery scrolls,
-  `scrolls`: `HeroMasteryData.CurrentAmount`), pieces, who wears what, relics, Great
-  Hall, arena league, inbox pieces, champion tags (`marker`: `HeroMarker`, one per champion;
-  ArenaFirst is "Arena Build I"), gear presets (`gear_presets`: `ExternalArtifactsStorage._presets`,
-  per champion or global (`hero_id` null, the game's key -1), artifact or accessory), saved teams (`teams`: presets with their area, from
-  `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3
-  arena defenses; empty slots are 0 or -1) and the Chimera's raid (`chimera`:
+  `webui/reader.py`). Only what the optimiser uses: champions (static facts from `hero_types.json`;
+  unspent mastery scrolls, `scrolls`: `HeroMasteryData.CurrentAmount`), pieces, who wears what,
+  relics, Great Hall, arena league, inbox pieces, champion tags (`marker`: `HeroMarker`, one per
+  champion; ArenaFirst is "Arena Build I"), gear presets (`gear_presets`:
+  `ExternalArtifactsStorage._presets`, per champion or global (`hero_id` null, the game's key -1),
+  artifact or accessory), saved teams (`teams`: presets with their area, from
+  `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3 arena
+  defenses; empty slots are 0 or -1), the Chimera's raid (`chimera`:
   `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
-  `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star
-  count; the game keeps the count only, not which battle quests earned it). Values are the game's: ids, enums by name (the faction's game
-  name: `account.faction_name` gives the display name), Fixed rounded to 6 decimals. A
-  module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
+  `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star count;
+  the game keeps the count only, not which battle quests earned it). Values are the game's: ids,
+  enums by name (the faction's game name, its `account.faction_name`), Fixed rounded to 6 decimals.
+  A module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
   object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
   (`AppModel` via its type info → parent `SingleInstance<AppModel>`'s statics; pieces live in
   `ArtifactStorageResolver._implementation`'s `ExternalArtifactsStorage` cache, not
@@ -65,10 +65,11 @@ the game itself.
   skill level it's for, from `relicSkillLevel==N`) and `echo` (a status it places again when
   one is placed, from `StatusEffectWithTypeIdIsApplied`); `effect_sources.json` has
   `relic_skill_levels` (`SkillLevelByRelicLevel`: relic level 0/6/9/12/15/18 → skill level 1–6).
-- `optimiser/levels.py`: base stats at any rank/level, computed as the game does (below);
+- `optimiser/levels.py`: base stats at any rank/level, computed as the game does (its model, with
+  damage, resist, the solver, the oracle and asset naming, in `docs/game-model.md`);
   `tools/check_levels.py` checks its table is still in the game's metadata (`just static`)
-  and, given a raider oracle table, compares results. `tools/oracle_request.py` /
-  `tools/oracle_import.py` drive the oracle (below), now for checking only.
+  and, given a raider oracle table, compares results; `tools/oracle_request.py` /
+  `tools/oracle_import.py` drive the oracle.
 - `optimiser/enemies.py`: the enemy store (`data/game/enemies.json`, types' base stats from
   `hero_types.json`): every stage's formations, team restrictions (`team_restriction`: one
   condition holds every champion, as `HeroesSquadContext.ConditionForSlot` reads it; several
@@ -134,13 +135,12 @@ the game itself.
     within `SEARCH_BUDGET` (20,000 teams or 1 s: for the Chimera with nothing pinned there are
     hundreds of thousands, mostly from the "N different" trials); if none meets them all,
     `partial_teams` (HiGHS) gives the best partial ones.
-- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `pages/Teams.vue`): what
-  the team is against: anything, or a stage from the target picker (`base=stage&target=<stage>[:
-  <wave>:<slot>]`; `teams.content` resolves it first, as the Chimera narrows the offers): a
-  Faction Wars stage's challenge (linked from the Info page's stages, `teams.stage_url`), the
-  Chimera's column of trials (`column=`; below), and any stage's restriction (only who it
-  admits is searched; the finder dialog's `only`), plus what's asked besides (tags, counts),
-  every team of five meeting them all. `optimiser/factionwars.py`: crypts
+- Team finder (`/teams`, `webui/service/teams.py`, `forms/teams.py`, `pages/Teams.vue`): what the
+  team is against — anything, or a stage from the target picker (`teams.content` resolves its
+  `target` first, as the Chimera narrows the offers): a Faction Wars stage's challenge (linked from
+  the Info page's stages, `teams.stage_url`), the Chimera's column of trials (`column=`; below), and
+  any stage's restriction (only who it admits is searched) — plus what's asked besides (tags,
+  counts), every team of five meeting them all. `optimiser/factionwars.py`: crypts
   (`crypts`, the faction each admits: only its champions are searched) and a stage's challenge
   (its last quest) as needs, from its text (`QUEST_NEEDS`: "Place 10+ Stun" asks for a Stun;
   counts aren't modelled, reliability is), against `ENEMIES` (no immunities). Fight quests
@@ -171,45 +171,44 @@ the game itself.
     previous one's before. Offset 0 puts the Mythical materials on Tail, so the column is
     Tail/Wing/Paw for offset % 3 = 0/1/2 (`mythical_column`; checked against the game: offset
     2, Paw). The page's default column.
-  - In the finder (`webui/service/chimera.py`: the column picker, the trial board's views,
-    each option's glance): the column under the picker, then the finder's slots, "Also bring",
-    gear and Run, then the board (`TrialBoard`: a row per form, its three trials across;
-    `TrialGlance` on each option card). Icons: `chimera/<Form>_<Level>`
+  - In the finder (`webui/service/chimera.py`): the column picker, then the finder's own slots,
+    "Also bring", gear and Run, then the board (`TrialBoard`: a row per form, its three trials
+    across; `TrialGlance` on each option card). Icons: `chimera/<Form>_<Level>`
     (ChimeraChallengeIcons), from `tools/extract_assets.py`.
 - Team gear (`/team-gear`, `webui/service/team_gear.py`, `forms/team_gear.py`,
   `pages/TeamGear.vue`): up to five champions (the team slots) geared at once against the target
   picker's enemy, each a compact row: up to two sets, SPD/ACC/C.RATE minimums and one goal
-  (a stat, or a skill's damage against the target's DEF). A minimum left out of the URL takes
-  its default: ACC `accuracy.accuracy_for_floor` (RES + 64: resisted within 0.1 points of the
-  3 % floor) for a champion who places debuffs (`kits`), C.RATE 100 % for one ranking damage;
-  `res` carries the RES those came from, so ACC still at its default follows a new target.
-  RES has no default (near the cap is the enemy's ACC + 247, `resistance_for_cap`: shown as
-  the field's placeholder). Each ACC/RES field and build shows its resist chances. State rides
-  in the URL, kept in the browser (`keptQuery`, not `run`); the rows are edited in the page and
-  sent with the next change (a slot, a rank, a target picked) or Find gear (`run`, the only
-  thing that solves), by field names the parser defines and the views carry (`RowFields`,
-  `minimum_field`, `PageFields`, `exclude_field`), so the page spells none itself; a build per champion with the champion page's Equip/Preview
-  (`BuildDetail`). `solve.find_team_builds`:
+  (a stat, or a skill's damage against the target's DEF). A minimum left out of the URL takes its
+  default: ACC `accuracy.accuracy_for_floor` for a champion who places debuffs (`kits`), C.RATE
+  100 % for one ranking damage; `res` carries the RES those came from, so ACC still at its default
+  follows a new target. RES has no default, just `resistance_for_cap` as the field's placeholder
+  (both functions and the points they're at: Resist in `docs/game-model.md`).
+  Each ACC/RES field and build shows its resist chances. State rides in the URL, kept in the
+  browser as the finder's is (not `run`); the rows are edited in the page and sent with the next
+  change (a slot, a rank, a target picked) or Find gear (`run`, the only thing that solves), by
+  field names the parser defines and the views carry (`RowFields`, `minimum_field`, `PageFields`,
+  `exclude_field`), so the page spells none itself; a build per champion, with the champion page's
+  Equip/Preview buttons (`BuildDetail`). `solve.find_team_builds`:
   slot order is priority, each champion's best build alone from what the earlier ones left,
   kept if the rest still meet their limits together (one model, minimums only), else the
   next best, `LEAVING_TRIES` in all, then that step solved with the rest in one model. One
   model ranking every goal in turn gave the same builds within 0.5 % but took minutes (the
   optimality proofs); this takes ~15-20 s for five with damage. A team's own gear counts as
   each member's; pieces teammates wear stay wearable. No team: `Unmet` (who can't alone,
-  `Shortfall`s) or `Clash`. The target stage's restriction holds the champion finder to what
-  it admits (the `only` prop: `service.finder.OnlyView`, the dialog's `only_*` fields) and
-  flags slotted champions it doesn't. Each team the finder finds links here ("Gear this team",
-  `teams.gear_url`: its champions in the slots, against the stage's enemy picked).
-- Team finder parts (the finder's, Team gear uses `TeamSlots`):
-  the slots (each a `relic` field: empty for what the champion wears now, "none", or a relic
-  id; the dropdown lists each owned relic type's best copy; a new champion starts from what's
-  worn), "Also bring" (with counts: `count=debuff:3`, so many different) and gear, relics &
-  assumptions panels and each need's row. `forms/team.py` (`parse_team` → `TeamAsk`: picks,
-  wanted, loadout, counts, relics; `Offers`, with the relic types; a search's shape: `Fill`,
+  `Shortfall`s) or `Clash`. The target stage's restriction holds the champion finder to what it
+  admits and flags slotted champions it doesn't. Each team the finder finds links here ("Gear this
+  team", `teams.gear_url`: its champions in the slots, against the stage's enemy picked).
+- Team finder parts (the finder's; Team gear borrows `TeamSlots`, which emits `place` and `wear`
+  for it, each page visiting with its own state): `TeamSlots`' slots — each a `relic` field: empty
+  for what the champion wears now, "none", or a relic id, the dropdown listing each owned relic
+  type's best copy, a new champion starting from what's worn — then "Also bring" (with counts:
+  `count=debuff:3`, so many different), the gear, relics & assumptions panels, and each need's row.
+  `forms/team.py` (`parse_team` → `TeamAsk`: picks, wanted, loadout, counts, relics; `Offers`, with
+  the relic types; a search's shape: `Fill`,
   `parse_fill`, `GRADES`), `service/team.py` (`TeamView`, `team_view(…, enemy, note)`: the want
   groups name the enemy, `note` says where a tag only lands; `need_view`, `slot_view`,
-  `slot_worn`: each slot's relics as gear). In Vue: `TeamSlots` (the finder dialog fills a
-  slot), `BringPanels` (chips, `TagPicker`: a search over what isn't chosen, grouped by kind;
+  `slot_worn`: each slot's relics as gear). In Vue: `BringPanels` (chips, `TagPicker`: a search
+  over what isn't chosen, grouped by kind;
   the count and assume forms), `RunBar`, `TeamOptions`/`OptionCard` (a slot for the Chimera's
   glance), `NeedsPanel` (a slot for the Chimera's trial rows: `TrialBoard`), `NeedItem`, `StatusIcon`,
   `ScorePill`. Their state rides in the query (the server reads only that): a change starts from
@@ -219,16 +218,18 @@ the game itself.
   to the saved one; "Empty all" forgets it); it stays in the address bar.
   URLs are built in Python: `service.team.PageUrl` (the page's path, its own fields and the
   team's) gives each option's `show_url`/`use_url` and the page's `TeamLinks` (`current`,
-  `empty`, `without` per chip, `more`). Team gear uses `TeamSlots` too (it emits `place` and
-  `wear`; each page visits with its own state). Their CSS is the parts' own look (`team-slot`,
+  `empty`, `without` per chip, `more`). Their CSS is the parts' own look (`team-slot`,
   `team-option`, `accent-panel` with `--accent`, `trial`). Icons: `statuses/`
   (StatusEffectIcons, by status kind; `service.team.icon_name` maps ours, e.g. DecreaseDefence
   → StatusReduceDefence).
-- `just dump` (part of `just update`): Il2CppDumper over the installed game into
-  `data/dump/<game version>` (`dump.cs`, `script.json`), the version the code's own
+- `just dump` (part of `just update`): the roytu fork of Il2CppDumper (github.com/roytu/Il2CppDumper
+  at `~/repo/Il2CppDumper`, built with `dotnet build Il2CppDumper/Il2CppDumper.csproj -c Release
+  -f net8.0 -p:RollForward=Major`, `RequireAnyKey: false` in the output's `config.json`:
+  `just install` does all of it, `IL2CPP_DUMPER_DIR` moves the checkout) over the installed game
+  into `data/dump/<game version>` (`dump.cs`, `script.json`), the version the code's own
   `StableManifestVersion` (the static data's lags until the game runs); skipped when a dump's
-  `source.sha256` matches GameAssembly.dll + metadata. `just schema`'s input and the source of
-  RVAs to disassemble.
+  `source.sha256` matches GameAssembly.dll + metadata. `just schema`'s input and where the RVAs to
+  disassemble come from. The current dump: 11.95.0, metadata v39.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
   (UnityPy) into `webui/static/assets/`.
 - `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
@@ -238,12 +239,14 @@ the game itself.
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list, and reserve rules
   (`optimiser/reserve.py`, by `rule_key`: `Tagged(marker)` what champions with a tag wear,
   `GlobalPresets` every global gear preset's pieces even unworn, `Team(preset id)` what a saved
-  team wears; what they reserve comes from each snapshot; edited on the Config page, `/config`). A solve's `GearFilter`
+  team wears; what they reserve comes from each snapshot; edited on the Config page, `/config`).
+  A solve's `GearFilter`
   says what gear it may not take, each part toggled on its own on the champion page: each reserve
   rule (`exclude_<rule key>`, on by default), champions locked above a level, anything other
   champions wear. Taken pieces note what reserves them. The champion's own gear is always
   allowed. Locks are kept for now, to compare.
-  Also what solves assume (account-wide, the Config page `/config`, once `/assumptions`; `optimiser/assume.py`): flags for
+  Also what solves assume (account-wide, on the same Config page, once `/assumptions`;
+  `optimiser/assume.py`): flags for
   the champion at their rank's top level, gear at +16 (main stat only) and ascended gear fully
   ascended (`planned_*` fields; `data/game/gear.json` tables, checked exact against every piece),
   and glyphs to assume (a grade per kind): `optimiser/glyphs.py` gives solves a copy of the account whose substats of those kinds carry the grade's top roll
@@ -252,7 +255,7 @@ the game itself.
   are glyphed (`solve.directions` > 0: minimums, ranked stats, the damage skill's stats + C.DMG).
   Also each champion's run history: the submitted form and the outcome view
   (`dataclasses.asdict` JSON, rebuilt by `service.runs.revive`; a run whose shape no longer fits
-  shows only its inputs). The page opens on the latest run; nothing is kept in the browser.
+  shows only its inputs).
 - Accessories (`/accessories`, tabs in the workflow's order: Swaps · Roll · Rework · Clean up,
   then Weights; `optimiser/accessories/`, which doesn't use the solver). Only unequipped gear takes
   inventory space (2200 for accessories); overflow waits in the mailbox (the inbox's
@@ -306,13 +309,30 @@ the game itself.
 - Nav (`service/layout.py` `nav_sections`, drawn by `layouts/AppLayout.vue`): Optimiser,
   Accessories, Teams, Info; a section with several pages shows them as tabs in a band under the
   bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
-  the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the champion list, the champion last solved for
-  (`store.latest_champion`), Config. Teams: Finder (`/teams`, the Chimera's trials too), Gear (`/team-gear`). Info: Faction Wars
-  (`/info`), Empower (`/empower`), Masteries (`/masteries`).
+  the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the
+  champion list, the champion last solved for (`store.latest_champion`), Config; Teams: the finder
+  (the Chimera's trials too) and Gear; Info: Faction Wars, Empower (`/empower`), Masteries,
+  Skill books.
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
   missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
+- Skill books page (`/books`, `webui/service/books.py`): the champions with a skill below
+  its top, as at the last sync, the champion filter bar above them narrowing it by stars
+  too (`service.finder`'s `matches` and `FilterChoices`). `forms.books`'s `DEFAULTS` start
+  it on 6★ Legendaries, and the bar sends its rarity and stars even when they're "any"
+  (`Any`, `any`), so one missing from the URL means nobody has chosen it yet. A skill's
+  level is 1 + the books spent on it (`Champion.skill_levels`, read for damage and kits),
+  and the game defines each skill's books (`Skill.books`, from `SkillLevelBonuses`), so
+  its top is one past how many it has — a skill with none (some passives) can't be booked
+  and counts as there. Those one book from done, then the rest by fewest books short. Each
+  skill is named by where it sits in its form's skill list (A1, A2 …, P1, P2 …; its name
+  only in the badge's tooltip), shown how far below its top it is with the books it hasn't
+  had on a line apiece under it (`Skill.books` from `SkillLevelBonuses`: damage, effect
+  chance, a turn of cooldown, HP, shields, ignore RES). A mythical's two forms take books
+  of their own (`forms_short` over `hero_forms`; only mythicals have a second, and the
+  reader doesn't say which form the champion is in), so one short in both shows a labelled
+  block per form on its card.
 - Masteries page (`/masteries`, `webui/service/masteries.py`): the 6★ champions with no mastery
   in a tree's last row (Helmsmasher's), split into those holding enough scrolls to reach it and
   those still to farm for (fewest Divine short first). Per kind (Divine, Advanced, Basic: the
@@ -321,14 +341,18 @@ the game itself.
   prices from `bonuses.json` `mastery_types` (`Tables.mastery_types`: each mastery's depth under
   `MasteryTypes`' parents and its `Price`; ids read `500<tree><row><column>`).
 - Champion list and finder, one list (`webui/service/finder.py`: `find_champions`,
-  `lock_champion`; `forms/finder.py`). The list (`/`, `pages/Champions.vue`, `ChampionFilters`,
-  `ChampionCard`, `LockPicker`): the filters (`q`, `rarity`, `faction`, `grade`) ride in the
-  URL and a change reloads only its `finder` prop; each champion carries their lock
-  (`/champions/{id}/lock` saves it and goes back). The finder dialog
-  (`components/ChampionFinder.vue`, `/finder` as JSON): its cards are picks, announced
+  `lock_champion`; `forms/finder.py`). Its filter (`matches`) and bar's options (`FilterChoices`)
+  are the skill books page's too; `ChampionFilters.vue` takes those, and `watchFilters` a page
+  keeping its own filters (`keep: null`) skips remembering them in `finder-filters`. The list
+  (`/`, `pages/Champions.vue`, `ChampionFilters`, `ChampionCard`, `LockPicker`): the filters
+  (`q`, `rarity`, `faction`, `grade`) ride in the URL and a change reloads only its `finder`
+  prop; each champion carries their lock (`/champions/{id}/lock` saves it and goes back).
+  The finder dialog (`components/ChampionFinder.vue`, `/finder` as JSON): its cards are picks, announced
   (`picked`) for the page to act on (the champion page's Switch champion visits their
   optimiser; `TeamSlots` puts the pick's id, `views.slot_value`, in a slot: a slot field
-  is an id, still read as "… #id" or part of a name; trailing open slots are left out of URLs); `only`/`onlyLabel` hold it to what a stage admits. Enter takes the first. The
+  is an id, still read as "… #id" or part of a name; trailing open slots are left out of URLs); a
+  page holds it to what a stage admits with `only`/`onlyLabel` (`service.finder.OnlyView`, the
+  dialog's `only_*` fields). Enter takes the first. The
   filters (not the name) are remembered in the browser (`finder-filters` in localStorage),
   shared by the list and the dialog.
 - Target picker (`webui/service/targets.py`, `forms/targets.py`, `components/TargetPicker.vue`,
@@ -339,10 +363,11 @@ the game itself.
   Grim Forest, Cursed City, co-op Demon Lord, Campaign) → group (region; shared names get what
   tells their ids apart) → difficulty → stage → wave (the last by default; its select at the
   right of the enemy's name), then one of its enemies (boss, else most HP). Each change asks
-  `/targets` for the view as JSON (`changed`: lower levels reset) and emits `picked` (the
-  champion page sets `enemy_def` and keeps the "stage:wave:slot" `target`, saved with runs; the
-  server draws a run's picker from it; Team gear sends its page again). The panel dims
-  (`detached`) when `enemy_def` no longer matches it.
+  `/targets` for the view as JSON (`changed`: lower levels reset) and emits `picked`: the champion
+  page sets `enemy_def` and keeps the pick as `target` ("<stage>:<wave>:<slot>", plus `base=stage`
+  where a page needs the stage on its own — Team gear and the team finder), saved with runs, whose
+  picker the server draws back from it. The panel dims (`detached`) when `enemy_def` no longer
+  matches it.
 - Inertia (Vue 3 + TypeScript): every page is a Vue page. `webui/inertia.py` is the server
   side of Inertia v3's protocol, our own (`respond`: the shell `templates/inertia.html`, the
   only Jinja left, with the page in its `<script data-page>` on a first load, JSON on the
@@ -356,9 +381,10 @@ the game itself.
   `app.saved`, as rescoring is slow); `composables/send.ts` posts them. Settings that change
   what a page shows post with `composables/save.ts` and reload its `page` prop. The champion
   page: `?run=<id>` names the run shown (`champions.shown_run`: else the latest), its form
-  restored from it; history picks reload `run` and `picker` alone; a solve redirects to its
-  new run. The front end is `webui/frontend/` (Vite; `src/app.ts`, `layouts/AppLayout.vue`,
-  `pages/<Component>.vue`, `components/`, `composables/`), built into `webui/static/dist/`
+  restored from it; history picks reload `run` and `picker` alone; a solve redirects to its new
+  run; nothing about runs is kept in the browser. The front end is `webui/frontend/` (Vite;
+  `src/app.ts`, `layouts/AppLayout.vue`, `pages/<Component>.vue`, `components/`, `composables/`),
+  built into `webui/static/dist/`
   (gitignored). A component's own look is its `<style scoped>` (moved out of `app.css`, so
   deleting a component deletes its styles); the shared vocabulary stays global (below). A rule
   reaching inside a child component uses `:deep()`, and only in a flat rule: nested, Vue
@@ -367,16 +393,15 @@ the game itself.
   it. Props are typed: `tools/gen_ts_types.py` writes `src/types/generated/<python
   module>.ts` (gitignored) from `webui.service`'s dataclasses and those they reach (shared
   shapes in `src/types/views.ts`), and `vue-tsc` checks the pages against them
-  (`just frontend-check`, in `just check`). Forms post form data (`forceFormData`), so
-  `webui/forms/` parse them as before.
+  (`just frontend-check`, in `just check`).
 - `webui/`: FastAPI + Inertia + Vue, our own CSS (no framework). `service/` is framework-free
   (frozen dataclass view models, sent to the pages as props), a module per page
   (`champions`, `results`, `runs`, `accessories`, `assumptions`) over `current` (paths, the
   cached account, locks), `views` (champion rows, piece names and art) and `scores` (accessory
   potentials kept in `data/cache/potentials.pickle` by piece state, per scorer and scoring
-  code, so only changed pieces are rescored); `forms/` is the form boundary (`request`: the
-  solve form and build buttons, `settings`: the forms that change the store, `chimera`, and
-  `common`: `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
+  code, so only changed pieces are rescored); `forms/` is the form boundary (forms post form data
+  (`forceFormData`): `request` the solve form and build buttons, `settings` those that change the
+  store, `chimera`, `common` `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
   `reader.py` return; only `app.py`, `inertia.py` and the shell know about HTTP/HTML.
   Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
   colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
@@ -401,7 +426,8 @@ the game itself.
   these, not a class per container; `.joined` joins a field and its button. Spacing is the
   parent's job (`gap`, the primitives), with logical properties. `static/app.css`: the
   shared components (what pages use raw, or several components share: tile frames' art, the
-  piece card's box, the listed champion's base); each component's own look is in its file. The look (◆ section titles) follows the Stitch design system the user supplied,
+  piece card's box, the listed champion's base). The look (◆ section titles) follows the Stitch
+  design system the user supplied,
   but keeps Alegreya (headings) and Alegreya Sans (text), the user's choice over the spec's
   fonts. Colour by tone: `good`/`up`, `bad`/`down`, `mid`, `info` set `--tone` (registered,
   non-inheriting); text takes it as its colour, and a `badge`, `status`, `meter` or `note`
@@ -475,120 +501,15 @@ request, like the finder's, is the exception). `package.json` holds the front en
 tooling (`npm ci`, part of `just update`).
 Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 
-## Stat model (verified exact against the game)
+## Game model
 
-stat = base + Great Hall + arena + awakening + empower + masteries + relics + gear, with
-percentages applying to **base** stats except crit (C.RATE/C.DMG percentages add).
-Anaxia's in-game stats matched exactly.
+`docs/game-model.md` — how the game computes it, read off its code and checked against it:
 
-- **Base:** static data holds unscaled stats with HP ÷ 15 and crit in %. Rank/level scaling
-  is in code (`HeroExtensions.GetBaseStats` → `BattleStats.BuildFromBase` → `CalcValue`):
-  HP/ATK/DEF = `Round(base × a × b^((L−1)/(10g−1)))`, (a, b) per rank from the static
-  `BattleStats.Multipliers` (filled from metadata; 1.0 at 1★ L1, 11.01 at 6★ L60), in Q32.32
-  `Fixed` (doubles truncate, products floor, round half to even); HP then × 15, crit ÷ 100.
-  `optimiser/levels.py` reproduces it; no oracle data is needed.
-- **Ascension** (0–6) is the last digit of `TypeId`; each ascended type has its own base stats.
-  **Awakening** (`AwakenedGrade`, "double ascend") is a separate thing: flat bonuses per rarity,
-  cumulative per star (`bonuses.json` `awakening`).
-- **Empower:** cumulative per level; Epic has its own table, Legendary/Mythical share one
-  (checked against `CalcEmpowerBonus`).
-- **Great Hall:** per affinity and stat level from the snapshot's `great_hall` (values per
-  level, not cumulative). **Arena:** its `arena_league` (Gold V +22% HP/ATK/DEF).
-- **Masteries:** 13 stat masteries; Lore of Steel (500343) multiplies set stat bonuses by
-  1.15 (the game lists that extra under masteries).
-- **Relics:** a type's stats unlock at levels 0/9/15; a stat's value is
-  `values[stat][level - unlock level]`. Stones add skills only.
-- **Gear:** substat value + glyph (`Enhancement`); artifact ascension adds `AscendBonus`.
-  Main stat by slot/rank/level is `ArtifactData.PrimaryBonusInfos`, ascension bonus by
-  slot/rank/ascend level `AscendBonusInfos` (ranks 4-6); rarity changes neither.
-  Glyphs are `BlackMarketData` items' `PowerUpData` (stat, rank, rarity, min/max roll): ranks
-  1–5 Uncommon only, 6 in Uncommon–Legendary; substats only, no C.RATE/C.DMG glyphs.
-  Accessories may be faction-locked. Sets: fixed (per N pieces) or variable (cumulative total
-  at each piece count, accessories count).
-- Pieces carry the game's set id. HH named sets differently (HH `AttackPowerAndIgnoreDefence`
-  = Cruel). Two placeholder sets (55, 56) are unreleased prototypes, hidden.
-
-## Damage (read from `SharedModel.Battle.Core.DamageCalculator` disassembly)
-
-- `damage = formula × (1 + books) × (1 + hit bonus) × other (1 + x) factors × DEF mult ×
-  status-effect reductions × random roll`.
-- DEF multiplier = `1 − 0.85 × (1 − e^(−effDEF/1500))`; effDEF = DEF × (1 + defenceModifier);
-  defenceModifier = skill's `DefenceModifier` − sets' ignore DEF (they **add**).
-- Crit hit bonus = C.DMG + skill crit extra, **no cap** anywhere. C.RATE is a probability.
-- Sets' damage bonus (`ChangeDamageMultiplier` passives on the owner's own hits, exported as
-  `damage_bonus` at full HP): Zeal +12 % per set (`sameSkillCount`), capped at 36 %; Fury +10 %
-  once (more below 75 % HP, not modelled). They add, × (1 + bonus). Zeal scales with the
-  wearer's HP, not the target's; no set adds damage by target HP (Slayer 9's extra hit is only
-  capped by it). Feral/Protection 9 (per buff/debuff on the target) are left out.
-- Set ignore DEF comes from `ChangeDefenceModifier` passives on set skills: Lethal/Savage share
-  skill 100010 (25 %, once); Cruel 5 % × sets; Slayer AoE only; values are multiples of 5 %.
-- Skill formulas (`MultiplierFormula`) are mostly `k*STAT`; anything using target/battle
-  state (`TRG_HP`, counts) isn't supported.
-- `DamageModifierFromStats` applies dealt-damage substats (PvP/boss/dungeon), not modelled yet.
-
-## Resist (read from `EffectManager.IsResisted` / `TryResist`)
-
-- `optimiser/accuracy.py`. d = target RES − caster ACC (`ApplyContext.get_Accuracy/
-  get_Resistance`: stat + per-application modifier, at least 0; RES × (1 − the skill's
-  `IgnoreResistanceModifier`) first). Resist chance: d < 30: 0.03 + 0.27 e^(6 (d/100 − 0.3));
-  d ≥ 30: 0.30 + 0.67 (1 − e^(−3 (d/100 − 0.3))); resisted when a random Fixed ≤ it. So 3 %
-  floor, 97 % cap, 7.5 % at ACC = RES; no breakpoint, the floor is only approached. Rolled
-  apart from the skill's own chance. Within 0.1 points: ACC ≥ RES + 64 (floor), RES ≥ ACC +
-  247 (cap).
-
-## Solver
-
-MILP in HiGHS (`highspy`). A binary per wearable piece (faction, open slot: `slot_unlocked`, the game's
-`RequiredHeroGradeByKindId` Ring 4 / Amulet 5 / Banner 6 stars, Amulet and Banner also ascended that
-far; `GearFilter`, `above_level` filter),
-one per armour slot, ≤ 1 per accessory slot; set bonuses exact via piece-count variables
-tied with equalities. Ranking is lexicographic: maximise each goal, then hold it within
-`slack` (relative; for damage, applied to damage not its log). Builds after the first exclude
-earlier ones with no-good cuts. Dominance pruning drops pieces that ≥ `builds` others in the
-same slot/set/faction match or beat on every stat the request uses.
-
-Damage is ranked by its log: tangent lines under log(formula) and log(1 + C.DMG) (20 each,
-over the reachable range: fewer, tighter tangents were several times faster); the DEF term
-(convex in ignore DEF) is exact with a binary per 5 % step, the steps stopping at the most any
-build ignores (`most_ignore`, a small side solve): the relaxation takes the chord to the top
-step, and topping out at every source summed (DEF multiplier 1) left the gap ~5x wider.
-Tangent rows go through one variable per term (`log_under_tangents`), not a term per piece.
-HiGHS has no MIQP and damage is a non-convex product anyway, hence the log form. A damage
-solve with four stat minimums takes ~15 s per build; the slack left in the bound is fractional
-set counts (parts of Merciless and Lethal both claiming their ignore).
-
-## Raider oracle (game-code calls)
-
-No longer needed for base stats (`optimiser/levels.py`); kept for checking formulas against
-the running game (`just check-levels` compares with its 6★ L60 table).
-
-`~/repo/raider`: a Rust DLL injected into Raid.exe that calls IL2CPP methods. **Only ever inject
-into the throwaway account's prefix `~/tmp/inject-test`, never the user's main install.**
-The payload dumps hero stats (`/tmp/raider-stats.json`) and answers
-`/tmp/raider-oracle-request.txt` ("type grade level form [empower]") with in-memory heroes
-never added to the account. Look offsets up by field name (they move between game versions),
-pass value types to `il2cpp_runtime_invoke` by pointer (`Nullable<int>` as
-{bool hasValue; int value}), unbox struct enumerators for `this`, and release the
-`AppModel.ReadUser` guard.
-
-IL2CPP dump for the current game (11.95.0, metadata v39): `just dump` into `data/dump/11.95.0`,
-with the roytu fork of Il2CppDumper (`~/repo/Il2CppDumper` from github.com/roytu/Il2CppDumper,
-built with `dotnet build Il2CppDumper/Il2CppDumper.csproj -c Release -f net8.0
--p:RollForward=Major`; set `RequireAnyKey: false` in the output's `config.json`: `just install`
-does all of it, `IL2CPP_DUMPER_DIR` moves the checkout). Method bodies:
-disassemble `GameAssembly.dll` at the dump's RVAs (capstone), labelling calls from
-`script.json`. Static array initialisers (`<PrivateImplementationDetails>` fields) show their
-data's offset in `global-metadata.dat` as `/*Metadata offset 0x…*/` in `dump.cs`.
-
-## Assets
-
-Portraits are named by type id with ascension 0 (`9990`); enemies' (bosses, Hydra heads, from
-`HeroAvatars_Bosses`/`HeroAvatarsHydra`) by full type id, via their type's `avatar`. Piece art `<set id>_<slot>`, set
-icons by set id. Affinity icons by lower-case affinity, faction banners by faction key (`account.faction_name`: the game's internal name, but
-Samurai → Shadowkin, Olympians → Argonites, which the game's tables, stage conditions and
-crypts still use; champions, pieces and relics carry the key; `faction_label` is what's
-shown (views carry it: `PieceView.faction_label`, the team views' factions): "Dark Elves", "Lizardmen"), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion
-portraits are in `FuseAvatarsLocal`. Set accessories use the set's generic art even when faction-locked; only
-set-less accessories use `<faction>_<slot>`. Old sprite names mapped by the user: Berserker = Crit
-Damage, Healing = Regeneration, Rage = Killstroke, Stalwart2 = Defiant, Taunting = Provoke,
-Warrior = Cruel. Accessory-only sets have no icon. The images are Plarium's art: keep local.
+- **Stat model:** stat = base + Great Hall + arena + awakening + empower + masteries + relics +
+  gear; percentages apply to base except crit; rank/level scaling in Q32.32 `Fixed`; ascension,
+  empowerment, glyphs, main stats and sets.
+- **Damage:** the formula's factors, the DEF multiplier, crit, the sets' damage bonus and ignore DEF.
+- **Resist:** the chance from RES − ACC: 3 % floor, 97 % cap, and the two breakpoints.
+- **Solver:** the MILP in HiGHS: its variables, lexicographic ranking, damage ranked by log tangents.
+- **Raider oracle:** calling game code from an injected DLL, to check formulas against the game.
+- **Assets:** how the extracted portraits, art, icons and banners are named.

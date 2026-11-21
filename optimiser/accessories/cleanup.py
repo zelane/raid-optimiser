@@ -26,8 +26,9 @@ first, as if worth the rules' `surplus_factor` of their value.
 - `ACCESSORY_SPACE`, `DEFAULT_TARGET_FREE`: the inventory
 - `Keep`, `SWITCHED`, `Placed`, `Pairing`, `Place`, `Swap`, `Plan`: the plan
 - `plan_cleanup`: the workflow
-- `find_swaps` (`set_upgrades`, `worn_score`), `res_speed_reserve`, `faction_wars_reserve`,
-  `places_in_groups`, `keep_reasons` (`could_rework_to_crit`), `place_piece`: its steps
+- `find_swaps` (`set_upgrades`, `pairing`, `worn_score`), `res_speed_reserve`,
+  `faction_wars_reserve`, `places_in_groups`, `keep_reasons` (`could_rework_to_crit`),
+  `place_piece`: its steps
 - `Reserves`: what the plan's own reserves keep
 - `kind_score`, `group_of`, `speed_value`, `speed_rolls`: what they share
 """
@@ -211,7 +212,7 @@ def find_swaps(pieces: tuple[Assessed, ...], rules: Rules) -> list[Pairing]:
     `swap_margin` times as much. Then set-less pieces still worn give way to any set piece of
     their slot, main stat and faction whose stats are better at all (`set_upgrades`)."""
     loose: dict[Group, list[Assessed]] = defaultdict(list)
-    worn: dict[Group, list[tuple[int, Assessed]]] = defaultdict(list)
+    worn: dict[Group, list[Assessed]] = defaultdict(list)
 
     for piece in pieces:
         if piece.artifact.special():
@@ -220,16 +221,16 @@ def find_swaps(pieces: tuple[Assessed, ...], rules: Rules) -> list[Pairing]:
         if piece.where is Where.INVENTORY:
             loose[group_of(piece)].append(piece)
         elif piece.where is Where.WORN and not piece.wearer_locked and piece.wearer is not None:
-            worn[group_of(piece)].append((piece.wearer, piece))
+            worn[group_of(piece)].append(piece)
 
     pairs = []
 
     for group, wearing in worn.items():
         best_first = sorted(loose.get(group, ()), key=worn_score, reverse=True)
-        weakest_first = sorted(wearing, key=lambda item: worn_score(item[1]))
+        weakest_first = sorted(wearing, key=worn_score)
         pairs += [
-            Pairing(better, current, wearer)
-            for better, (wearer, current) in zip(best_first, weakest_first, strict=False)
+            pairing(better, current)
+            for better, current in zip(best_first, weakest_first, strict=False)
             if worn_score(better) > worn_score(current) * rules.swap_margin
         ]
 
@@ -239,7 +240,7 @@ def find_swaps(pieces: tuple[Assessed, ...], rules: Rules) -> list[Pairing]:
 
 def set_upgrades(
     loose: dict[Group, list[Assessed]],
-    worn: dict[Group, list[tuple[int, Assessed]]],
+    worn: dict[Group, list[Assessed]],
     taken: list[Pairing],
 ) -> list[Pairing]:
     """A set piece beats a set-less one whenever its stats are better: it may add or grow a
@@ -257,11 +258,9 @@ def set_upgrades(
         if group.set_id != NO_SET:
             set_pieces[same_kind(group)] += members
 
-    set_less = [
-        (wearer, p) for group, ps in worn.items() if group.set_id == NO_SET for wearer, p in ps
-    ]
+    set_less = [p for group, ps in worn.items() if group.set_id == NO_SET for p in ps]
 
-    for wearer, current in sorted(set_less, key=lambda item: worn_score(item[1])):
+    for current in sorted(set_less, key=worn_score):
         if current.artifact.id in used:
             continue
 
@@ -275,9 +274,16 @@ def set_upgrades(
 
         better = max(candidates, key=lambda p: (worn_score(p), p.set_factor))
         used |= {better.artifact.id, current.artifact.id}
-        pairs.append(Pairing(better, current, wearer))
+        pairs.append(pairing(better, current))
 
     return pairs
+
+
+def pairing(better: Assessed, worn: Assessed) -> Pairing:
+    """`better` in place of `worn`, on the champion wearing it (`find_swaps` only pairs pieces
+    a champion wears)."""
+    assert worn.wearer is not None
+    return Pairing(better, worn, worn.wearer)
 
 
 def worn_score(piece: Assessed) -> float:

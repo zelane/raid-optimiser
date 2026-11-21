@@ -2,11 +2,14 @@
 finder.py - the account's champions as the champion list and the finder (the picker dialog)
 list them: whose name holds the text, of a rarity and a faction and at least so many stars,
 in the game's default order, each with their lock. The list locks them; a page opening the
-finder decides what a pick does (the champion's optimiser, a team slot).
+finder decides what a pick does (the champion's optimiser, a team slot). Other pages filter
+their own champions the same way (`matches`) and offer the same bar (`FilterChoices`).
 
 - `FINDER_LIMIT`: the most it lists
 - `ListedChampion`, `FinderView`: a champion as it lists them, and the list
 - `find_champions`, `lock_champion`: what the pages ask for
+- `matches`, `FilterChoices`, `filter_choices`, `faction_choices`: the filter, and what the bar
+  offers
 - `account_factions`: the factions its filter offers
 - `OnlyView`, `only_view`, `restriction_label`: a page's hold on the list (what its stage
   admits), as the dialog sends and shows it
@@ -47,22 +50,48 @@ class FinderView:
 
 def find_champions(account: Account, locks: Locks, query: FinderQuery) -> FinderView:
     """The matches; a faction the account has none of means any."""
-    wanted = query.text.casefold()
     factions = account_factions(account)
+    matched = [c for c in account.champions.values() if matches(c, query, factions)]
+    matched.sort(key=game_order, reverse=True)
+    picks = [listed(c, locks.get(c.id, 0)) for c in matched[:FINDER_LIMIT]]
+    offered = filter_choices(account)
+    return FinderView(
+        query, picks, len(matched), offered.rarities, offered.factions, offered.grades
+    )
+
+
+def matches(champion: Champion, query: FinderQuery, factions: tuple[str, ...]) -> bool:
+    """The champion in the filter: their name holds the text, of the rarity and faction asked
+    for (a faction the account has none of: any), at least so many stars, and what the page's
+    stage admits."""
     faction = query.faction if query.faction in factions else None
-    matches = [
-        c
-        for c in account.champions.values()
-        if wanted in c.name.casefold()
-        and (query.rarity is None or c.rarity == query.rarity)
-        and (faction is None or faction_name(c.faction) == faction)
-        and c.grade >= query.min_grade
-        and (query.only is None or query.only.admits(c))
-    ]
-    matches.sort(key=game_order, reverse=True)
-    picks = [listed(c, locks.get(c.id, 0)) for c in matches[:FINDER_LIMIT]]
-    choices = tuple(Choice(name, faction_label(name)) for name in factions)
-    return FinderView(query, picks, len(matches), RARITIES, choices, GRADES)
+
+    return (
+        query.text.casefold() in champion.name.casefold()
+        and (query.rarity is None or champion.rarity == query.rarity)
+        and (faction is None or faction_name(champion.faction) == faction)
+        and champion.grade >= query.min_grade
+        and (query.only is None or query.only.admits(champion))
+    )
+
+
+@dataclass(frozen=True)
+class FilterChoices:
+    """What the champion filter bar offers (`ChampionFilters.vue`): the rarities and star counts
+    to choose, and the account's factions by display name, labelled as the game shows them."""
+
+    rarities: tuple[str, ...]
+    factions: tuple[Choice, ...]
+    grades: tuple[int, ...]
+
+
+def filter_choices(account: Account) -> FilterChoices:
+    """What a page's champion filter offers: every rarity and star count, the account's factions."""
+    return FilterChoices(RARITIES, faction_choices(account), GRADES)
+
+
+def faction_choices(account: Account) -> tuple[Choice, ...]:
+    return tuple(Choice(name, faction_label(name)) for name in account_factions(account))
 
 
 def lock_champion(champion: Champion, level: int) -> ListedChampion:

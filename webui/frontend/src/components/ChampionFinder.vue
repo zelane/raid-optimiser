@@ -78,7 +78,7 @@ function closeOnBackdrop(event: MouseEvent) {
       <ChampionFilters
         v-if="found"
         v-model="filters"
-        :finder="found"
+        :choices="found"
         placeholder="Name (Enter takes the first)"
         @keydown.enter.prevent="takeFirst"
       />
