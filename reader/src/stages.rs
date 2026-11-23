@@ -36,7 +36,10 @@ pub fn read(
         .into_iter()
         .map(|(stage, stats)| {
             let b = process.block(stats, fields.span)?;
-            let progress = Progress { passed: b.bool(fields.passed), stars: b.i32(fields.stars) };
+            let progress = Progress {
+                passed: b.bool(fields.passed),
+                stars: b.i32(fields.stars),
+            };
             Ok((stage, progress))
         })
         .collect()

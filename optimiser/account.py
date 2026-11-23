@@ -13,8 +13,8 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
   piece count
 - `Hit`, `Effect`, `Placement`, `Book`, `Skill`: champion skills, as far as damage (and what
   else scales) and what they place and do (how often, how surely, on whom) go
-- `HeroForm`, `HeroType`, `LoreOfSteel`, `MasteryType`, `EmpowerSubstitute`, `Tables`: the game's
-  fixed tables
+- `HeroForm`, `Aura`, `HeroType`, `LoreOfSteel`, `MasteryType`, `EmpowerSubstitute`, `Tables`:
+  the game's fixed tables
 - `Relic`: a relic the account has
 - `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
   the Chimera's current raid, and progress on a stage
@@ -24,7 +24,7 @@ tables (`paths.GAME`), parsed once at the boundary into the shapes the stat mode
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
 - `cached_tables` (`tables_stamp`), `parse_tables`, `parse_sets` (`parse_ignore`),
-  `parse_skills`, `parse_relics` (`relic_stats`), `parse_hero_type`, `parse_forms`,
+  `parse_skills`, `parse_relics` (`relic_stats`), `parse_hero_type` (`parse_aura`), `parse_forms`,
   `parse_glyphs`, `parse_gear` (`by_line`), `great_hall_by_affinity`, `parse_champion`,
   `parse_artifact` (`parse_line`), `parse_preset`, `parse_gear_preset`, `parse_raid`, `team`:
   its steps
@@ -360,16 +360,39 @@ class HeroForm:
 
 
 @dataclass(frozen=True)
+class Aura:
+    """A leader skill: a bonus for the team in battles of one `area` (the game's: Arena,
+    Dungeon, Fractions, DoomTower, Story; None: any), held to allies of one affinity, faction
+    or rarity where those are set."""
+
+    bonus: Bonus
+    area: str | None
+    element: str | None
+    faction: str | None  # `faction_name`
+    rarity: str | None
+
+    def reaches(self, champion: "Champion") -> bool:
+        """Whether an ally of the champion's affinity, faction and rarity gets it."""
+        held = [
+            (self.element, champion.element),
+            (self.faction, champion.faction),
+            (self.rarity, champion.rarity),
+        ]
+        return all(wanted in (None, theirs) for wanted, theirs in held)
+
+
+@dataclass(frozen=True)
 class HeroType:
     """A champion type's fixed facts, by the game's names but for the faction (its display
     name, `faction_name`); affinity and role are its first form's (a form never changes
-    affinity)."""
+    affinity). Mythicals have an aura per form."""
 
     name: str
     faction: str
     rarity: str
     element: str
     role: str
+    auras: tuple[Aura, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -857,6 +880,17 @@ def parse_hero_type(raw: dict) -> HeroType:
         rarity=raw["rarity"],
         element=first["element"],
         role=first["role"],
+        auras=tuple(parse_aura(aura) for aura in raw.get("auras", ())),
+    )
+
+
+def parse_aura(raw: dict) -> Aura:
+    return Aura(
+        bonus=Bonus(STAT_NAMES[raw["stat"]], raw["value"], raw["absolute"]),
+        area=raw["area"],
+        element=raw["element"],
+        faction=faction_name(raw["faction"]) if raw["faction"] else None,
+        rarity=raw["rarity"],
     )
 
 

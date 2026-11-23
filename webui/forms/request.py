@@ -3,14 +3,22 @@ request.py - the request form's fields into a `Request`, or the reasons they can
 
 Fields: `min_<STAT>`/`max_<STAT>` (C.RATE and C.DMG in %), `set_<n>` with `pieces_<n>` (any
 number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` with
-`damage_skill` (skill id) and `enemy_def`, `slack` (%), `builds`, the gear filters (each
+`damage_skill` (skill id) and `enemy_def`, the rates against an opponent (`enemy_res` and
+`enemy_acc`, the target's unless typed): `rank_LANDS` and `rank_RESISTS` (debuffs landing
+against its RES, resisting its ACC), `min_landing` and `min_resisting` (%: minimums, turned into
+ACC's and RES's), `slack` (%), `builds`, the gear filters (each
 present when ticked: `unworn_only`; `locked` with `lock_level`; `exclude_<rule key>` per
-reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; absent: the first).
+reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; absent: the first),
+the battle assumed: `buff_<STAT>` (a buff's strength, as its status names it: `buff_SPD=30`)
+and `aura` (a leader, `battle.Leader.key`: one whose aura reaches the champion).
 The equip and preview buttons post `artifact_ids`, comma-separated.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `parse_request` (`parse_gear_filter`, `exclude_field`): the boundary
-- `parse_form`, `parse_limits`, `parse_sets`, `parse_ranking`, `parse_damage`: its steps
+- `RATE_GOALS`: the rates' rank fields
+- `parse_form`, `parse_limits`, `parse_rate_minimums`, `parse_sets`, `parse_ranking`,
+  `parse_damage`, `parse_rate`, `parse_opponent`, `parse_battle` (`parse_buffs`,
+  `parse_leader`): its steps
 - `parse_equip`: the build buttons' pieces
 """
 
@@ -19,6 +27,8 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats
+from optimiser.accuracy import Lands, Resists
+from optimiser.battle import BUFFS, Battle, Buff, Leader, auras_reaching
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.labels import PERCENT_STATS, STAT_LABELS
 from optimiser.reserve import Rule, reservations, rule_key
@@ -26,6 +36,7 @@ from optimiser.solve import MAX_PIECES, GearFilter, Goal, Request
 from webui.forms.common import FormErrors, parse_number
 
 DEFAULT_ENEMY_DEF = 6000
+RATE_GOALS = {"LANDS": "Debuffs landing", "RESISTS": "Resisting debuffs"}
 DEFAULT_ABOVE_LEVEL = 8
 MAX_BUILDS = 10
 
@@ -39,7 +50,7 @@ def parse_request(
 ) -> Request | FormErrors:
     errors: list[str] = []
     champion = parse_form(form, champion, account, errors)
-    minimums = parse_limits(form, "min", errors)
+    minimums = parse_limits(form, "min", errors) | parse_rate_minimums(form, errors)
     maximums = parse_limits(form, "max", errors)
     set_minimums = parse_sets(form, account, errors)
     ranking = parse_ranking(form, champion, account, errors)
@@ -47,6 +58,7 @@ def parse_request(
     builds = parse_number(form, "builds", "builds", errors, default=3)
     above_level = parse_number(form, "above_level", "item level", errors, DEFAULT_ABOVE_LEVEL)
     gear = parse_gear_filter(form, account, locks, rules, errors)
+    battle = parse_battle(form, champion, account, errors)
 
     if not 0 <= slack <= 50:
         errors.append("slack must be between 0 and 50 %")
@@ -67,6 +79,7 @@ def parse_request(
         builds=int(builds),
         gear=gear,
         above_level=int(above_level),
+        battle=battle,
     )
 
 
@@ -125,6 +138,37 @@ def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Sta
     return limits
 
 
+def parse_rate_minimums(form: Mapping[str, str], errors: list[str]) -> Stats:
+    """The rates asked at least, as the ACC and RES they take (each at least the stat's own
+    minimum, if one's typed too)."""
+    limits: Stats = {}
+    asked = [
+        ("min_landing", "lands at least", Lands, "enemy_res"),
+        ("min_resisting", "resists at least", Resists, "enemy_acc"),
+    ]
+
+    for field, label, goal_type, opponent_field in asked:
+        if not form.get(field, "").strip():
+            continue
+
+        percent = parse_number(form, field, label, errors)
+        opponent = parse_opponent(form, opponent_field, errors)
+        if opponent is None:
+            continue
+
+        goal = goal_type(opponent)
+        stat = goal.stat
+        least = goal.least_for(percent / 100)
+        if least is None:
+            errors.append(f"{label} {percent:g} %: no {STAT_LABELS[stat]} gets there (3-97 %)")
+            continue
+
+        typed = parse_number(form, f"min_{stat.name}", label, [], default=0)
+        limits[stat] = max(float(least), typed)
+
+    return limits
+
+
 def parse_sets(form: Mapping[str, str], account: Account, errors: list[str]) -> dict[int, int]:
     """Rows are numbered however the page numbered them; reported by position."""
     minimums: dict[int, int] = {}
@@ -167,7 +211,15 @@ def parse_ranking(
         if goal := parse_damage(form, champion, account, errors):
             prioritised.append((priority, len(Stat), goal))
 
-    if not any(form.get(f"rank_{name}", "").strip() for name in [*Stat.__members__, "DAMAGE"]):
+    for order, (name, label) in enumerate(RATE_GOALS.items(), len(Stat) + 1):
+        if form.get(f"rank_{name}", "").strip():
+            priority = parse_number(form, f"rank_{name}", f"priority {label}", errors)
+
+            if rate := parse_rate(form, name, errors):
+                prioritised.append((priority, order, rate))
+
+    names = [*Stat.__members__, "DAMAGE", *RATE_GOALS]
+    if not any(form.get(f"rank_{name}", "").strip() for name in names):
         errors.append("give at least one stat a priority")
 
     return tuple(goal for _, _, goal in sorted(prioritised, key=lambda entry: entry[:2]))
@@ -193,6 +245,69 @@ def parse_damage(
 
         case goal:
             return goal
+
+
+def parse_rate(form: Mapping[str, str], name: str, errors: list[str]) -> Lands | Resists | None:
+    match name:
+        case "LANDS":
+            resistance = parse_opponent(form, "enemy_res", errors)
+            return None if resistance is None else Lands(resistance)
+
+        case _:
+            accuracy = parse_opponent(form, "enemy_acc", errors)
+            return None if accuracy is None else Resists(accuracy)
+
+
+def parse_opponent(form: Mapping[str, str], field: str, errors: list[str]) -> float | None:
+    """The opponent's RES (`enemy_res`) or ACC (`enemy_acc`): needed for a rate."""
+    label = "the opponent's RES" if field == "enemy_res" else "the opponent's ACC"
+
+    if not form.get(field, "").strip():
+        message = f"a rate needs {label}: pick a target, or type it"
+        if message not in errors:
+            errors.append(message)
+
+        return None
+
+    value = parse_number(form, field, label, errors)
+    return value if value >= 0 else None
+
+
+def parse_battle(
+    form: Mapping[str, str], champion: Champion, account: Account, errors: list[str]
+) -> Battle:
+    return Battle(parse_buffs(form, errors), parse_leader(form, champion, account, errors))
+
+
+def parse_buffs(form: Mapping[str, str], errors: list[str]) -> tuple[Buff, ...]:
+    buffs = []
+
+    for stat, strengths in BUFFS.items():
+        if not (text := form.get(f"buff_{stat.name}", "").strip()):
+            continue
+
+        if buff := next((b for b in strengths if str(b.percent) == text), None):
+            buffs.append(buff)
+        else:
+            shown = " or ".join(str(b.percent) for b in strengths)
+            errors.append(f"an Increase {STAT_LABELS[stat]} buff is {shown} %, not {text}")
+
+    return tuple(buffs)
+
+
+def parse_leader(
+    form: Mapping[str, str], champion: Champion, account: Account, errors: list[str]
+) -> Leader | None:
+    if not (key := form.get("aura", "").strip()):
+        return None
+
+    offered = auras_reaching(account, champion)
+
+    if leader := next((each for each in offered if each.key == key), None):
+        return leader
+
+    errors.append(f"that aura no longer reaches {champion.name}: pick another leader")
+    return None
 
 
 def parse_equip(form: Mapping[str, str], account: Account) -> list[int] | FormErrors:

@@ -27,6 +27,10 @@ watch(
       </span>
       <span v-if="results.lore_of_steel">Lore of Steel applied.</span>
       <span v-if="results.damage">The DMG row is {{ results.damage }}.</span>
+      <span v-for="rate in results.rates" :key="rate">{{ rate }}.</span>
+      <span v-if="results.battle.length" class="planned">
+        Assumed in battle: {{ results.battle.join(", ") }}.
+      </span>
     </p>
 
     <div class="table-well">

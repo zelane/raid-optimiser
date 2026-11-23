@@ -5,24 +5,34 @@ the finder's (`service.finder`).
 
 - `SUPPORT_CHECK_DEF`, `RARITY_ORDER`, `AFFINITY_ORDER`: the page's shape, and the game's
   default champion order
-- `StatOption`, `SetOption`, `RuleOption`, `FormOptions`, `SkillOption`, `FormView`,
-  `ChampionPage`: the views
+- `StatOption`, `SetOption`, `RuleOption`, `BattleOption`, `BattleGroup`, `BattleOptions`,
+  `FormOptions`, `SkillOption`, `FormView`, `ChampionPage`: the views
 - `champion_page`, `shown_run`: what the page asks for
-- `game_order`, `form_options`, `form_views`, `skill_options`, `describe_goal`,
-  `current_stats`: what it shares
+- `game_order`, `form_options`, `battle_options` (`buff_groups`, `buff_option`, `aura_groups`,
+  `aura_option`), `form_views`,
+  `skill_options`, `describe_goal`, `current_stats`: what it shares
 """
 
 from dataclasses import dataclass, replace
 
 from optimiser.account import LOCK_LEVELS, Account, Champion, Stat, Stats, worn_gear
+from optimiser.battle import BUFFS, Buff, Leader, auras_reaching
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
-from optimiser.labels import PERCENT_STATS, STAT_LABELS, rule_label
+from optimiser.labels import (
+    PERCENT_STATS,
+    STAT_LABELS,
+    aura_holds,
+    aura_label,
+    buff_label,
+    rule_label,
+)
 from optimiser.paths import STORE
 from optimiser.reserve import Rule, reservations, reserved_count, rule_key
 from optimiser.stats import build_stats
 from optimiser.store import latest_run
 from webui.service.results import StatCell, stat_cells
 from webui.service.runs import RunEntryView, RunView, run_history, run_view, saved_run
+from webui.service.team import IconView
 from webui.service.views import ChampionRow, asset_url, champion_row
 
 SUPPORT_CHECK_DEF = 6000  # any DEF will do: whether a skill can be ranked doesn't depend on it
@@ -55,11 +65,38 @@ class RuleOption:
 
 
 @dataclass(frozen=True)
+class BattleOption:
+    """A buff or a leader's aura to assume, as the page's picker lists it. `field` and `value`
+    are the form's (`buff_SPD` and "30"; `aura` and a `Leader.key`)."""
+
+    field: str
+    value: str
+    label: str
+    note: str | None
+    icons: list[IconView]
+
+
+@dataclass(frozen=True)
+class BattleGroup:
+    title: str
+    options: list[BattleOption]
+
+
+@dataclass(frozen=True)
+class BattleOptions:
+    """Buffs by stat; the auras reaching the champion by stat, strongest first."""
+
+    buffs: list[BattleGroup]
+    auras: list[BattleGroup]
+
+
+@dataclass(frozen=True)
 class FormOptions:
     stats: list[StatOption]
     sets: list[SetOption]  # by name
     rules: list[RuleOption]  # the reserve rules, as configured
     lock_levels: list[int]  # for "only from champions locked up to": 0 (unlocked) first
+    battle: BattleOptions
 
 
 @dataclass(frozen=True)
@@ -102,7 +139,7 @@ def champion_page(account: Account, rules: tuple[Rule, ...], champion: Champion)
     return ChampionPage(
         champion=champion_row(champion),
         forms=form_views(account, champion),
-        options=form_options(account, rules),
+        options=form_options(account, rules, champion),
         history=run_history(champion),
     )
 
@@ -132,7 +169,7 @@ def game_order(champion: Champion) -> tuple[int, ...]:
     )
 
 
-def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:
+def form_options(account: Account, rules: tuple[Rule, ...], champion: Champion) -> FormOptions:
     """Up to the top lock level would let any locked champion's gear in, so it's left out."""
     sets = sorted(
         (
@@ -155,6 +192,65 @@ def form_options(account: Account, rules: tuple[Rule, ...]) -> FormOptions:
             for rule in rules
         ],
         lock_levels=list(range(max(LOCK_LEVELS))),
+        battle=battle_options(account, champion),
+    )
+
+
+def battle_options(account: Account, champion: Champion) -> BattleOptions:
+    return BattleOptions(buffs=buff_groups(), auras=aura_groups(account, champion))
+
+
+def buff_groups() -> list[BattleGroup]:
+    """A group per stat, its two strengths (the stronger with the game's second icon)."""
+    return [
+        BattleGroup(
+            STAT_LABELS[stat],
+            [
+                buff_option(buff, f"StatusIncrease{stat.value}{suffix}")
+                for buff, suffix in zip(strengths, ("", "2"), strict=True)
+            ],
+        )
+        for stat, strengths in BUFFS.items()
+    ]
+
+
+def buff_option(buff: Buff, icon: str) -> BattleOption:
+    label = buff_label(buff)
+    return BattleOption(
+        field=f"buff_{buff.stat.name}",
+        value=str(buff.percent),
+        label=label,
+        note=None,
+        icons=[IconView(label, asset_url("statuses", icon))],
+    )
+
+
+def aura_groups(account: Account, champion: Champion) -> list[BattleGroup]:
+    leaders = auras_reaching(account, champion)
+    groups = []
+
+    for stat in Stat:
+        held = [leader for leader in leaders if leader.aura.bonus.stat == stat]
+        held.sort(key=lambda leader: (-leader.aura.bonus.value, leader.champion.name))
+
+        if held:
+            groups.append(
+                BattleGroup(STAT_LABELS[stat], [aura_option(account, each) for each in held])
+            )
+
+    return groups
+
+
+def aura_option(account: Account, leader: Leader) -> BattleOption:
+    """A mythical's aura is one of its forms': it says which."""
+    name = leader.champion.name
+    forms = len(account.tables.hero_types[leader.champion.type_id].auras)
+    return BattleOption(
+        field="aura",
+        value=leader.key,
+        label=f"{name} (form {leader.number + 1})" if forms > 1 else name,
+        note=" · ".join(filter(None, [aura_label(leader.aura), aura_holds(leader.aura)])),
+        icons=[IconView(name, champion_row(leader.champion).portrait_url)],
     )
 
 

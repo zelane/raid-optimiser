@@ -8,7 +8,7 @@ champion's goal ranked first. No piece goes to two of them (`solve.find_team_bui
 - `RANK_CHOICES`: what a row can rank
 - `gear_page`: the workflow
 - `slot_view`, `row_view`, `minimum_view`, `minimum_value`, `places_debuffs`,
-  `damage_skills`, `default_skill`, `solve_team`, `member_request`, `member_result`,
+  `damage_skills`, `default_skill`, `solve_team`, `row_goal`, `member_request`, `member_result`,
   `shortfall_lines`, `percent`: its steps
 """
 
@@ -16,7 +16,13 @@ import time
 from dataclasses import dataclass, replace
 
 from optimiser.account import Account, Champion, Stat, worn_gear
-from optimiser.accuracy import accuracy_for_floor, resist_chance, resistance_for_cap
+from optimiser.accuracy import (
+    Lands,
+    Resists,
+    accuracy_for_floor,
+    resist_chance,
+    resistance_for_cap,
+)
 from optimiser.assume import assume
 from optimiser.damage import DamageGoal, Unsupported, damage_goal, estimate_damage
 from optimiser.enemies import Restriction, Rotating
@@ -39,7 +45,7 @@ from optimiser.solve import (
 from optimiser.stats import build_stats
 from optimiser.teams.kits import kit_of
 from optimiser.teams.tags import Side
-from webui.forms.request import DEFAULT_ABOVE_LEVEL, exclude_field
+from webui.forms.request import DEFAULT_ABOVE_LEVEL, RATE_GOALS, exclude_field
 from webui.forms.team import Unmatched
 from webui.forms.team_gear import (
     DAMAGE,
@@ -187,7 +193,9 @@ def gear_page(
         choices=[ChoiceView(choice_label(c)) for c in champions],
         rows=rows,
         sets=sorted(((s.id, s.name) for s in account.tables.sets.values()), key=lambda s: s[1]),
-        ranks=[(stat.name, STAT_LABELS[stat]) for stat in RANK_CHOICES] + [(DAMAGE, "Damage")],
+        ranks=[(stat.name, STAT_LABELS[stat]) for stat in RANK_CHOICES]
+        + [(DAMAGE, "Damage")]
+        + list(RATE_GOALS.items()),
         rules=[
             RuleView(
                 rule_key(rule),
@@ -319,6 +327,29 @@ def default_skill(skills: list[tuple[int, str, DamageGoal]]) -> int | None:
     return skills[-1][0] if skills else None
 
 
+def row_goal(
+    account: Account, champion: Champion, asked: RowAsk, row: RowView, target: EnemyCard
+) -> Goal:
+    """What the row ranks: a stat, a skill's damage against the target's DEF, or a rate
+    against its RES or ACC (SPD when nothing it names can be)."""
+    match asked.rank:
+        case Stat() as stat:
+            return stat
+
+        case "LANDS":
+            return Lands(target.resistance)
+
+        case "RESISTS":
+            return Resists(target.accuracy)
+
+        case _ if row.skill is not None:
+            skills = {s: g for s, _, g in damage_skills(account, champion, target.defence)}
+            return skills.get(row.skill, Stat.SPD)
+
+        case _:
+            return Stat.SPD
+
+
 def member_request(
     account: Account,
     champion: Champion,
@@ -358,12 +389,7 @@ def solve_team(
 
     for champion, row in zip(champions, rows, strict=True):
         asked = ask.rows[row.number - 1]
-        goal: Goal = asked.rank if isinstance(asked.rank, Stat) else Stat.SPD
-
-        if asked.rank == DAMAGE:
-            skills = {s: g for s, _, g in damage_skills(account, champion, target.defence)}
-            goal = skills.get(row.skill, Stat.SPD) if row.skill is not None else Stat.SPD
-
+        goal = row_goal(account, champion, asked, row, target)
         request = member_request(account, champion, asked, ask, target, goal)
         assumed, request = assume(account, request, assumptions)
         members.append(Member(assumed, request))
