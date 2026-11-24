@@ -327,60 +327,6 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
               Damage ranks the skill's critical hit against that much enemy DEF (the target's, once
               one is picked above): pair it with C.RATE at least 100.
             </small>
-<<<<<<< Updated upstream
-=======
-            <div
-              v-for="rate in rates"
-              :key="rate.rank"
-              class="goal-pick stack"
-              style="--space: var(--space-2xs)"
-            >
-              <span class="caps">{{ rate.label }}</span>
-              <div class="cluster" style="--space: var(--space-xs) var(--space-m)">
-                <label
-                  class="inline"
-                  :title="
-                    fields[`rank_${rate.rank}`]
-                      ? `${rate.limitLabel}: the target ranking aims for (blank: as far as it goes)`
-                      : `${rate.limitLabel}: a minimum (blank: none)`
-                  "
-                >
-                  <input
-                    v-model="fields[rate.limitField]"
-                    type="number"
-                    min="3"
-                    max="97"
-                    step="any"
-                    placeholder="—"
-                    :aria-label="`${rate.label}: ${rate.limitLabel} %`"
-                  />
-                  %
-                </label>
-                <label class="inline">
-                  vs {{ rate.opponent }}
-                  <input v-model="fields[rate.opponentField]" type="number" min="0" step="any" />
-                </label>
-                <label class="inline" title="1 ranks first; blank: not ranked">
-                  Priority
-                  <input
-                    v-model="fields[`rank_${rate.rank}`]"
-                    class="rank"
-                    type="number"
-                    min="1"
-                    max="9"
-                    placeholder="—"
-                    :aria-label="`${rate.label} priority`"
-                  />
-                </label>
-              </div>
-            </div>
-            <small class="note">
-              Each rate's % is a minimum (lands or resists at least), against an opponent's RES or
-              ACC (the target's, once one is picked). Given a priority, the % is a target instead:
-              ranked towards it, not required, and past it (or 97 %, with none) the next priority
-              gets the gear.
-            </small>
->>>>>>> Stashed changes
           </div>
         </fieldset>
       </div>
