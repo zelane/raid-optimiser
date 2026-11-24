@@ -24,6 +24,7 @@ dev = [
     "httpx2>=2.16.2",
 ]
 assets = ["UnityPy>=1.20"]
+emulate = ["unicorn>=2.1", "pefile>=2024.8", "capstone>=5"]
 capture = [
     "mitmproxy>=12.3.1",
 ]

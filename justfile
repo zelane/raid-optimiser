@@ -277,6 +277,17 @@ schema dump_cs="":
 check-levels oracle="data/game/base_stats_6_60.json":
     uv run python -m tools.check_levels oracle "{{oracle}}" data/game/hero_types.json
 
+# The hit model (optimiser/hit.py) against the game's own code, run in an emulator
+# (tests/test_game_code.py), with the dump of the installed GameAssembly.dll
+test-game *args:
+    #!/usr/bin/env bash
+    set -eu
+    hash=$(cat "{{game}}/GameAssembly.dll" "{{metadata}}" | sha256sum | cut -d' ' -f1)
+    dump=$(dirname "$(grep -lxF "$hash" data/dump/*/source.sha256 | head -1)")
+    [ "$dump" != . ] || { echo "no dump of the installed game: just dump" >&2; exit 1; }
+    GAME_ASSEMBLY="{{game}}/GameAssembly.dll" GAME_METADATA="{{metadata}}" GAME_DUMP="$dump" \
+        uv run --group dev --group emulate pytest tests/test_game_code.py "$@"
+
 # Write the raider oracle's request file (inject into ~/tmp/inject-test only!)
 oracle-request out=oracle_request_file:
     uv run python -m tools.oracle_request data/game/hero_types.json "{{out}}"

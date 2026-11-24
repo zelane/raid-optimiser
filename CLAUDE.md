@@ -36,7 +36,9 @@ in-game commands below; the account and the game's tables come from the game its
   `ExternalArtifactsStorage._presets`, per champion or global (`hero_id` null, the game's key -1),
   artifact or accessory), saved teams (`teams`: presets with their area, from
   `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3 arena
-  defenses; empty slots are 0 or -1), the Chimera's raid (`chimera`:
+  defenses, each 3v3 defender's skill settings (`arena3x3_priorities`: its slot's
+  `PrioritiesSetup`, the game's settings in its `sequences`: openers and `SkillPriorityType` by
+  skill id); empty slots are 0 or -1), the Chimera's raid (`chimera`:
   `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
   `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star count;
   the game keeps the count only, not which battle quests earned it). Values are the game's: ids,
@@ -56,6 +58,9 @@ in-game commands below; the account and the game's tables come from the game its
   whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
   `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
   `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
+  Hero types carry their `auras` (`LeaderSkills`: stat, value, flat or not, and the area,
+  affinity, faction and rarity they're held to, null for any; `account.Aura`, read by the
+  optimiser's battle).
   Enemy skills' block effects (`PassiveBlockEffect`) carry `blocks`: the effect kinds they stop,
   their groups resolved through `static_export.EFFECT_KIND_GROUPS` (12, BossImmunitiesEffects,
   read from the game's code: `EffectKindGroupExtensions..cctor`'s arrays in global-metadata.dat;
@@ -178,7 +183,9 @@ in-game commands below; the account and the game's tables come from the game its
 - Team gear (`/team-gear`, `webui/service/team_gear.py`, `forms/team_gear.py`,
   `pages/TeamGear.vue`): up to five champions (the team slots) geared at once against the target
   picker's enemy, each a compact row: up to two sets, SPD/ACC/C.RATE minimums and one goal
-  (a stat, or a skill's damage against the target's DEF). A minimum left out of the URL takes its
+  (a stat, a skill's damage against the target's DEF, or a rate: debuffs landing against its
+  RES, resisting its ACC: `accuracy.Lands`/`Resists`, ranked as the stat capped where the rate
+  stops rising). A minimum left out of the URL takes its
   default: ACC `accuracy.accuracy_for_floor` for a champion who places debuffs (`kits`), C.RATE
   100 % for one ranking damage; `res` carries the RES those came from, so ACC still at its default
   follows a new target. RES has no default, just `resistance_for_cap` as the field's placeholder
@@ -235,6 +242,27 @@ in-game commands below; the account and the game's tables come from the game its
 - `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
   `labels`), `paths` (where the data lives) and `settings` (the store's rows as the model's
   types: the only model module besides `store` that touches the file).
+- Battle (`optimiser/battle.py`; the champion page's Battle panel, `BattlePanel.vue` over the
+  team finder's `TagPicker` and `RemoveChip`, which is a button when it has no `href`): buffs and
+  a leader's aura assumed in a solve, as bonuses on base stats (`Request.battle`, added to the
+  constant by `stats.constant_stats`, so every goal sees them; the "now" row too). Buffs by the
+  game's status names (`IncreaseSpeed30`); ACC and RES ones flat (not yet read from the code).
+  Fields `buff_<STAT>` (its strength) and `aura` (`Leader.key`, "<champion id>:<aura number>": a
+  mythical has one per form). Only auras reaching the champion are offered (`auras_reaching`:
+  affinity, faction, rarity; a Faction Wars one only to the leader's faction); the area is shown,
+  not checked against the target.
+- Rate goals (`optimiser/accuracy.py` `Lands`, `Resists`; the champion page's "Debuffs land" and
+  "Resist debuffs" rows, `forms/request.py` `rank_LANDS`/`rank_RESISTS`, `min_landing`/
+  `min_resisting` in %, against `enemy_res`/`enemy_acc`, which the target picker fills like
+  `enemy_def`): a rate minimum is turned into the stat's at the form; ranked, the stat is capped
+  where the rate stops rising and held within the slack of its best rate (`solve.held_floor`).
+- `optimiser/hit.py`: the reference model of a hit (`DamageCalculator`, `DamageContext`, the
+  multiplier hooks) in the game's `Fixed` arithmetic (`optimiser/fixed.py`), bit for bit; the
+  solver doesn't use it. `just test-game` (tests/test_game_code.py) checks it against the game's
+  own code: `tools/game_emulator.py` runs GameAssembly.dll's methods in Unicorn on objects laid
+  out from the dump (`tools/dump_types.py`, cached in data/cache), libil2cpp's entry points found
+  from known call sites; needs the installed game's dump and the `emulate` group. What it covers
+  and how: `docs/game-model.md`, Damage.
 - `optimiser/store.py`: user state the snapshot doesn't hold, in SQLite at `data/state/optimiser.sqlite`
   (stdlib `sqlite3`): champion locks 1–5, set on the champion list, and reserve rules
   (`optimiser/reserve.py`, by `rule_key`: `Tagged(marker)` what champions with a tag wear,
@@ -470,6 +498,7 @@ just seed [--reset]   # list the accessory seeds (types, set fits); --reset back
 just check            # black + ruff over all Python, the house style checker, stylelint, then Prettier + vue-tsc over the front end
 just css-fix          # Prettier, then stylelint's fixes (property order, quotes), over webui/static/*.css
 uv run --group dev pytest   # tests/ (not part of just check)
+just test-game        # optimiser/hit.py against the game's own code, emulated (~40 s)
 ```
 
 The steps install and update run (`tools`, `ca`, `hh-patch`, `dump`, `reader-layout`, `reader`,
@@ -508,7 +537,9 @@ Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 - **Stat model:** stat = base + Great Hall + arena + awakening + empower + masteries + relics +
   gear; percentages apply to base except crit; rank/level scaling in Q32.32 `Fixed`; ascension,
   empowerment, glyphs, main stats and sets.
-- **Damage:** the formula's factors, the DEF multiplier, crit, the sets' damage bonus and ignore DEF.
+- **Damage:** a hit's steps (phases) and who hooks each, the formula's factors (affinity, hit
+  type, DEF, status reductions, stat modifiers, roll), how modifiers combine, and reflected,
+  shared, DoT and bomb damage.
 - **Resist:** the chance from RES − ACC: 3 % floor, 97 % cap, and the two breakpoints.
 - **Solver:** the MILP in HiGHS: its variables, lexicographic ranking, damage ranked by log tangents.
 - **Raider oracle:** calling game code from an injected DLL, to check formulas against the game.

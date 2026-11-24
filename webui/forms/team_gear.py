@@ -6,7 +6,8 @@ Fields: the team's slots (`slot`, `relic`: `forms.team`); then a row per slot, i
 ending in the slot's number (1 first): `set_<slot>` (repeated, up to `SETS_PER_ROW`: a set id,
 empty for none) each with `pieces_<slot>` (in the same order; empty: the set's smallest
 bonus), `min_SPD_<slot>`, `min_ACC_<slot>`, `min_RES_<slot>`, `min_CR_<slot>` (C.RATE in %),
-`rank_<slot>` (a `Stat` name or `DAMAGE`; empty: SPD) and `skill_<slot>` (the skill whose
+`rank_<slot>` (a `Stat` name, `DAMAGE`, or a rate: `LANDS`, `RESISTS`, against the target's
+RES or ACC; empty: SPD) and `skill_<slot>` (the skill whose
 damage it ranks; empty: the champion's default). A minimum left out of the query (not sent
 empty) takes its default (`Default`): ACC near the resist floor against the target's RES
 (`accuracy.accuracy_for_floor`) for a champion who places debuffs, C.RATE 100 % for one
@@ -31,7 +32,7 @@ from optimiser.account import Account, FixedSet, Stat
 from optimiser.reserve import Rule
 from optimiser.solve import MAX_PIECES, GearFilter
 from webui.forms.common import FormErrors
-from webui.forms.request import exclude_field, parse_gear_filter
+from webui.forms.request import RATE_GOALS, exclude_field, parse_gear_filter
 from webui.forms.targets import SavedTarget, parse_saved
 from webui.forms.team import TRUE, SlotPick, parse_slots
 
@@ -88,7 +89,8 @@ type Minimum = float | Default | None  # None: no minimum
 @dataclass(frozen=True)
 class RowAsk:
     """A slot's row as asked: sets (id -> pieces), minimums (C.RATE as a fraction), what it
-    ranks (a stat, or `DAMAGE` with `skill`: None for the champion's default)."""
+    ranks (a stat, `DAMAGE` with `skill`: None for the champion's default, or a rate's name
+    from `RATE_GOALS`)."""
 
     sets: dict[int, int]
     minimums: dict[Stat, Minimum]
@@ -215,8 +217,8 @@ def parse_rank(text: str, slot: int, errors: list[str]) -> Stat | str:
     if not text:
         return Stat.SPD
 
-    if text == DAMAGE:
-        return DAMAGE
+    if text == DAMAGE or text in RATE_GOALS:
+        return text
 
     if text in Stat.__members__:
         return Stat[text]

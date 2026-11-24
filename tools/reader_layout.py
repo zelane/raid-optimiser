@@ -39,7 +39,17 @@ CLASSES = {
         "SkillPrioritiesSetups",
         "TypeRanges",
     ),
-    ("SharedModel.Meta.Heroes", "SkillPrioritiesSetup"): ("HeroId",),
+    ("SharedModel.Meta.Heroes", "SkillPrioritiesSetup"): (
+        "HeroId",
+        "StarterSkillId",
+        "PriorityBySkillId",
+        "Sequences",
+    ),
+    ("SharedModel.Meta.Heroes", "HeroAiPresetSequence"): (
+        "StarterSkillId",
+        "StarterSkillIds",
+        "PriorityBySkillId",
+    ),
     ("SharedModel.Meta.Heroes", "Hero"): (
         "Id",
         "TypeId",
@@ -102,7 +112,7 @@ CLASSES = {
     ("Client.Model.Gameplay.Arena3x3", "Arena3x3WrapperReadOnly"): ("Data",),
     ("SharedModel.Meta.Battle.Arena3x3", "UserArena3X3Data"): ("Arena3X3DefenseTeamSetup",),
     ("SharedModel.Battle.Core.Setup", "TeamSetup"): ("HeroSlotSetups",),
-    ("SharedModel.Battle.Core.Setup", "HeroSlotSetup"): ("InventoryHeroId",),
+    ("SharedModel.Battle.Core.Setup", "HeroSlotSetup"): ("InventoryHeroId", "PrioritiesSetup"),
     ("SharedModel", "SharedModelManager"): ("DynamicData",),
     ("SharedModel.Meta", "DynamicData"): ("StageData",),
     ("SharedModel.Meta.Stages", "DynamicStageData"): ("AllianceChimeraData",),
@@ -141,6 +151,7 @@ ENUMS = {
     ("SharedModel.Meta.Inbox", "InboxTypeId"),
     ("SharedModel.Meta.Heroes", "HeroesAiPresetType"),
     ("SharedModel.Meta.Heroes", "HeroMarker"),
+    ("SharedModel.Meta.Heroes", "SkillPriorityType"),
     ("SharedModel.Meta.Masteries", "MasteryPointType"),
 }
 

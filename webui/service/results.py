@@ -5,8 +5,9 @@ current gear, or why there are none.
 - `StatCell`, `LineView`, `PieceView`, `BuildView`, `ResultsView`, `ShortfallView`,
   `Outcome`: the views (saved with runs, so fields added later have defaults)
 - `solve`: the workflow (`Stopped` if stopped before a build was found)
-- `results_view`, `shortfall_view`: its outcomes
-- `build_view`, `piece_view`, `line_view`, `stat_cells`, `damage_cell`: what they share
+- `results_view` (`battle_notes`), `shortfall_view`: its outcomes
+- `build_view`, `piece_view`, `line_view`, `stat_cells`, `damage_cell`, `rate_cell`,
+  `rate_note`, `RATE_LABELS`: what they share
 """
 
 import time
@@ -23,9 +24,20 @@ from optimiser.account import (
     faction_label,
     worn_gear,
 )
+from optimiser.accuracy import Lands, Resists
 from optimiser.assume import assume
+from optimiser.battle import Battle
 from optimiser.damage import estimate_damage
-from optimiser.labels import STAT_LABELS, format_stat, line_amount, line_label, reason_label
+from optimiser.labels import (
+    STAT_LABELS,
+    aura_holds,
+    aura_label,
+    buff_label,
+    format_stat,
+    line_amount,
+    line_label,
+    reason_label,
+)
 from optimiser.paths import STORE
 from optimiser.reserve import Reservations, Worn
 from optimiser.settings import read_assumptions
@@ -122,6 +134,10 @@ class ResultsView:
     builds: list[BuildView]
     seconds: float
     champion_level_note: str | None = None  # "at L60 (now L52)"; the default is for old runs
+    rates: list[str] = field(default_factory=list)  # what each ranked rate's column measures
+    battle: list[str] = field(
+        default_factory=list
+    )  # the buffs and aura assumed, "Increase SPD 30%"
 
 
 @dataclass(frozen=True)
@@ -162,25 +178,33 @@ def results_view(
     seconds: float,
     reserved: Reservations,
 ) -> ResultsView:
-    """The builds against the champion's current gear (as they are, nothing assumed)."""
+    """The builds against the champion's current gear (as they are, nothing assumed but the
+    battle, which every row is in)."""
     champion = request.champion
     sets = account.tables.sets
     worn = worn_gear(account, champion)
-    current = build_stats(champion, worn, account.tables)
+    current = build_stats(champion, worn, account.tables, request.battle.bonuses())
     goal = request.damage_goal()
     current_damage = estimate_damage(goal, current, worn, sets) if goal else None
 
-    def damage_cells(stats: Stats, artifacts: tuple[Artifact, ...]) -> list[StatCell]:
-        if goal is None:
-            return []
+    rates = [goal for goal in request.ranking if isinstance(goal, Lands | Resists)]
 
-        return [damage_cell(estimate_damage(goal, stats, artifacts, sets), current_damage)]
+    def extra_cells(stats: Stats, artifacts: tuple[Artifact, ...]) -> list[StatCell]:
+        rate_cells = [rate_cell(rate, stats, current) for rate in rates]
+
+        if goal is None:
+            return rate_cells
+
+        damage = damage_cell(estimate_damage(goal, stats, artifacts, sets), current_damage)
+        return [damage, *rate_cells]
 
     return ResultsView(
         champion=champion_row(champion),
         lore_of_steel=set_multiplier(champion, account.tables) > 1,
         damage=f"{goal.skill_name} crit vs {goal.enemy_defence:g} DEF" if goal else None,
-        current=stat_cells(current, None) + damage_cells(current, tuple(worn)),
+        current=stat_cells(current, None) + extra_cells(current, tuple(worn)),
+        rates=[rate_note(rate) for rate in rates],
+        battle=battle_notes(request.battle),
         builds=[
             build_view(
                 n,
@@ -188,7 +212,7 @@ def results_view(
                 current,
                 account,
                 champion,
-                damage_cells(build.stats, build.artifacts),
+                extra_cells(build.stats, build.artifacts),
                 reserved,
             )
             for n, build in enumerate(builds, 1)
@@ -200,6 +224,18 @@ def results_view(
             else None
         ),
     )
+
+
+def battle_notes(battle: Battle) -> list[str]:
+    """ "Increase SPD 30%", "Roric Wyrmbane's aura (SPD +19%, in Arena)" """
+    notes = [buff_label(buff) for buff in battle.buffs]
+
+    if leader := battle.leader:
+        holds = aura_holds(leader.aura)
+        detail = aura_label(leader.aura) + (f", {holds}" if holds else "")
+        notes.append(f"{leader.champion.name}'s aura ({detail})")
+
+    return notes
 
 
 def shortfall_view(shortfall: Shortfall, request: Request) -> ShortfallView:
@@ -318,6 +354,31 @@ def stat_cells(stats: Stats, current: Stats | None) -> list[StatCell]:
         )
 
     return cells
+
+
+def rate_cell(goal: Lands | Resists, stats: Stats, current: Stats) -> StatCell:
+    """A ranked rate's cell: how often debuffs land (`Lands`) or are resisted (`Resists`), and
+    the change in percentage points from the gear worn now."""
+    label = RATE_LABELS[type(goal)]
+    rate, now = goal.rate(stats[goal.stat]), goal.rate(current[goal.stat])
+    text = f"{rate:.1%}"
+
+    if text == f"{now:.1%}":
+        return StatCell(label, text, None, None)
+
+    return StatCell(label, text, f"{'+' if rate > now else '-'}{abs(rate - now):.1%}", rate > now)
+
+
+RATE_LABELS = {Lands: "Lands", Resists: "Resists"}
+
+
+def rate_note(goal: Lands | Resists) -> str:
+    match goal:
+        case Lands(resistance=resistance):
+            return f"Lands is how often its debuffs land against {resistance:g} RES"
+
+        case Resists(accuracy=accuracy):
+            return f"Resists is how often it resists debuffs from {accuracy:g} ACC"
 
 
 def damage_cell(damage: float, current: float | None) -> StatCell:

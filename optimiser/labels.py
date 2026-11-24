@@ -5,13 +5,16 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 - `format_stat`, `format_line`, `line_label`, `line_amount`: the formatting
 - `glyph_kind_label`, `glyph_grade_label`: glyphs, "HP%", "6★ Legendary"
 - `gear_filter_label`: what a solve keeps out of its gear, in a line
+- `AREA_LABELS`, `buff_label`, `aura_label`, `aura_holds`: what a battle assumes, "Increase
+  SPD 30%", "SPD +19%", "in Arena, Magic allies"
 - `MARKER_LABELS`, `rule_label`, `reason_label`: champion tags as the game shows them, and
   what reserves gear: "Arena Build I", "team cb"; "Arena Build I (Arbiter)", "preset spd"
 """
 
 import re
 
-from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine
+from optimiser.account import Account, Aura, GlyphGrade, GlyphKind, Stat, StatLine, faction_label
+from optimiser.battle import Buff
 from optimiser.reserve import GlobalPresets, Held, Reason, Rule, Tagged, Team, Worn
 from optimiser.solve import GearFilter
 
@@ -26,6 +29,13 @@ STAT_LABELS = {
     Stat.CD: "C.DMG",
 }
 PERCENT_STATS = (Stat.CR, Stat.CD)
+AREA_LABELS = {
+    "Arena": "Arena",
+    "Dungeon": "Dungeons",
+    "Fractions": "Faction Wars",
+    "DoomTower": "Doom Tower",
+    "Story": "Campaign",
+}
 MARKER_LABELS = {
     "Favorite": "Favorite",
     "First": "Build I",
@@ -81,6 +91,29 @@ def glyph_kind_label(kind: GlyphKind) -> str:
 def glyph_grade_label(grade: GlyphGrade) -> str:
     """Ranks 1-5 only come in Uncommon, so only 6★ names its rarity."""
     return f"{grade.rank}★" + (f" {grade.rarity}" if grade.rank == 6 else "")
+
+
+def buff_label(buff: Buff) -> str:
+    return f"Increase {STAT_LABELS[buff.stat]} {buff.percent}%"
+
+
+def aura_label(aura: Aura) -> str:
+    bonus = aura.bonus
+    return f"{STAT_LABELS[bonus.stat]} +{line_amount(bonus.value, bonus.absolute)}"
+
+
+def aura_holds(aura: Aura) -> str | None:
+    """Where and for whom it holds, if not everywhere for anyone: "in Arena, Magic allies"."""
+    allies = [
+        part
+        for part in (aura.element, aura.faction and faction_label(aura.faction), aura.rarity)
+        if part
+    ]
+    parts = [
+        *([f"in {AREA_LABELS.get(aura.area, aura.area)}"] if aura.area else []),
+        *([" ".join(allies) + " allies"] if allies else []),
+    ]
+    return ", ".join(parts) or None
 
 
 def gear_filter_label(gear: GearFilter, account: Account) -> str:

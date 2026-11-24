@@ -1,7 +1,7 @@
 """
 stats.py - a champion's stats as the game adds them up: base stats (rank, level and
-ascension), then fixed bonuses, gear and set bonuses. Percentages apply to base stats,
-except crit, where they add.
+ascension), then fixed bonuses, gear and set bonuses, and what a battle adds (`battle`: buffs,
+an aura). Percentages apply to base stats, except crit, where they add.
 
 Everything but gear is a constant per champion, and gear adds linearly per piece, which is
 what lets the solver treat a build as a sum.
@@ -31,15 +31,21 @@ from optimiser.account import (
 ADDITIVE = (Stat.CR, Stat.CD)
 
 
-def build_stats(champion: Champion, artifacts: Iterable[Artifact], tables: Tables) -> Stats:
-    """The stats the game shows for `champion` wearing `artifacts`."""
+def build_stats(
+    champion: Champion,
+    artifacts: Iterable[Artifact],
+    tables: Tables,
+    battle: tuple[Bonus, ...] = (),
+) -> Stats:
+    """The stats the game shows for `champion` wearing `artifacts` (in a battle, with what
+    `battle` adds)."""
     base = base_stats(champion, tables)
     worn = list(artifacts)
     pieces = Counter(a.set_id for a in worn)
     multiplier = set_multiplier(champion, tables)
 
     return add(
-        constant_stats(champion, tables),
+        constant_stats(champion, tables, battle),
         *(artifact_stats(a, base) for a in worn),
         *(
             set_stats(tables.sets[set_id], count, base, multiplier)
@@ -54,9 +60,9 @@ def base_stats(champion: Champion, tables: Tables) -> Stats:
     return levels.base_stats(tables.form_of(champion).unscaled, champion.grade, champion.level)
 
 
-def constant_stats(champion: Champion, tables: Tables) -> Stats:
+def constant_stats(champion: Champion, tables: Tables, battle: tuple[Bonus, ...] = ()) -> Stats:
     """Base stats plus everything that doesn't depend on gear: the account's Great Hall, the
-    arena league, awakening, empowerment, stat masteries and relics."""
+    arena league, awakening, empowerment, stat masteries, relics and `battle`."""
     base = base_stats(champion, tables)
     fixed = [
         *champion.great_hall,
@@ -65,6 +71,7 @@ def constant_stats(champion: Champion, tables: Tables) -> Stats:
         *level_bonuses(tables.empower, champion.rarity, champion.empower),
         *(tables.masteries[m] for m in champion.masteries if m in tables.masteries),
         *champion.relics,
+        *battle,
     ]
     return add(base, *({bonus.stat: resolve(bonus, base)} for bonus in fixed))
 

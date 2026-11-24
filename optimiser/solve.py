@@ -9,7 +9,10 @@ piece goes to two champions. Every stat is a per-champion constant plus a sum ov
 pieces chosen; set bonuses are exact through piece-count variables. So each step is a MILP,
 solved with HiGHS (a team's limits checked in one model).
 
-A ranked goal is a stat, or a skill's damage (`DamageGoal`). Damage is a product, so it's
+A ranked goal is a stat, a skill's damage (`DamageGoal`), or a rate (`accuracy.RateGoal`: debuffs
+landing against a RES, or resisting an ACC). A rate is ranked as its stat, capped where the
+rate stops rising (as C.RATE is at 100 %), and held within the slack of its best rate, not
+stat: the least stat for that rate. Damage is a product, so it's
 ranked by its log: log(formula) + log(1 + C.DMG) + log(1 + sets' damage bonus) + log(DEF
 multiplier). The first three are concave, held under tangent lines (the bonus's at every total
 it can reach, so exact); the last depends only on the DEF the sets ignore, which comes in 5 %
@@ -45,6 +48,7 @@ from optimiser.account import (
     Account,
     Artifact,
     ArtifactSet,
+    Bonus,
     Champion,
     FixedSet,
     Locks,
@@ -55,6 +59,8 @@ from optimiser.account import (
     VariableSet,
     slot_unlocked,
 )
+from optimiser.accuracy import Lands, RateGoal, Resists
+from optimiser.battle import Battle
 from optimiser.damage import (
     ActiveBonus,
     ActiveIgnore,
@@ -115,7 +121,7 @@ class GearFilter:
         return self.lock_level is None or self.locks.get(owner, 0) <= self.lock_level
 
 
-type Goal = Stat | DamageGoal
+type Goal = Stat | DamageGoal | RateGoal
 
 
 @dataclass(frozen=True)
@@ -131,6 +137,7 @@ class Request:
     builds: int
     gear: GearFilter
     above_level: int  # only pieces enhanced past this level (8: +9 and up)
+    battle: Battle = Battle()  # buffs and an aura assumed on the champion
 
     def damage_goal(self) -> DamageGoal | None:
         """The skill damage ranked, if any is."""
@@ -192,6 +199,7 @@ class Problem:
     champion: Champion
     tables: Tables
     base: Stats
+    battle: tuple[Bonus, ...]  # what the battle assumed adds (`Battle.bonuses`)
     constant: Stats
     pieces: tuple[Artifact, ...]
     piece_stats: dict[int, Stats]  # artifact id -> what it adds
@@ -360,6 +368,7 @@ def frame(
     champion = request.champion
     tables = account.tables
     base = base_stats(champion, tables)
+    battle = request.battle.bonuses()
     wearing = [
         a for a in account.artifacts if a.id not in taken and wearable(a, account, request, team)
     ]
@@ -370,7 +379,8 @@ def frame(
         champion=champion,
         tables=tables,
         base=base,
-        constant=constant_stats(champion, tables),
+        battle=battle,
+        constant=constant_stats(champion, tables, battle),
         pieces=pieces,
         piece_stats={a.id: piece_stats[a.id] for a in pieces},
         sets={a.set_id: tables.sets[a.set_id] for a in pieces if a.set_id in tables.sets},
@@ -442,6 +452,9 @@ def directions(request: Request) -> dict[Stat, int]:
             case DamageGoal(formula=formula):
                 wanted |= {stat: 1 for stat in formula.coefficients} | {Stat.CD: 1}
 
+            case Lands() | Resists() as rate:
+                wanted[rate.stat] = 1
+
             case stat:
                 wanted[stat] = 1
 
@@ -493,7 +506,7 @@ def maximise_ranking(milp: "Milp", problem: Problem, request: Request) -> Build 
 def solved_build(milp: "Milp", problem: Problem) -> Build:
     """The member's pieces in the model's solution."""
     picked = tuple(a for a in problem.pieces if milp.highs.val(milp.chosen[a.id]) > 0.5)
-    return Build(picked, build_stats(problem.champion, picked, problem.tables))
+    return Build(picked, build_stats(problem.champion, picked, problem.tables, problem.battle))
 
 
 def explain_shortfall(problem: Problem, request: Request) -> SetsRuleOut | Shortfall:
@@ -674,30 +687,52 @@ def add_limits(milp: Milp, request: Request) -> None:
 
 @dataclass(frozen=True)
 class Ranked:
-    """A goal as the solver maximises it; `log` when that's the log of the goal."""
+    """A goal as the solver maximises it (damage's log; a capped stat's value up to its cap)."""
 
     expression: Expression
-    log: bool
+    goal: Goal
 
 
 def ranked(milp: Milp, goal: Goal, problem: Problem) -> Ranked:
     match goal:
         case DamageGoal():
-            return Ranked(log_damage(milp, goal, problem), log=True)
+            return Ranked(log_damage(milp, goal, problem), goal)
+
+        case Lands() | Resists() as rate:
+            return Ranked(capped(milp, rate.stat, rate.most_useful()), goal)
 
         case stat if (cap := RANK_CAPS.get(stat)) is not None:
-            capped = milp.highs.addVariable(lb=-highspy.kHighsInf, ub=cap)
-            milp.highs.addConstr(capped <= milp.stats[stat])
-            return Ranked(capped, log=False)  # more is wasted past the cap
+            return Ranked(capped(milp, stat, cap), goal)
 
         case stat:
-            return Ranked(milp.stats[stat], log=False)
+            return Ranked(milp.stats[stat], goal)
+
+
+def capped(milp: Milp, stat: Stat, cap: float) -> highspy.highs_var:
+    """The stat, counted up to `cap`: more is wasted past it."""
+    value = milp.highs.addVariable(lb=-highspy.kHighsInf, ub=cap)
+    milp.highs.addConstr(value <= milp.stats[stat])
+    return value
 
 
 def hold(milp: Milp, objective: Ranked, best: float, slack: float) -> None:
     """Keep the goal within `slack` of its best while later goals are maximised."""
-    floor = best + math.log(1 - slack) if objective.log else best - slack * abs(best)
-    milp.highs.addConstr(objective.expression >= floor)
+    milp.highs.addConstr(objective.expression >= held_floor(objective.goal, best, slack))
+
+
+def held_floor(goal: Goal, best: float, slack: float) -> float:
+    """The least the ranked expression may fall to: damage within `slack` of its best (it's
+    ranked by its log), a rate within `slack` of its best rate, a stat of its best stat."""
+    match goal:
+        case DamageGoal():
+            return best + math.log(1 - slack)
+
+        case Lands() | Resists() as rate:
+            least = rate.least_for(rate.rate(best) * (1 - slack))
+            return best if least is None else min(least, best)
+
+        case _:
+            return best - slack * abs(best)
 
 
 def log_damage(milp: Milp, goal: DamageGoal, problem: Problem):

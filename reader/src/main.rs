@@ -51,6 +51,8 @@ struct Snapshot {
     gear_presets: Vec<artifacts::GearPreset>,
     arena_defense: Vec<i32>,
     arena3x3_defense: Vec<Vec<i32>>,
+    /// per 3v3 team and slot: the champion's skill settings
+    arena3x3_priorities: Vec<Vec<Option<teams::SkillPriorities>>>,
     chimera: Option<chimera::Raid>,
     /// stage id → how far the account has got (stages it has fought)
     stages: BTreeMap<i32, stages::Progress>,
@@ -79,6 +81,7 @@ fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
         gear_presets: artifacts::presets(process, layout)?,
         arena_defense: teams::arena_defense(process, layout, user)?,
         arena3x3_defense: teams::arena3x3_defense(process, layout, user)?,
+        arena3x3_priorities: teams::arena3x3_priorities(process, layout, user)?,
         chimera: chimera::read(process, layout)?,
         stages: stages::read(process, layout, user)?,
     })

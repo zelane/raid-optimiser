@@ -4,6 +4,7 @@
 // run's when one is shown (the latest, or one picked from the history), else the defaults.
 import { Head, router } from "@inertiajs/vue3";
 import { computed, onUnmounted, ref, watch } from "vue";
+import BattlePanel from "../components/BattlePanel.vue";
 import ChampionFinder from "../components/ChampionFinder.vue";
 import ChampionTile from "../components/ChampionTile.vue";
 import RunHistory from "../components/RunHistory.vue";
@@ -13,7 +14,7 @@ import { checkedOf } from "../composables/format";
 import { stopSolve } from "../composables/send";
 import type { ChampionPage, FormView } from "../types/generated/webui.service.champions";
 import type { RunView } from "../types/generated/webui.service.runs";
-import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
+import type { EnemyCard, TargetPicker as Picker } from "../types/generated/webui.service.targets";
 
 const props = defineProps<{ page: ChampionPage; run: RunView | null; picker: Picker }>();
 
@@ -27,15 +28,41 @@ interface SetRow {
   pieces: string;
 }
 
+// The rate goals' rows: what each ranks, against which of the opponent's stats, and the
+// minimum it can take (`webui/forms/request.py`).
+const rates = [
+  {
+    rank: "LANDS",
+    label: "Debuffs land",
+    opponent: "RES",
+    opponentField: "enemy_res",
+    limitLabel: "lands at least",
+    limitField: "min_landing",
+  },
+  {
+    rank: "RESISTS",
+    label: "Resist debuffs",
+    opponent: "ACC",
+    opponentField: "enemy_acc",
+    limitLabel: "resists at least",
+    limitField: "min_resisting",
+  },
+];
+
 const fields = ref<Fields>({});
 const sets = ref<SetRow[]>([]);
 const skills = ref<Record<string, string>>({});
 const target = ref(props.picker.target);
-const targetDefence = ref(props.picker.picked.defence);
+// The picked enemy's stats the form fills in (DEF for damage, RES and ACC for the rates).
+const targetStats = ref(enemyStats(props.picker.picked));
 let setsAdded = 0;
 
 function firstSkill(form: FormView) {
   return String((form.skills.find((skill) => skill.supported) ?? form.skills[0])?.id ?? "");
+}
+
+function enemyStats(enemy: EnemyCard) {
+  return { enemy_def: enemy.defence, enemy_res: enemy.resistance, enemy_acc: enemy.accuracy };
 }
 
 function defaults(): Fields {
@@ -43,6 +70,8 @@ function defaults(): Fields {
   return {
     form: "0",
     enemy_def: "6000",
+    enemy_res: String(props.picker.picked.resistance),
+    enemy_acc: String(props.picker.picked.accuracy),
     slack: "1",
     builds: "3",
     above_level: "8",
@@ -91,7 +120,7 @@ watch(
   () => props.picker,
   (picker) => {
     target.value = picker.target;
-    targetDefence.value = picker.picked.defence;
+    targetStats.value = enemyStats(picker.picked);
   },
 );
 
@@ -100,12 +129,14 @@ const form = computed(
     props.page.forms.find((view) => String(view.number) === fields.value.form) ??
     props.page.forms[0],
 );
-const detached = computed(() => Number(fields.value.enemy_def) !== targetDefence.value);
+const detached = computed(() =>
+  Object.entries(targetStats.value).some(([name, value]) => Number(fields.value[name]) !== value),
+);
 
-function picked(defence: number, picked: string) {
+function picked(enemy: EnemyCard, picked: string) {
   target.value = picked;
-  targetDefence.value = defence;
-  fields.value.enemy_def = String(defence);
+  targetStats.value = enemyStats(enemy);
+  for (const [name, value] of Object.entries(targetStats.value)) fields.value[name] = String(value);
 }
 
 function checked(name: string) {
@@ -175,7 +206,7 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
       <TargetPicker
         :picker="picker"
         :detached="detached"
-        @picked="(enemy, key) => picked(enemy.defence, key)"
+        @picked="(enemy, key) => picked(enemy, key)"
       />
     </section>
     <div class="champion-column stack" style="--space: var(--space-2xl)">
@@ -289,43 +320,96 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
                 </tbody>
               </table>
             </div>
-            <div class="damage-pick cluster" style="--space: var(--space-s) var(--space-m)">
+            <div class="goal-pick stack" style="--space: var(--space-2xs)">
               <span class="caps">Damage</span>
-              <select
-                v-if="form"
-                v-model="skills[String(form.number)]"
-                aria-label="Skill to rank damage by"
-              >
-                <option
-                  v-for="skill in form.skills"
-                  :key="skill.id"
-                  :value="String(skill.id)"
-                  :disabled="!skill.supported"
-                  :title="skill.note"
+              <div class="cluster" style="--space: var(--space-xs) var(--space-m)">
+                <select
+                  v-if="form"
+                  v-model="skills[String(form.number)]"
+                  aria-label="Skill to rank damage by"
                 >
-                  {{ skill.name }}{{ skill.supported ? "" : " (can't be ranked)" }}
-                </option>
-              </select>
-              <label class="inline">
-                vs DEF
-                <input v-model="fields.enemy_def" type="number" min="0" step="any" />
-              </label>
-              <label class="inline" title="1 ranks first; blank: not ranked">
-                Priority
-                <input
-                  v-model="fields.rank_DAMAGE"
-                  class="rank"
-                  type="number"
-                  min="1"
-                  max="9"
-                  placeholder="—"
-                  aria-label="Damage priority"
-                />
-              </label>
+                  <option
+                    v-for="skill in form.skills"
+                    :key="skill.id"
+                    :value="String(skill.id)"
+                    :disabled="!skill.supported"
+                    :title="skill.note"
+                  >
+                    {{ skill.name }}{{ skill.supported ? "" : " (can't be ranked)" }}
+                  </option>
+                </select>
+                <label class="inline">
+                  vs DEF
+                  <input v-model="fields.enemy_def" type="number" min="0" step="any" />
+                </label>
+                <label class="inline" title="1 ranks first; blank: not ranked">
+                  Priority
+                  <input
+                    v-model="fields.rank_DAMAGE"
+                    class="rank"
+                    type="number"
+                    min="1"
+                    max="9"
+                    placeholder="—"
+                    aria-label="Damage priority"
+                  />
+                </label>
+              </div>
             </div>
             <small class="note">
               Damage ranks the skill's critical hit against that much enemy DEF (the target's, once
               one is picked above): pair it with C.RATE at least 100.
+            </small>
+            <div
+              v-for="rate in rates"
+              :key="rate.rank"
+              class="goal-pick stack"
+              style="--space: var(--space-2xs)"
+            >
+              <span class="caps">{{ rate.label }}</span>
+              <div class="cluster" style="--space: var(--space-xs) var(--space-m)">
+                <label
+                  class="inline"
+                  :title="
+                    fields[`rank_${rate.rank}`]
+                      ? `${rate.limitLabel}: the target ranking aims for (blank: as far as it goes)`
+                      : `${rate.limitLabel}: a minimum (blank: none)`
+                  "
+                >
+                  <input
+                    v-model="fields[rate.limitField]"
+                    type="number"
+                    min="3"
+                    max="97"
+                    step="any"
+                    placeholder="—"
+                    :aria-label="`${rate.label}: ${rate.limitLabel} %`"
+                  />
+                  %
+                </label>
+                <label class="inline">
+                  vs {{ rate.opponent }}
+                  <input v-model="fields[rate.opponentField]" type="number" min="0" step="any" />
+                </label>
+                <label class="inline" title="1 ranks first; blank: not ranked">
+                  Priority
+                  <input
+                    v-model="fields[`rank_${rate.rank}`]"
+                    class="rank"
+                    type="number"
+                    min="1"
+                    max="9"
+                    placeholder="—"
+                    :aria-label="`${rate.label} priority`"
+                  />
+                </label>
+              </div>
+            </div>
+            <small class="note">
+              Each rate's % is a minimum (lands or resists at least), against an opponent's RES or
+              ACC (the target's, once one is picked). Given a priority, the % is a target instead:
+              ranked towards it, not required, and past it (or 97 %, with none) the next priority
+              gets the gear.
             </small>
           </div>
         </fieldset>
@@ -361,6 +445,10 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
             </div>
           </div>
           <button type="button" class="dashed" @click="addSet">+ Add a set</button>
+        </fieldset>
+        <fieldset class="panel">
+          <legend>Battle</legend>
+          <BattlePanel v-model:fields="fields" :options="page.options.battle" />
         </fieldset>
         <fieldset class="panel search">
           <legend>Search</legend>
@@ -595,7 +683,7 @@ table.limits {
   }
 }
 
-.damage-pick {
+.goal-pick {
   > .caps {
     color: var(--primary);
   }

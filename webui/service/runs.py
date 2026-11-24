@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import UTC, datetime
 
 from optimiser.account import Account, Champion
+from optimiser.accuracy import Lands, Resists
 from optimiser.damage import DamageGoal
 from optimiser.labels import STAT_LABELS, format_stat, gear_filter_label
 from optimiser.paths import STORE
@@ -96,8 +97,8 @@ def last_solved() -> int | None:
 
 
 def describe_request(request: Request, account: Account) -> str:
-    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: locked up to 2", led by the form for
-    champions with several ("Health form · HP › ...")."""
+    """ "HP › SPD · SPD ≥ 200 · Lethal 4 · gear: locked up to 2 · battle: SPD 30%, Roric
+    Wyrmbane's aura", led by the form for champions with several ("Health form · HP › ...")."""
     champion = request.champion
     forms = account.tables.hero_forms.get(champion.type_id, ())
     form = [f"{forms[champion.form].role} form"] if len(forms) > 1 else []
@@ -115,8 +116,12 @@ def describe_request(request: Request, account: Account) -> str:
     ]
     ranking = " › ".join(describe_ranked(goal) for goal in request.ranking)
     gear = f"gear: {gear_filter_label(request.gear, account)}"
+    battle = request.battle
+    assumed = [f"{STAT_LABELS[buff.stat]} {buff.percent}%" for buff in battle.buffs]
+    assumed += [f"{battle.leader.champion.name}'s aura"] if battle.leader else []
+    in_battle = [f"battle: {', '.join(assumed)}"] if assumed else []
 
-    return " · ".join([*form, ranking, *at_least, *at_most, *sets, gear])
+    return " · ".join([*form, ranking, *at_least, *at_most, *sets, gear, *in_battle])
 
 
 def describe_ranked(goal: Goal) -> str:
@@ -124,8 +129,18 @@ def describe_ranked(goal: Goal) -> str:
         case DamageGoal(skill_name=skill_name):
             return f"{skill_name} DMG"
 
+        case Lands(resistance=resistance, target=target):
+            return f"debuffs land vs {resistance:g} RES{aiming_at(target)}"
+
+        case Resists(accuracy=accuracy, target=target):
+            return f"resists {accuracy:g} ACC{aiming_at(target)}"
+
         case stat:
             return STAT_LABELS[stat]
+
+
+def aiming_at(target: float | None) -> str:
+    return "" if target is None else f" (to {target:.0%})"
 
 
 def outcome_note(outcome: Outcome) -> str:

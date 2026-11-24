@@ -298,9 +298,24 @@ def build_hero_types(hero):
                     }
                     for f in h.get("Forms") or []
                 ],
+                "auras": [aura(leader) for leader in h.get("LeaderSkills") or []],
             }
         )
     return out
+
+
+def aura(leader):
+    """A leader skill: a stat bonus for the team, held to battles in one area and to allies
+    of one affinity, faction or rarity where those are set (None: any)."""
+    return {
+        "stat": leader["StatKindId"],
+        "value": round(leader["Amount"], 6),
+        "absolute": leader["IsAbsolute"],
+        "area": leader["Area"],
+        "element": leader["Element"],
+        "faction": leader["Faction"],
+        "rarity": leader["Rarity"],
+    }
 
 
 def avatar_name(h):

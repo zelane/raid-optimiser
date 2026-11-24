@@ -4,10 +4,14 @@
 //! - `presets`: every preset; an area from the id, as `HeroesAiPreset.get_Type` finds it
 //! - `arena_defense`: the classic arena's defense team (`UserArenaData.DefenseHeroIds`)
 //! - `arena3x3_defense`: the 3v3 arena's teams (a `TeamSetup` each)
+//! - `SkillPriorities`, `arena3x3_priorities`: each 3v3 defender's skill settings (its slot's
+//!   `PrioritiesSetup`): the skill it opens with, each skill's priority, and its `Sequence`s
+
+use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::collections::{array_i32, list_refs, string};
+use crate::collections::{array_i32, dict_i32, list_i32, list_refs, string};
 use crate::layout::{offsets, Layout};
 use crate::process::Process;
 use crate::roots;
@@ -29,6 +33,17 @@ const PVP_IDS: [i32; 5] = [0, 301, 601, 602, 603];
 const PVP: i32 = 2;
 
 offsets!(PresetFields, "HeroesAiPreset" { id: "Id", name: "Name", setups: "SkillPrioritiesSetups" });
+offsets!(PrioritiesFields, "SkillPrioritiesSetup" {
+    hero_id: "HeroId",
+    starter: "StarterSkillId",
+    priorities: "PriorityBySkillId",
+    sequences: "Sequences",
+});
+offsets!(SequenceFields, "HeroAiPresetSequence" {
+    starter: "StarterSkillId",
+    starters: "StarterSkillIds",
+    priorities: "PriorityBySkillId",
+});
 
 #[derive(Serialize)]
 pub struct Preset {
@@ -36,6 +51,23 @@ pub struct Preset {
     pub name: String,
     pub area: String,
     pub heroes: Vec<i32>,
+}
+
+/// A champion's skill settings: skill id → `SkillPriorityType` by name (Default, First…,
+/// NotUsed), the skill it opens with, and the sequences the game keeps beside them.
+#[derive(Serialize)]
+pub struct SkillPriorities {
+    pub hero_id: i32,
+    pub starter: Option<i32>,
+    pub priorities: BTreeMap<i32, String>,
+    pub sequences: Vec<Sequence>,
+}
+
+#[derive(Serialize)]
+pub struct Sequence {
+    pub starter: Option<i32>,
+    pub starters: Vec<i32>,
+    pub priorities: BTreeMap<i32, String>,
 }
 
 pub fn presets(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Preset>, String> {
@@ -77,19 +109,95 @@ pub fn arena3x3_defense(
     layout: &Layout,
     user: u64,
 ) -> Result<Vec<Vec<i32>>, String> {
-    let slots = layout.field("TeamSetup.HeroSlotSetups")?;
     let hero_id = layout.field("HeroSlotSetup.InventoryHeroId")?;
+
+    arena3x3_slots(process, layout, user)?
+        .into_iter()
+        .map(|team| {
+            team.into_iter()
+                .map(|slot| process.read(slot + hero_id))
+                .collect()
+        })
+        .collect()
+}
+
+/// Per team, per slot: its champion's skill settings (None where the slot has none).
+pub fn arena3x3_priorities(
+    process: &Process,
+    layout: &Layout,
+    user: u64,
+) -> Result<Vec<Vec<Option<SkillPriorities>>>, String> {
+    let setup = layout.field("HeroSlotSetup.PrioritiesSetup")?;
+    let fields = PrioritiesFields::new(layout)?;
+    let sequence = SequenceFields::new(layout)?;
+
+    arena3x3_slots(process, layout, user)?
+        .into_iter()
+        .map(|team| {
+            team.into_iter()
+                .map(|slot| match process.read::<u64>(slot + setup)? {
+                    0 => Ok(None),
+                    addr => skill_priorities(process, layout, &fields, &sequence, addr).map(Some),
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// The 3v3 defense's `HeroSlotSetup`s, per team, empty slots left out.
+fn arena3x3_slots(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Vec<u64>>, String> {
+    let slots = layout.field("TeamSetup.HeroSlotSetups")?;
     let setups = layout.follow(process, user, &ARENA3X3)?;
 
     list_refs(process, setups)?
         .into_iter()
         .map(|team| {
-            list_refs(process, process.read(team + slots)?)?
+            Ok(list_refs(process, process.read(team + slots)?)?
                 .into_iter()
                 .filter(|&slot| slot != 0)
-                .map(|slot| process.read(slot + hero_id))
-                .collect()
+                .collect())
         })
+        .collect()
+}
+
+fn skill_priorities(
+    process: &Process,
+    layout: &Layout,
+    fields: &PrioritiesFields,
+    sequence: &SequenceFields,
+    addr: u64,
+) -> Result<SkillPriorities, String> {
+    let b = process.block(addr, fields.span)?;
+    let sequences = list_refs(process, b.ptr(fields.sequences))?
+        .into_iter()
+        .filter(|&s| s != 0)
+        .map(|s| {
+            let sb = process.block(s, sequence.span)?;
+            Ok(Sequence {
+                starter: sb.nullable_i32(sequence.starter),
+                starters: list_i32(process, sb.ptr(sequence.starters))?,
+                priorities: priority_names(process, layout, sb.ptr(sequence.priorities))?,
+            })
+        })
+        .collect::<Result<_, String>>()?;
+
+    Ok(SkillPriorities {
+        hero_id: b.i32(fields.hero_id),
+        starter: b.nullable_i32(fields.starter),
+        priorities: priority_names(process, layout, b.ptr(fields.priorities))?,
+        sequences,
+    })
+}
+
+/// A `Dictionary<int, SkillPriorityType>`, its values by name.
+fn priority_names(
+    process: &Process,
+    layout: &Layout,
+    dict: u64,
+) -> Result<BTreeMap<i32, String>, String> {
+    dict_i32(process, dict)?
+        .into_iter()
+        .map(|(skill, priority)| Ok((skill, layout.name("SkillPriorityType", priority)?)))
         .collect()
 }
 
