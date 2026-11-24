@@ -124,8 +124,21 @@ def describe_ranked(goal: Goal) -> str:
         case DamageGoal(skill_name=skill_name):
             return f"{skill_name} DMG"
 
+<<<<<<< Updated upstream
+=======
+        case Lands(resistance=resistance, target=target):
+            return f"debuffs land vs {resistance:g} RES{aiming_at(target)}"
+
+        case Resists(accuracy=accuracy, target=target):
+            return f"resists {accuracy:g} ACC{aiming_at(target)}"
+
+>>>>>>> Stashed changes
         case stat:
             return STAT_LABELS[stat]
+
+
+def aiming_at(target: float | None) -> str:
+    return "" if target is None else f" (to {target:.0%})"
 
 
 def outcome_note(outcome: Outcome) -> str:
