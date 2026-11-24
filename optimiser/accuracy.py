@@ -74,16 +74,20 @@ def resistance_for_cap(accuracy: float) -> int:
 @dataclass(frozen=True)
 class Lands:
     """A goal: the champion's debuffs landing against a RES. Ranks ACC by how rarely it's
-    resisted, so ACC past the floor (`accuracy_for_floor`) is worth nothing more."""
+    resisted, so ACC past the `target` rate (none: the floor, `accuracy_for_floor`) is worth
+    nothing more."""
 
     resistance: float
+    target: float | None = None
     stat = Stat.ACC
 
     def rate(self, accuracy: float) -> float:
         return 1 - resist_chance(accuracy, self.resistance)
 
     def most_useful(self) -> int:
-        return accuracy_for_floor(self.resistance)
+        floor = accuracy_for_floor(self.resistance)
+        least = None if self.target is None else self.least_for(self.target)
+        return floor if least is None else min(least, floor)
 
     def least_for(self, rate: float) -> int | None:
         """The least ACC that lands `rate` of the time (None: none does)."""
@@ -93,16 +97,20 @@ class Lands:
 @dataclass(frozen=True)
 class Resists:
     """A goal: the champion resisting debuffs from an ACC. Ranks RES by how often it resists,
-    so RES past the cap (`resistance_for_cap`) is worth nothing more."""
+    so RES past the `target` rate (none: the cap, `resistance_for_cap`) is worth nothing
+    more."""
 
     accuracy: float
+    target: float | None = None
     stat = Stat.RES
 
     def rate(self, resistance: float) -> float:
         return resist_chance(self.accuracy, resistance)
 
     def most_useful(self) -> int:
-        return resistance_for_cap(self.accuracy)
+        cap = resistance_for_cap(self.accuracy)
+        least = None if self.target is None else self.least_for(self.target)
+        return cap if least is None else min(least, cap)
 
     def least_for(self, rate: float) -> int | None:
         """The least RES that resists `rate` of the time (None: none does)."""

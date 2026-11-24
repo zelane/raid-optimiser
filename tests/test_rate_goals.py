@@ -4,6 +4,8 @@ ranked as their stat capped where the rate stops rising, held within the slack o
 rate.
 
 - `test_most_useful`: the cap is where the rate is within 0.1 points of the floor or cap
+- `test_target_caps_the_rate`: a target rate stops the ranking there, never past the floor or cap
+- `test_unranked_percent_is_a_minimum`, `test_ranked_percent_is_a_target`: the form's % fields
 - `test_held_floor_keeps_the_rate`: the hold's least stat keeps the rate within the slack
 - `test_held_floor_never_above_best`: rounding the stat up never asks more than the best
 - `test_ranking_stops_at_the_floor`: on the account, ACC past the rate's need goes to the next
@@ -16,12 +18,35 @@ from optimiser.account import Stat
 from optimiser.accuracy import RESIST_FLOOR, Lands, Resists, resist_chance
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 from optimiser.solve import held_floor
+from webui.forms.request import parse_rate, parse_rate_minimums
 
 
 def test_most_useful() -> None:
     lands, resists = Lands(250), Resists(300)
     assert resist_chance(lands.most_useful(), 250) <= RESIST_FLOOR + 0.001
     assert resist_chance(300, resists.most_useful()) >= 0.97 - 0.001
+
+
+def test_target_caps_the_rate() -> None:
+    lands, resists = Lands(250, 0.8), Resists(300, 0.6)
+    assert lands.most_useful() == lands.least_for(0.8) < Lands(250).most_useful()
+    assert resists.most_useful() == resists.least_for(0.6) < Resists(300).most_useful()
+    assert Lands(250, 0.97).most_useful() <= Lands(250).most_useful()
+
+
+def test_unranked_percent_is_a_minimum() -> None:
+    form = {"min_landing": "80", "enemy_res": "250", "min_ACC": "100"}
+    assert parse_rate_minimums(form, []) == {Stat.ACC: Lands(250).least_for(0.8)}
+
+
+def test_ranked_percent_is_a_target() -> None:
+    form = {"min_landing": "80", "enemy_res": "250", "rank_LANDS": "1"}
+    assert parse_rate_minimums(form, []) == {}
+    assert parse_rate(form, "LANDS", []) == Lands(250, 0.8)
+
+    errors: list[str] = []
+    assert parse_rate({**form, "min_landing": "99"}, "LANDS", errors) is None
+    assert errors
 
 
 @pytest.mark.parametrize("goal", [Lands(250), Resists(300)])

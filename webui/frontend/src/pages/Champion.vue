@@ -368,7 +368,14 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
             >
               <span class="caps">{{ rate.label }}</span>
               <div class="cluster" style="--space: var(--space-xs) var(--space-m)">
-                <label class="inline" :title="`${rate.limitLabel}: a minimum (blank: none)`">
+                <label
+                  class="inline"
+                  :title="
+                    fields[`rank_${rate.rank}`]
+                      ? `${rate.limitLabel}: the target ranking aims for (blank: as far as it goes)`
+                      : `${rate.limitLabel}: a minimum (blank: none)`
+                  "
+                >
                   <input
                     v-model="fields[rate.limitField]"
                     type="number"
@@ -400,8 +407,9 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
             </div>
             <small class="note">
               Each rate's % is a minimum (lands or resists at least), against an opponent's RES or
-              ACC (the target's, once one is picked). Ranked, more ACC or RES counts only while it
-              moves the chance: past 97 % the next priority gets the gear.
+              ACC (the target's, once one is picked). Given a priority, the % is a target instead:
+              ranked towards it, not required, and past it (or 97 %, with none) the next priority
+              gets the gear.
             </small>
           </div>
         </fieldset>

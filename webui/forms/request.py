@@ -6,7 +6,8 @@ number of rows, any `n`), `rank_<STAT>` (a priority, 1 first), `rank_DAMAGE` wit
 `damage_skill` (skill id) and `enemy_def`, the rates against an opponent (`enemy_res` and
 `enemy_acc`, the target's unless typed): `rank_LANDS` and `rank_RESISTS` (debuffs landing
 against its RES, resisting its ACC), `min_landing` and `min_resisting` (%: minimums, turned into
-ACC's and RES's), `slack` (%), `builds`, the gear filters (each
+ACC's and RES's; a ranked rate's is its target instead, ranked up to and not held to), `slack`
+(%), `builds`, the gear filters (each
 present when ticked: `unworn_only`; `locked` with `lock_level`; `exclude_<rule key>` per
 reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; absent: the first),
 the battle assumed: `buff_<STAT>` (a buff's strength, as its status names it: `buff_SPD=30`)
@@ -15,7 +16,7 @@ The equip and preview buttons post `artifact_ids`, comma-separated.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `parse_request` (`parse_gear_filter`, `exclude_field`): the boundary
-- `RATE_GOALS`: the rates' rank fields
+- `RATE_GOALS`, `RATE_FIELDS`: the rates' rank fields, and their % and opponent's
 - `parse_form`, `parse_limits`, `parse_rate_minimums`, `parse_sets`, `parse_ranking`,
   `parse_damage`, `parse_rate`, `parse_opponent`, `parse_battle` (`parse_buffs`,
   `parse_leader`): its steps
@@ -37,6 +38,10 @@ from webui.forms.common import FormErrors, parse_number
 
 DEFAULT_ENEMY_DEF = 6000
 RATE_GOALS = {"LANDS": "Debuffs landing", "RESISTS": "Resisting debuffs"}
+RATE_FIELDS = {  # each rate's % field, its label, and the opponent's stat it's against
+    "LANDS": ("min_landing", "lands at least", "enemy_res"),
+    "RESISTS": ("min_resisting", "resists at least", "enemy_acc"),
+}
 DEFAULT_ABOVE_LEVEL = 8
 MAX_BUILDS = 10
 
@@ -139,32 +144,20 @@ def parse_limits(form: Mapping[str, str], prefix: str, errors: list[str]) -> Sta
 
 
 def parse_rate_minimums(form: Mapping[str, str], errors: list[str]) -> Stats:
-    """The rates asked at least, as the ACC and RES they take (each at least the stat's own
-    minimum, if one's typed too)."""
+    """The rates asked at least and not ranked, as the ACC and RES they take (each at least the
+    stat's own minimum, if one's typed too). A ranked rate's % is its target instead."""
     limits: Stats = {}
-    asked = [
-        ("min_landing", "lands at least", Lands, "enemy_res"),
-        ("min_resisting", "resists at least", Resists, "enemy_acc"),
-    ]
 
-    for field, label, goal_type, opponent_field in asked:
-        if not form.get(field, "").strip():
+    for name in RATE_GOALS:
+        if form.get(f"rank_{name}", "").strip() or not form.get(RATE_FIELDS[name][0], "").strip():
             continue
 
-        percent = parse_number(form, field, label, errors)
-        opponent = parse_opponent(form, opponent_field, errors)
-        if opponent is None:
+        if (rate := parse_rate(form, name, errors)) is None or rate.target is None:
             continue
 
-        goal = goal_type(opponent)
-        stat = goal.stat
-        least = goal.least_for(percent / 100)
-        if least is None:
-            errors.append(f"{label} {percent:g} %: no {STAT_LABELS[stat]} gets there (3-97 %)")
-            continue
-
-        typed = parse_number(form, f"min_{stat.name}", label, [], default=0)
-        limits[stat] = max(float(least), typed)
+        if (least := rate.least_for(rate.target)) is not None:
+            typed = parse_number(form, f"min_{rate.stat.name}", "", [], default=0)
+            limits[rate.stat] = max(float(least), typed)
 
     return limits
 
@@ -248,14 +241,24 @@ def parse_damage(
 
 
 def parse_rate(form: Mapping[str, str], name: str, errors: list[str]) -> Lands | Resists | None:
-    match name:
-        case "LANDS":
-            resistance = parse_opponent(form, "enemy_res", errors)
-            return None if resistance is None else Lands(resistance)
+    """The rate against the opponent, its % (if typed) its target."""
+    percent_field, label, opponent_field = RATE_FIELDS[name]
+    opponent = parse_opponent(form, opponent_field, errors)
+    target = None
 
-        case _:
-            accuracy = parse_opponent(form, "enemy_acc", errors)
-            return None if accuracy is None else Resists(accuracy)
+    if form.get(percent_field, "").strip():
+        target = parse_number(form, percent_field, label, errors) / 100
+
+    if opponent is None:
+        return None
+
+    rate = Lands(opponent, target) if name == "LANDS" else Resists(opponent, target)
+    if target is not None and rate.least_for(target) is None:
+        stat = STAT_LABELS[rate.stat]
+        errors.append(f"{label} {target:.0%}: no {stat} gets there (3-97 %)")
+        return None
+
+    return rate
 
 
 def parse_opponent(form: Mapping[str, str], field: str, errors: list[str]) -> float | None:
