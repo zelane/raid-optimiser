@@ -32,6 +32,7 @@ from optimiser.stats import build_stats
 from optimiser.store import latest_run
 from webui.service.results import StatCell, stat_cells
 from webui.service.runs import RunEntryView, RunView, run_history, run_view, saved_run
+from webui.service.skills import SkillLevel, form_skills
 from webui.service.team import IconView
 from webui.service.views import ChampionRow, asset_url, champion_row
 
@@ -111,15 +112,17 @@ class SkillOption:
 
 @dataclass(frozen=True)
 class FormView:
-    """One of the champion's forms (most have only one): its stats in the gear worn now, and
-    the skills damage can be ranked by in it. `icon_url` is its helm when picked, `idle_url`
-    when not (None without the art; mythicals' two forms have it)."""
+    """One of the champion's forms (most have only one): its stats in the gear worn now, its
+    skills and how far each is booked, and the skills damage can be ranked by in it. `icon_url`
+    is its helm when picked, `idle_url` when not (None without the art; mythicals' two forms
+    have it)."""
 
     number: int  # 0 first, as the request's `form` field posts it
     role: str  # the game's: Attack, Defense, Health, Support
     icon_url: str | None
     idle_url: str | None
     current: list[StatCell]
+    books: list[SkillLevel]
     skills: list[SkillOption]
 
 
@@ -267,6 +270,7 @@ def form_views(account: Account, champion: Champion) -> list[FormView]:
                 icon_url=asset_url("forms", str(number + 1)),
                 idle_url=asset_url("forms", f"{number + 1}-white"),
                 current=stat_cells(current_stats(account, in_form), None),
+                books=form_skills(form, champion.skill_levels, account.tables),
                 skills=skill_options(account, in_form),
             )
         )

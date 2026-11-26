@@ -5,11 +5,10 @@ many it has; a skill with none is already there), and what the unused ones would
 those same books. A champion's two forms (a mythical's) take books of their own, so what each form
 still wants is grouped on its own; the reader doesn't say which form the champion is in.
 
-- `SLOT_KINDS`: the game's skill group -> how the page labels its skills
 - `BOOK_GAINS`: the game's `SkillBonusType` -> what its book adds
 - `SkillShort`, `FormShort`, `ShortOfBooks`, `BooksPage`: the views
 - `books_page`: what the page shows
-- `forms_short`, `slot_labels`, `book_gains`, `top_level`: its pieces
+- `forms_short`, `book_gains`: its pieces (skill slots and tops: `service.skills`)
 
 The champion filter bar (`service.finder`) narrows the list; `forms.books` holds its defaults.
 """
@@ -21,9 +20,8 @@ from optimiser.account import Account, Champion, HeroForm, Skill, Tables
 from webui.forms.finder import FinderQuery
 from webui.service.champions import game_order
 from webui.service.finder import FilterChoices, account_factions, filter_choices, matches
+from webui.service.skills import slot_labels, slot_order, top_level
 from webui.service.views import ChampionRow, champion_row
-
-SLOT_KINDS = {"Active": "A", "Passive": "P"}  # numbered in order: A1, A2 …, P1, P2 …
 
 BOOK_GAINS = {
     "Attack": "damage",
@@ -150,26 +148,6 @@ def skills_short(form: HeroForm, levels: dict[int, int], tables: Tables) -> list
     ]
 
 
-def slot_labels(form: HeroForm, tables: Tables) -> dict[int, str]:
-    """Where each of a form's skills sits, numbered in order: its actives A1, A2, A3 …, its
-    passives P1, P2 …"""
-    labels: dict[int, str] = {}
-    so_far = dict.fromkeys(SLOT_KINDS, 0)
-
-    for skill_id in form.skills:
-        skill = tables.skills.get(skill_id)
-        kind = "Active" if skill and skill.group == "Active" else "Passive"
-        so_far[kind] += 1
-        labels[skill_id] = f"{SLOT_KINDS[kind]}{so_far[kind]}"
-
-    return labels
-
-
-def slot_order(slot: str) -> tuple[int, int]:
-    """A1, A2, A3 …, then P1, P2 …: the kind first, its number after."""
-    return (0 if slot[0] == SLOT_KINDS["Active"] else 1, int(slot[1:]))
-
-
 def book_gains(skill: Skill, level: int) -> list[str]:
     """What the books this skill hasn't had would give it, each kind summed: '+20% damage',
     '1 turn less cooldown'. The books are in order, so the ones left are from its level up."""
@@ -188,9 +166,3 @@ def book_gains(skill: Skill, level: int) -> list[str]:
             gains.append(f"+{round(value * 100, 1):g}% {BOOK_GAINS.get(kind, kind)}")
 
     return gains
-
-
-def top_level(skill: Skill) -> int:
-    """The level all a skill's books reach: a book is a level past 1, and a skill the game gives
-    no books to is already there."""
-    return len(skill.books) + 1

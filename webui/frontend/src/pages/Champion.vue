@@ -129,6 +129,12 @@ const form = computed(
     props.page.forms.find((view) => String(view.number) === fields.value.form) ??
     props.page.forms[0],
 );
+// The skill shown in the Skills card's tabs: the first until one's picked, kept by its slot
+// across a form switch when the other form has it.
+const skillSlot = ref("A1");
+const shownSkill = computed(
+  () => form.value?.books.find((skill) => skill.slot === skillSlot.value) ?? form.value?.books[0],
+);
 const detached = computed(() =>
   Object.entries(targetStats.value).some(([name, value]) => Number(fields.value[name]) !== value),
 );
@@ -262,6 +268,47 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
           </div>
         </dl>
       </article>
+      <section
+        v-if="form && shownSkill"
+        class="panel stack skills"
+        aria-labelledby="skills-head"
+        style="--space: var(--space-s)"
+      >
+        <div class="cluster" style="--justify: space-between; --align: center">
+          <h2 id="skills-head">Skills</h2>
+          <div class="segmented small" role="radiogroup" aria-label="Skill">
+            <label v-for="skill in form.books" :key="skill.slot" :title="skill.name">
+              <input v-model="skillSlot" type="radio" :value="skill.slot" />
+              {{ skill.slot }}
+            </label>
+          </div>
+        </div>
+        <div class="stack" style="--space: var(--space-3xs)">
+          <div class="cluster" style="--space: var(--space-xs); --align: baseline">
+            <strong>{{ shownSkill.name }}</strong>
+            <small
+              v-if="shownSkill.cooldown"
+              class="note"
+              :title="
+                shownSkill.cooldown < shownSkill.base_cooldown
+                  ? `Cooldown ${shownSkill.cooldown} turns, ${shownSkill.base_cooldown} unbooked`
+                  : `Cooldown ${shownSkill.cooldown} turns`
+              "
+            >
+              ⟳ {{ shownSkill.cooldown }}
+            </small>
+            <span
+              v-if="shownSkill.top > 1"
+              class="push books"
+              :class="shownSkill.level < shownSkill.top ? 'mid' : 'good'"
+              :title="`Level ${shownSkill.level} of ${shownSkill.top}`"
+            >
+              {{ shownSkill.level }}/{{ shownSkill.top }}
+            </span>
+          </div>
+          <p v-if="shownSkill.description" class="description">{{ shownSkill.description }}</p>
+        </div>
+      </section>
       <RunHistory
         :history="page.history"
         :champion-id="page.champion.id"
@@ -597,6 +644,20 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
   .stack {
     align-items: flex-start;
     padding-top: var(--space-s);
+  }
+}
+
+/* The form's skills: where each sits, its name and how far it's booked, the game's text under. */
+.skills {
+  .books {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .description {
+    font-size: var(--text-s);
+    color: var(--on-surface-variant);
+    white-space: pre-line;
   }
 }
 

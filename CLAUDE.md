@@ -360,7 +360,10 @@ in-game commands below; the account and the game's tables come from the game its
   chance, a turn of cooldown, HP, shields, ignore RES). A mythical's two forms take books
   of their own (`forms_short` over `hero_forms`; only mythicals have a second, and the
   reader doesn't say which form the champion is in), so one short in both shows a labelled
-  block per form on its card.
+  block per form on its card. Slots and tops are `service.skills` (`form_skills`), which the
+  champion page's Skills card (under the profile: a tab per skill of the picked form, its books as
+  "1/3", its cooldown after the books it's had (`booked_cooldown`) and the game's text,
+  `skills.json` `description`) shares.
 - Masteries page (`/masteries`, `webui/service/masteries.py`): the 6★ champions with no mastery
   in a tree's last row (Helmsmasher's), split into those holding enough scrolls to reach it and
   those still to farm for (fewest Divine short first). Per kind (Divine, Advanced, Basic: the

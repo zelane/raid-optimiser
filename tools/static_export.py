@@ -563,9 +563,10 @@ def source_skill_ids(sources):
 
 
 def build_skills(skills, heroes, status_names, extra_ids=()):
-    """The champions' skills: name, whether it's AoE, its unconditional damage hits (formula,
-    count, the skill's own DEF modifier), the damage bonus each book adds, and the formulas of
-    its other effects that scale with the caster's stats (`scaling`: kind and formula).
+    """The champions' skills: name, the game's text (markup stripped), whether it's AoE, its
+    unconditional damage hits (formula, count, the skill's own DEF modifier), the damage bonus
+    each book adds, and the formulas of its other effects that scale with the caster's stats
+    (`scaling`: kind and formula).
     Also what it can place and do, whatever the condition or chance: `debuffs` on enemies and
     `buffs` on its team (status effect names), every effect kind it has (`effect_kinds`:
     Revive, TeamAttack, PassiveCounterattack, …) and whether it hits for a share of the
@@ -586,6 +587,7 @@ def build_skills(skills, heroes, status_names, extra_ids=()):
         ]
         out[str(skill_id)] = {
             "name": skill["Name"],
+            "description": TAGS.sub("", skill["Description"] or "").replace("\r\n", "\n"),
             "group": skill["Group"],
             "cooldown": skill["Cooldown"],
             "aoe": any(e["TargetParams"]["TargetType"] == "AllEnemies" for e in hits),

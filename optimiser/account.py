@@ -346,6 +346,7 @@ class Skill:
     cooldown: int = 0
     placements: tuple[Placement, ...] = ()
     books: tuple[Book, ...] = ()
+    description: str = ""  # the game's text, markup stripped
 
 
 @dataclass(frozen=True)
@@ -787,6 +788,7 @@ def parse_skills(static: Path) -> dict[int, Skill]:
         int(skill_id): Skill(
             id=int(skill_id),
             name=raw["name"] or f"skill {skill_id}",
+            description=raw.get("description", ""),
             group=raw["group"],
             aoe=raw["aoe"],
             hits=tuple(Hit(h["formula"], h["count"], h["defence_modifier"]) for h in raw["hits"]),
