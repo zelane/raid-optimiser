@@ -12,7 +12,8 @@ present when ticked: `unworn_only`; `locked` with `lock_level`; `exclude_<rule k
 reserve rule), `above_level`, `form` (which of a mythical's forms, 0 first; absent: the first),
 the battle assumed: `buff_<STAT>` (a buff's strength, as its status names it: `buff_SPD=30`)
 and `aura` (a leader, `battle.Leader.key`: one whose aura reaches the champion).
-The equip and preview buttons post `artifact_ids`, comma-separated.
+The equip and preview buttons post `artifact_ids`, comma-separated, and the gear filters the
+build was found under (`gear_fields`), with `team`: the teammates' ids, whose pieces it may take.
 
 - `MAX_BUILDS`, `DEFAULT_ENEMY_DEF`, `DEFAULT_ABOVE_LEVEL`: the form's shape
 - `parse_request` (`parse_gear_filter`, `exclude_field`): the boundary
@@ -20,12 +21,13 @@ The equip and preview buttons post `artifact_ids`, comma-separated.
 - `parse_form`, `parse_limits`, `parse_rate_minimums`, `parse_sets`, `parse_ranking`,
   `parse_damage`, `parse_rate`, `parse_opponent`, `parse_battle` (`parse_buffs`,
   `parse_leader`): its steps
-- `parse_equip`: the build buttons' pieces
+- `Equip`, `parse_equip`, `gear_fields`, `filter_form`: the build buttons (checked by
+  `service.results.check_equip`)
 """
 
 import re
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats
 from optimiser.accuracy import Lands, Resists
@@ -43,6 +45,7 @@ RATE_FIELDS = {  # each rate's % field, its label, and the opponent's stat it's 
     "RESISTS": ("min_resisting", "resists at least", "enemy_acc"),
 }
 DEFAULT_ABOVE_LEVEL = 8
+GEAR_FIELD = re.compile(r"^(unworn_only|locked|lock_level|exclude_.+)$")  # `parse_gear_filter`'s
 MAX_BUILDS = 10
 
 
@@ -313,11 +316,24 @@ def parse_leader(
     return None
 
 
-def parse_equip(form: Mapping[str, str], account: Account) -> list[int] | FormErrors:
-    fields = [text.strip() for text in form.get("artifact_ids", "").split(",") if text.strip()]
+@dataclass(frozen=True)
+class Equip:
+    """A build button's pieces, and the gear rules the build was found under (`gear_fields`:
+    none for a button with no solve behind it), `team` the teammates whose pieces it may take."""
 
-    if not all(text.isdigit() for text in fields):
-        return FormErrors(["artifact ids must be numbers"])
+    artifact_ids: list[int]
+    gear: GearFilter
+    team: frozenset[int]
+
+
+def parse_equip(
+    form: Mapping[str, str], account: Account, locks: Locks, rules: tuple[Rule, ...]
+) -> Equip | FormErrors:
+    fields = [text.strip() for text in form.get("artifact_ids", "").split(",") if text.strip()]
+    team = [text.strip() for text in form.get("team", "").split(",") if text.strip()]
+
+    if not all(text.isdigit() for text in fields + team):
+        return FormErrors(["artifact and champion ids must be numbers"])
 
     artifact_ids = [int(text) for text in fields]
     known = {artifact.id for artifact in account.artifacts}
@@ -328,4 +344,28 @@ def parse_equip(form: Mapping[str, str], account: Account) -> list[int] | FormEr
     if unknown := [artifact_id for artifact_id in artifact_ids if artifact_id not in known]:
         return FormErrors([f"pieces no longer in the account: {unknown}; run the build again"])
 
-    return artifact_ids
+    errors: list[str] = []
+    gear = parse_gear_filter(form, account, locks, rules, errors)
+
+    if errors:
+        return FormErrors(errors)
+
+    return Equip(artifact_ids, gear, frozenset(int(text) for text in team))
+
+
+def gear_fields(form: Mapping[str, str]) -> dict[str, str]:
+    """The form's gear rules (`parse_gear_filter`'s fields), for the build buttons to send."""
+    return {name: value for name, value in form.items() if GEAR_FIELD.match(name)}
+
+
+def filter_form(gear: GearFilter) -> dict[str, str]:
+    """The gear rules as the fields `parse_gear_filter` reads them back from."""
+    fields = {exclude_field(rule): "on" for rule in gear.rules}
+
+    if gear.unworn_only:
+        fields["unworn_only"] = "on"
+
+    if gear.lock_level is not None:
+        fields |= {"locked": "on", "lock_level": str(gear.lock_level)}
+
+    return fields

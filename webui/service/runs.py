@@ -32,6 +32,7 @@ from optimiser.store import (
     read_run,
     save_run,
 )
+from webui.forms.request import gear_fields
 from webui.service.results import Outcome, ResultsView, ShortfallView
 from webui.service.views import champion_row
 
@@ -56,11 +57,12 @@ class RunEntryView:
 @dataclass(frozen=True)
 class RunView:
     """A saved run. `outcome` is None when it was saved in a shape these views no longer
-    have."""
+    have; `gear` its gear rules, which its builds' Equip sends to be checked again."""
 
     entry: RunEntryView
     form: dict[str, str]
     outcome: Outcome | None
+    gear: dict[str, str]
 
 
 def record_run(
@@ -203,7 +205,7 @@ def run_view(run: Run, champion: Champion) -> RunView:
         case other:
             outcome = other
 
-    return RunView(entry_view(run.entry), run.form, outcome)
+    return RunView(entry_view(run.entry), run.form, outcome, gear_fields(run.form))
 
 
 def entry_view(entry: RunEntry) -> RunEntryView:

@@ -20,7 +20,11 @@ in-game commands below; the account and the game's tables come from the game its
   nothing changes and no sync follows). It injects the SignalR
   invocation into the extractor's `/reader` hub WebSocket, as if HH's server sent it, then
   waits for (and swallows) the extractor's `HelperRequestResult`. `account_id` is the
-  account's user id. `webui/extractor.py` is the client; each build has both buttons.
+  account's user id. `webui/extractor.py` is the client; each build has both buttons. Equip sends the gear rules
+  the build was found under (a run's `gear_fields`, Team gear's `filter_form` and its team) and
+  is refused if the account has moved on since: a piece now on a champion those rules keep it
+  from, at today's locks, or newly reserved (`results.check_equip`; a solve can't see pieces
+  another build is about to take, so two builds solved before either is equipped can clash).
   `/sell` (`{"artifact_ids"}`, `SellArtifacts(int[])`) only selects the pieces in the game's
   sell screen; the user confirms the sale in game. Only the accessories page sends it, and
   only pieces its current plan sells (`forms.settings.parse_sell`).

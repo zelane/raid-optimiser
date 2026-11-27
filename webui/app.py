@@ -42,7 +42,7 @@ from webui import extractor, inertia, reader
 from webui.forms.books import parse_books_query
 from webui.forms.common import FormErrors
 from webui.forms.finder import FinderQuery, parse_finder_query
-from webui.forms.request import parse_equip, parse_request
+from webui.forms.request import Equip, parse_equip, parse_request
 from webui.forms.settings import (
     FlagSetting,
     GlyphPlan,
@@ -519,8 +519,14 @@ def sync():
 
 @app.post("/champions/{champion_id}/equip")
 async def equip(request: Request, champion_id: int):
-    def send(account: Account, champion: Champion, artifact_ids: list[int]):
-        match extractor.equip(champion.id, artifact_ids):
+    """Refused when the account has moved on since the build was found: a piece now on a
+    champion its gear rules keep it from (`results.check_equip`)."""
+
+    def send(account: Account, champion: Champion, equip: Equip):
+        if refused := results.check_equip(equip, account, champion):
+            return Err(refused)
+
+        match extractor.equip(champion.id, equip.artifact_ids):
             case Err() as error:
                 return error
 
@@ -535,8 +541,8 @@ async def equip(request: Request, champion_id: int):
 
 @app.post("/champions/{champion_id}/preview")
 async def preview(request: Request, champion_id: int):
-    def send(account: Account, champion: Champion, artifact_ids: list[int]):
-        return extractor.preview(account, champion.id, artifact_ids)
+    def send(account: Account, champion: Champion, equip: Equip):
+        return extractor.preview(account, champion.id, equip.artifact_ids)
 
     return await send_build(request, champion_id, send)
 
@@ -544,19 +550,19 @@ async def preview(request: Request, champion_id: int):
 async def send_build(
     request: Request,
     champion_id: int,
-    send: Callable[[Account, Champion, list[int]], Result[None]],
+    send: Callable[[Account, Champion, Equip], Result[None]],
 ) -> Response:
     """The build button's pieces, sent to the game by `send`."""
     account = current.current_account()
     champion = find_champion(account, champion_id)
     form = await read_form(request)
 
-    match parse_equip(form, account):
+    match parse_equip(form, account, current.current_locks(), current.current_reserve_rules()):
         case FormErrors(messages=messages):
             outcome = Err("; ".join(messages))
 
-        case artifact_ids:
-            outcome = send(account, champion, artifact_ids)
+        case equip:
+            outcome = send(account, champion, equip)
 
     return sent(outcome)
 

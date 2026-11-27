@@ -8,6 +8,7 @@ current gear, or why there are none.
 - `results_view` (`battle_notes`), `shortfall_view`: its outcomes
 - `build_view`, `piece_view`, `line_view`, `stat_cells`, `damage_cell`, `rate_cell`,
   `rate_note`, `RATE_LABELS`: what they share
+- `check_equip` (`refusal`): a build button's pieces its gear rules no longer allow
 """
 
 import time
@@ -41,8 +42,17 @@ from optimiser.labels import (
 from optimiser.paths import STORE
 from optimiser.reserve import Reservations, Worn
 from optimiser.settings import read_assumptions
-from optimiser.solve import Build, Request, SetsRuleOut, Shortfall, Stopped, find_builds
+from optimiser.solve import (
+    Build,
+    GearFilter,
+    Request,
+    SetsRuleOut,
+    Shortfall,
+    Stopped,
+    find_builds,
+)
 from optimiser.stats import build_stats, set_multiplier
+from webui.forms.request import Equip
 from webui.service.views import (
     ChampionRow,
     StarView,
@@ -389,3 +399,41 @@ def damage_cell(damage: float, current: float | None) -> StatCell:
 
     delta = damage - current
     return StatCell("DMG", text, f"{'+' if delta > 0 else '-'}{abs(delta):,.0f}", delta > 0)
+
+
+def check_equip(equip: Equip, account: Account, champion: Champion) -> str | None:
+    """The pieces the build's gear rules no longer allow, as the account is now: since it was
+    found, a piece went to a champion it may not take from (one locked, or any when it took
+    unworn gear only) or a reserve rule took it. "Gloves, Ring: Kro'khad (locked at 5)"."""
+    pieces = {artifact.id: artifact for artifact in account.artifacts}
+    allowed = equip.team | {champion.id}
+    slots_by_reason: dict[str, list[str]] = {}
+
+    for artifact_id in equip.artifact_ids:
+        owner = account.owners.get(artifact_id)
+
+        if owner in allowed or equip.gear.allows(artifact_id, owner):
+            continue
+
+        reason = refusal(artifact_id, owner, equip.gear, account)
+        slots_by_reason.setdefault(reason, []).append(slot_label(pieces[artifact_id].slot))
+
+    if not slots_by_reason:
+        return None
+
+    taken = "; ".join(f"{', '.join(slots)}: {reason}" for reason, slots in slots_by_reason.items())
+    return f"no longer free to take since the build was found ({taken}): run it again"
+
+
+def refusal(artifact_id: int, owner: int | None, gear: GearFilter, account: Account) -> str:
+    """Why a piece is off limits now: the reserve rules keeping it ("Arena Build I (Arbiter)"),
+    else who wears it ("Kro'khad (locked at 5)")."""
+    if reasons := gear.reserved.get(artifact_id):
+        return ", ".join(reason_label(reason, account) for reason in reasons)
+
+    wearer = account.champions[owner].name if owner in account.champions else "another champion"
+
+    if gear.unworn_only:
+        return f"worn by {wearer}"
+
+    return f"worn by {wearer} (locked at {gear.locks.get(owner, 0)})"

@@ -45,7 +45,7 @@ from optimiser.solve import (
 from optimiser.stats import build_stats
 from optimiser.teams.kits import kit_of
 from optimiser.teams.tags import Side
-from webui.forms.request import DEFAULT_ABOVE_LEVEL, RATE_GOALS, exclude_field
+from webui.forms.request import DEFAULT_ABOVE_LEVEL, RATE_GOALS, exclude_field, filter_form
 from webui.forms.team import Unmatched
 from webui.forms.team_gear import (
     DAMAGE,
@@ -129,8 +129,13 @@ class MemberResult:
 
 @dataclass(frozen=True)
 class TeamResult:
+    """`gear`: the gear rules it was found under, and `team` its champions' ids, which each
+    member's Equip sends to be checked again (teammates' pieces are fair game)."""
+
     members: list[MemberResult]
     seconds: float
+    gear: dict[str, str]
+    team: list[int]
 
 
 @dataclass(frozen=True)
@@ -424,6 +429,8 @@ def solve_team(
                     for request, build in zip(requests, team, strict=True)
                 ],
                 seconds,
+                filter_form(ask.gear),
+                [champion.id for champion in champions],
             )
 
 

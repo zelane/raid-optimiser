@@ -7,7 +7,7 @@ import type { ResultsView } from "../types/generated/webui.service.results";
 import BuildDetail from "./BuildDetail.vue";
 import Ledger from "./Ledger.vue";
 
-const props = defineProps<{ results: ResultsView }>();
+const props = defineProps<{ results: ResultsView; gear?: Record<string, string> }>();
 const picked = ref(props.results.builds[0]?.number ?? 0);
 
 watch(
@@ -55,7 +55,12 @@ watch(
     </div>
   </div>
   <template v-for="build in results.builds" :key="build.number">
-    <BuildDetail v-if="build.number === picked" :build="build" :champion="results.champion" />
+    <BuildDetail
+      v-if="build.number === picked"
+      :build="build"
+      :champion="results.champion"
+      :gear="gear"
+    />
   </template>
 </template>
 

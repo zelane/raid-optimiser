@@ -26,13 +26,17 @@ export async function sendToGame(
 }
 
 // Equips the pieces on the champion in game (or previews them there: nothing changes). An
-// equip syncs the account, so the page's views (worn gear, stats) reload after one.
+// equip syncs the account, so the page's views (worn gear, stats) reload after one. `gear`: the
+// gear rules the build was found under (`forms.request.gear_fields`), which the server checks
+// the pieces against again, as the account is now; `team` the teammates it may take from.
 export async function equipInGame(
   championId: number,
   artifactIds: number[],
   action: "equip" | "preview" = "equip",
+  gear: Record<string, string> = {},
+  team: number[] = [],
 ): Promise<Sent> {
-  const fields = { artifact_ids: artifactIds.join(",") };
+  const fields = { ...gear, artifact_ids: artifactIds.join(","), team: team.join(",") };
   const sent = await sendToGame(`/champions/${championId}/${action}`, fields);
   if (action === "equip" && !sent.error) router.reload();
   return sent;

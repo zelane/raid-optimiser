@@ -351,6 +351,8 @@ function minimumTitle(placeholder: string) {
           :build="member.build"
           :champion="member.champion"
           :title="member.champion.name"
+          :gear="result.gear"
+          :team="result.team"
         />
       </section>
     </section>

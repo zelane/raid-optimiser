@@ -586,7 +586,7 @@ const finder = ref<InstanceType<typeof ChampionFinder>>();
         This run was saved by an older version and can't be shown; its inputs are restored.
       </small>
     </p>
-    <RunResults v-else-if="'builds' in run.outcome" :results="run.outcome" />
+    <RunResults v-else-if="'builds' in run.outcome" :results="run.outcome" :gear="run.gear" />
     <article v-else>
       <header><strong>No build meets the request</strong></header>
       <p v-if="run.outcome.reason">{{ run.outcome.reason }}</p>

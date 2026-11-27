@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // A build's details: what's still to do for it, the buttons that send it to the game, and its
-// pieces. `champion` wears it; `title` heads it (default "Build <n>").
+// pieces. `champion` wears it; `title` heads it (default "Build <n>"); `gear` the gear rules it
+// was found under and `team` its teammates, sent with Equip to be checked against the account now.
 import { computed, ref } from "vue";
 import { plural } from "../composables/format";
 import { equipInGame, type Sent } from "../composables/send";
@@ -21,7 +22,13 @@ const SLOTS = [
   "Banner",
 ];
 
-const props = defineProps<{ build: BuildView; champion: ChampionRow; title?: string }>();
+const props = defineProps<{
+  build: BuildView;
+  champion: ChampionRow;
+  title?: string;
+  gear?: Record<string, string>;
+  team?: number[];
+}>();
 const heading = computed(() => props.title ?? `Build ${props.build.number}`);
 
 const notes = computed(() => {
@@ -57,7 +64,13 @@ async function send(action: "preview" | "equip") {
   }
 
   sending.value = true;
-  sent.value = await equipInGame(props.champion.id, props.build.artifact_ids, action);
+  sent.value = await equipInGame(
+    props.champion.id,
+    props.build.artifact_ids,
+    action,
+    props.gear,
+    props.team,
+  );
   sentAction.value = action;
   sending.value = false;
 }
