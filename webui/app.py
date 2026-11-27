@@ -8,8 +8,8 @@ app.py - the web entry point: routes that hand the service's views to Vue pages 
   `reserve_rule`, `champion`, `builds`, `stop_solve`, `delete_run`, `equip`, `preview`,
   `accessories`, `accessory_type`, `add_accessory_type`, `copy_accessory_type`,
   `delete_accessory_type`, `accessory_target`, `protect_accessory`, `sell_accessories`, `empower`,
-  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `masteries`, `books`, `sync`:
-  the routes
+  `chimera`, `teams`, `team_gear`, `targets`, `finder`, `info`, `events`, `event_shards`,
+  `masteries`, `books`, `sync`, `start_watch`, `stop_watch`: the routes
 - `sent`, `saved`, `view_json`: a Vue component's own requests, answered as JSON
 - `finder_query`: the champion filters in a request's query
 - `back_with`: back to a Vue page's form with its errors
@@ -34,8 +34,10 @@ from starlette.types import Scope
 
 from optimiser.account import LOCK_LEVELS, Account, Champion
 from optimiser.enemies import Restriction, team_restriction
+from optimiser.paths import EVENTS
 from optimiser.reserve import reservations
 from optimiser.solve import Stopped, stop
+from optimiser.summons import Summoning
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
@@ -74,9 +76,11 @@ from webui.service import champions as champion_pages
 from webui.service import chimera as chimera_pages
 from webui.service import current, layout, results, runs
 from webui.service import empower as empower_pages
+from webui.service import events as event_pages
 from webui.service import finder as finder_pages
 from webui.service import info as info_pages
 from webui.service import masteries as mastery_pages
+from webui.service import summons as summon_pages
 from webui.service import targets as target_pages
 from webui.service import team_gear as team_gear_pages
 from webui.service import teams as teams_pages
@@ -439,6 +443,43 @@ def info(request: Request):
     return inertia_page(request, "Info", {"page": page})
 
 
+@app.get("/events")
+def events(request: Request):
+    """The events on, as the reader last read them (the page polls this, for `just watch`):
+    none if it found none."""
+    if (found := current.current_events()) is None:
+        return inertia_page(request, "Events", {"page": None})
+
+    _, relics = current.current_effect_sources()
+    names = {relic.id: relic.name for relic in relics}
+    summons = current.current_summons()
+    summoning = None if summons is None else Summoning(current.current_shard_types(), summons)
+    page = event_pages.events_page(
+        current.current_account(),
+        found,
+        names,
+        summoning,
+        datetime.now(UTC),
+        reader.age_text(EVENTS),
+    )
+    return inertia_page(request, "Events", {"page": page})
+
+
+@app.get("/events/{event_id}/shards")
+def event_shards(event_id: int, short: int):
+    """The shards each type takes to earn `short` more points in the event (the shard plan
+    asks as its target or the champions counted by hand change), as JSON."""
+    found = current.current_events()
+    summons = current.current_summons()
+    event = next((e for e in found.events if e.id == event_id), None) if found else None
+
+    if event is None or summons is None:
+        raise HTTPException(404, f"no event {event_id} with summons")
+
+    summoning = Summoning(current.current_shard_types(), summons)
+    return view_json(summon_pages.shard_rows(event, summoning, short, datetime.now(UTC)))
+
+
 @app.get("/masteries")
 def masteries(request: Request):
     page = mastery_pages.masteries_page(current.current_account())
@@ -515,6 +556,17 @@ def delete_run(request: Request, champion_id: int, run_id: int):
 def sync():
     """Reads the account; on success the layout reloads its page's props with it."""
     return sent(reader.sync())
+
+
+@app.post("/watch/start")
+def start_watch():
+    """Starts `just watch`, which keeps the account current while the game runs."""
+    return sent(reader.start_watch())
+
+
+@app.post("/watch/stop")
+def stop_watch():
+    return sent(reader.stop_watch())
 
 
 @app.post("/champions/{champion_id}/equip")
@@ -595,7 +647,9 @@ def inertia_page(request: Request, component: str, props: inertia.Props) -> Resp
     """A Vue page, with what every page gets: the frame's nav and sync age."""
 
     def frame() -> layout.Layout:
-        return layout.layout_view(request.url.path, optimiser_url(), reader.synced_ago())
+        return layout.layout_view(
+            request.url.path, optimiser_url(), reader.synced_ago(), reader.watching()
+        )
 
     return inertia.respond(request, templates, component, {"layout": frame, **props})
 

@@ -9,9 +9,11 @@ and pictured.
 - `slot_value`: a champion in a team slot's field (and the URL): their id
 - `set_name`, `slot_label`, `piece_image_url`: a piece
 - `asset_url`: an extracted game icon
+- `span_text`: a time left, as the pages word it ("2d 5h")
 """
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 
 from optimiser.account import Account, Artifact, Champion, Slot
@@ -121,3 +123,15 @@ def choice_label(champion: Champion) -> str:
 
 def slot_value(champion: Champion) -> str:
     return str(champion.id)
+
+
+def span_text(span: timedelta) -> str:
+    """ "2d 5h", "5h 20m", "20m"."""
+    minutes = int(span.total_seconds() // 60)
+    days, minutes = divmod(minutes, 24 * 60)
+    hours, minutes = divmod(minutes, 60)
+
+    if days:
+        return f"{days}d {hours}h"
+
+    return f"{hours}h {minutes}m" if hours else f"{minutes}m"

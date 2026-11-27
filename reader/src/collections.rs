@@ -3,9 +3,10 @@
 //!
 //! - `list_refs`, `list_i32`: a `List<T>`'s items, of a reference `T` or an int
 //! - `array_i32`: an `int[]` (or an array of int-sized enums, or pairs of them, flattened)
-//! - `string`: a `System.String`
+//! - `string`, `long_string`: a `System.String` (a name; JSON)
 //! - `dict_refs`, `dict_i32`: a `Dictionary<K, V>`'s live entries, with an int-sized key
 //!   (int or enum) and a reference or int value
+//! - `concurrent_dict_refs`: a `ConcurrentDictionary<int, V>`'s entries, of a reference `V`
 
 use crate::process::Process;
 
@@ -54,6 +55,38 @@ pub fn list_i32(process: &Process, list: u64) -> Result<Vec<i32>, String> {
         .collect())
 }
 
+/// `ConcurrentDictionary<int, V>` → its `Tables` → their `Node[]` buckets, each a chain of
+/// nodes (key, value, next).
+const CONCURRENT_TABLES: u64 = 0x10;
+const TABLES_BUCKETS: u64 = 0x10;
+const NODE_KEY: u64 = 0x10;
+const NODE_VALUE: u64 = 0x18;
+const NODE_NEXT: u64 = 0x20;
+
+pub fn concurrent_dict_refs(process: &Process, dict: u64) -> Result<Vec<(i32, u64)>, String> {
+    if dict == 0 {
+        return Ok(Vec::new());
+    }
+
+    let tables = process.ptr(dict + CONCURRENT_TABLES, "concurrent dictionary tables")?;
+    let buckets = process.ptr(tables + TABLES_BUCKETS, "concurrent dictionary buckets")?;
+    let length = process.read::<u64>(buckets + ARRAY_LENGTH)? as usize;
+    let heads = array_bytes(process, buckets, length, 8)?;
+    let mut entries = Vec::new();
+
+    for head in heads.chunks_exact(8).map(|c| u64_at(c, 0)) {
+        let mut node = head;
+
+        while node != 0 {
+            let key = process.read::<i32>(node + NODE_KEY)?;
+            entries.push((key, process.read::<u64>(node + NODE_VALUE)?));
+            node = process.read::<u64>(node + NODE_NEXT)?;
+        }
+    }
+
+    Ok(entries)
+}
+
 pub fn dict_refs(process: &Process, dict: u64) -> Result<Vec<(i32, u64)>, String> {
     let entries = live_entries(process, dict, &REF_ENTRY)?;
     Ok(entries
@@ -82,13 +115,18 @@ pub fn array_i32(process: &Process, array: u64, per_item: usize) -> Result<Vec<i
 }
 
 pub fn string(process: &Process, string: u64) -> Result<String, String> {
+    long_string(process, string, STRING_MAX)
+}
+
+/// A `System.String` of at most `max` chars: JSON the game keeps whole, say.
+pub fn long_string(process: &Process, string: u64, max: i32) -> Result<String, String> {
     if string == 0 {
         return Ok(String::new());
     }
 
     let length = process.read::<i32>(string + STRING_LENGTH)?;
 
-    if !(0..=STRING_MAX).contains(&length) {
+    if !(0..=max).contains(&length) {
         return Err(format!("string of length {length} at {string:#x}"));
     }
 

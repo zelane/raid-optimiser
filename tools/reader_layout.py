@@ -20,7 +20,12 @@ from pathlib import Path
 import click
 
 CLASSES = {
-    ("Client.Model", "AppModel"): ("<UserId>k__BackingField", "_userWrapper"),
+    ("Client.Model", "AppModel"): (
+        "<UserId>k__BackingField",
+        "_userWrapper",
+        "GlobalEventsExternalLocalizationStorage",
+    ),
+    ("Client.Model.Common.Localization.External", "ExternalStringStorage"): ("_storage",),
     ("Client.Model.Guard", "UserWrapper"): (
         "Heroes",
         "Artifacts",
@@ -30,7 +35,39 @@ CLASSES = {
         "Relics",
         "Arena3x3",
         "Stages",
+        "GlobalEvents",
+        "Quests",
+        "Account",
+        "Shards",
+        "ServerEvents",
     ),
+    ("Client.Model.Gameplay.Shards", "ShardWrapperReadOnly"): ("ShardData",),
+    ("SharedModel.Meta.Shards", "UserShardData"): ("Shards",),
+    ("SharedModel.Meta.Shards", "Shard"): ("TypeId", "Count"),
+    ("Client.Model.Gameplay.ServerEvents", "ServerEventsWrapperReadOnly"): ("ServerEventsData",),
+    ("SharedModel.Meta.ServerEvents", "ServerEventsData"): ("ServerEvents",),
+    ("SharedModel.Meta.ServerEvents", "ServerEvent"): (
+        "TypeId",
+        "GboName",
+        "DateFrom",
+        "DateTo",
+        "Shards",
+    ),
+    ("SharedModel.Meta.ServerEvents.EventData", "ShardsData"): ("TypeId", "DropRules"),
+    ("SharedModel.Meta.Shards", "ShardDropRule"): (
+        "Rarity",
+        "Chance",
+        "ChanceIncreaseOnEachTry",
+        "ChanceIncreaseSummonNumber",
+    ),
+    ("Client.Model.Gameplay.Account", "AccountWrapperReadOnly"): ("AccountData",),
+    ("SharedModel.Meta.Account", "UserAccount"): (
+        "TotalPower",
+        "Experience",
+        "ResourcesGained",
+        "ResourcesSpent",
+    ),
+    ("SharedModel.Meta.Account", "Resources"): ("RawValues",),
     ("Client.Model.Gameplay.Heroes", "HeroesWrapperReadOnly"): ("HeroData",),
     ("SharedModel.Meta.Heroes", "UserHeroData"): ("HeroById", "HeroesAiPresets"),
     ("SharedModel.Meta.Heroes", "HeroesAiPreset"): (
@@ -132,6 +169,30 @@ CLASSES = {
     ("Client.Model.Gameplay.Stages", "StageWrapperReadOnly"): ("StageData",),
     ("SharedModel.Meta.Stages", "UserStageData"): ("BattleResultsByStageId",),
     ("SharedModel.Meta.Stages", "StageStats"): ("Passed", "Stars"),
+    ("Client.Model.Gameplay.GlobalEvents", "GlobalEventsWrapperReadOnly"): (
+        "<DataJson>k__BackingField",
+    ),
+    ("Client.Model.Gameplay.Quests", "QuestWrapperReadOnly"): ("QuestData",),
+    ("SharedModel.Meta.Quests.Data", "UserQuestData"): ("OpenedStates",),
+    ("SharedModel.Meta.Quests.Data", "QuestState"): (
+        "QuestId",
+        "PrototypeId",
+        "StateId",
+        "Completions",
+    ),
+    ("SharedModel.Meta.Quests.Completions", "QuestCompletion"): ("BySoloEvent", "ByTournament"),
+    ("SharedModel.Meta.Quests.Completions", "QuestCompletionBySoloEvent"): (
+        "BracketIndex",
+        "EventsProgress",
+    ),
+    ("SharedModel.Meta.Quests.Data", "GlobalEventActionProgress"): ("Points",),
+    ("SharedModel.Meta.Quests.Completions", "QuestCompletionByTournament"): ("GlobalRatingInfo",),
+    ("SharedModel.Meta.GlobalRatings", "GlobalRatingInfo"): (
+        "Points",
+        "Position",
+        "GlobalPosition",
+        "BracketIndex",
+    ),
 }
 ROOTS = (
     "Client.Model.AppModel",
@@ -153,6 +214,11 @@ ENUMS = {
     ("SharedModel.Meta.Heroes", "HeroMarker"),
     ("SharedModel.Meta.Heroes", "SkillPriorityType"),
     ("SharedModel.Meta.Masteries", "MasteryPointType"),
+    ("SharedModel.Meta.Quests", "QuestStateId"),
+    ("SharedModel.Meta.Account", "ResourceTypeId"),
+    ("SharedModel.Meta.Shards", "ShardTypeId"),
+    ("SharedModel.Meta.Heroes", "HeroRarity"),
+    ("SharedModel.Meta.ServerEvents", "ServerEventTypeId"),
 }
 
 NAMESPACE = re.compile(r"^// Namespace: ?(.*)$")

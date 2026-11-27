@@ -23,16 +23,20 @@ const subnav = computed<PageSubnav | null>(() => {
 const syncing = ref(false);
 const syncFailed = ref<string | null>(null);
 
-// Reads the account from the running game; on success the page's props reload with it.
-async function sync() {
+// Reads the account from the running game now; on success the page's props reload with it.
+// Starting or stopping `just watch` (which reads it as it changes) reloads the frame alone.
+async function send(url: string, reload: string[] | null) {
   syncing.value = true;
   syncFailed.value = null;
 
-  const outcome = await sendToGame("/sync");
+  const outcome = await sendToGame(url);
   syncing.value = false;
   syncFailed.value = outcome.error;
-  if (!outcome.error) router.reload();
+  router.reload(reload ? { only: reload } : {});
 }
+
+const sync = () => send("/sync", null);
+const toggleWatch = () => send(layout.value.watching ? "/watch/stop" : "/watch/start", ["layout"]);
 </script>
 
 <template>
@@ -56,11 +60,30 @@ async function sync() {
       <ul class="tools">
         <li class="cluster" style="--space: var(--space-m)">
           <small v-if="syncFailed" class="sync-status down">Failed: {{ syncFailed }}</small>
-          <small v-else class="sync-status caps">{{ layout.synced_ago }}</small>
+          <small
+            v-else
+            class="sync-status caps"
+            :class="{ watching: layout.watching }"
+            :title="layout.watching ? 'Watching the game: read as it changes' : undefined"
+          >
+            {{ layout.synced_ago }}
+          </small>
+          <button
+            class="quiet small"
+            :disabled="syncing"
+            :title="
+              layout.watching
+                ? 'Stop reading the account as it changes'
+                : 'Read the account as it changes, while the game runs (just watch)'
+            "
+            @click="toggleWatch"
+          >
+            {{ layout.watching ? "Stop watching" : "Watch" }}
+          </button>
           <button
             class="quiet small sync"
             :disabled="syncing"
-            title="Read the account from the running game"
+            title="Read the account from the running game now"
             @click="sync"
           >
             Sync
@@ -208,6 +231,7 @@ main.container {
   box-shadow: 0 0 8px var(--primary);
 }
 
+/* The dot: green and pulsing while the watcher keeps the account current. */
 .sync-status {
   white-space: nowrap;
 
@@ -215,6 +239,17 @@ main.container {
     content: "●";
     margin-right: var(--space-xs);
     color: var(--tertiary);
+  }
+
+  &.watching::before {
+    color: var(--stat-up);
+    animation: pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
   }
 }
 

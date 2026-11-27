@@ -1,9 +1,13 @@
-"""Generate a static-data schema from an Il2CppDumper dump.cs.
+"""Generate a schema from an Il2CppDumper dump.cs.
 
-Extracts, for every type reachable from the root `StaticData` class:
-  - MessagePack string keys -> field name + C# type (incl. inherited fields)
+Extracts, for every type reachable from the root classes (`StaticData` by default):
+  - serialized keys -> field name + C# type (incl. inherited fields): MessagePack's `[Key]`
+    by default, or the game's own JSON's `[Json]` (`--attribute Json`)
   - enum value -> name tables
-so the raw static-data JSON can be renamed/typed by static_export.py.
+so the raw data can be renamed and typed: the static data by static_export.py, the events
+the reader takes as the game's JSON (`--root UpdatableGlobalEventsData --root
+GlobalEventInterfaceSettingsDto --attribute Json`: the second is JSON within it) by
+`optimiser.events`.
 
 Re-run after re-dumping the game (`just update` does both):
     uv run python -m tools.gen_schema data/dump/<version>/dump.cs schema/schema.json
@@ -20,8 +24,16 @@ TYPE_RE = re.compile(
     r"^(?:public|internal|private|protected)?\s*(?:static |sealed |abstract |readonly )*"
     r"(class|struct|enum) ([\w.`<>,]+?)(?: : ([^/{]+?))?\s*// TypeDefIndex"
 )
-KEY_RE = re.compile(r'^\s*\[Key\("([^"]*)"\)\]')
-INTKEY_RE = re.compile(r"^\s*\[Key\((\d+)\)\]")
+
+
+def key_patterns(attribute):
+    """The lines naming a field's serialized key: by string, or by number."""
+    return (
+        re.compile(rf'^\s*\[{attribute}\("([^"]*)"\)\]'),
+        re.compile(rf"^\s*\[{attribute}\((\d+)\)\]"),
+    )
+
+
 FIELD_RE = re.compile(
     r"^\s+(?:public|internal|private|protected)\s+(?:readonly\s+)?(?!const\b|static\b)"
     r"([\w.<>,\[\] ?]+?)\s+(\w+)(?:;| \{)"
@@ -29,7 +41,8 @@ FIELD_RE = re.compile(
 ENUM_RE = re.compile(r"^\s+public const ([\w.]+) (\w+) = (-?\d+);")
 
 
-def parse(path):
+def parse(path, attribute="Key"):
+    key_re, intkey_re = key_patterns(attribute)
     types = defaultdict(list)  # short name -> [entry]
     ns, cur, key = "", None, None
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -59,7 +72,7 @@ def parse(path):
                 if m:
                     cur["values"][m.group(3)] = m.group(2)
                 continue
-            m = KEY_RE.match(line) or INTKEY_RE.match(line)
+            m = key_re.match(line) or intkey_re.match(line)
             if m:
                 key = m.group(1)
                 continue
@@ -95,10 +108,14 @@ def referenced(type_str):
 @click.command(help=__doc__)
 @click.argument("dump", type=click.Path(exists=True, dir_okay=False))
 @click.argument("out", type=click.Path(dir_okay=False))
-def main(dump: str, out: str) -> None:
-    types = parse(dump)
+@click.option(
+    "--root", "roots", multiple=True, default=("StaticData",), help="a class the schema starts from"
+)
+@click.option("--attribute", default="Key", help="the attribute naming serialized keys")
+def main(dump: str, out: str, roots: tuple[str, ...], attribute: str) -> None:
+    types = parse(dump, attribute)
     schema = {"classes": {}, "enums": {}}
-    todo, seen = ["StaticData"], set()
+    todo, seen = list(roots), set()
     while todo:
         n = todo.pop()
         if n in seen or n not in types:

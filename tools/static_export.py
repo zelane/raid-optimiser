@@ -5,8 +5,8 @@
 The cache (`LocalLow/Plarium/Raid_ Shadow Legends/static-data`) is decoded by
 `tools.static_decode`; given the directory, its newest file is read.
 
-Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json (and
-out/static.json with --full).
+Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,
+shards}.json (and out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
 older than the game version: run `just update`.
 """
@@ -360,6 +360,39 @@ def build_glyphs(market):
             }
         )
     return sorted(glyphs, key=lambda g: (g["stat"], not g["absolute"], g["rank"], g["max"]))
+
+
+def build_items(market):
+    """The black market's items' names by id (`SkillUpgradeItemRare`: "Rare Skill Tome"), for
+    the prizes events list (`optimiser.events`). Items the game leaves unnamed are left out."""
+    return {
+        item["Id"]: item["Name"]
+        for item in market["Items"]
+        if item.get("Name") and not item["Name"].startswith("l10n:")
+    }
+
+
+def build_shards(shard_data):
+    """Each shard type: its name, the affinities it summons, and its odds by rarity, with their
+    mercy (past `mercy_after` shards without the rarity, `mercy_step` more chance each), as
+    the reader writes a summon boost's (`optimiser.summons`)."""
+    return [
+        {
+            "id": shard["Id"],
+            "name": shard.get("Name") or shard["Id"],
+            "elements": shard.get("ApplicableElements") or [],
+            "rules": [
+                {
+                    "rarity": rule["Rarity"],
+                    "chance": rule["Chance"],
+                    "mercy_step": rule.get("ChanceIncreaseOnEachTry"),
+                    "mercy_after": rule.get("ChanceIncreaseSummonNumber"),
+                }
+                for rule in shard.get("DropRules") or ()
+            ],
+        }
+        for shard in shard_data["ShardTypes"]
+    ]
 
 
 def build_gear(art):
@@ -1134,6 +1167,10 @@ def main(static_data: Path, schema_path: str, out_dir: str, full: bool) -> None:
     json.dump(gear, open(out / "gear.json", "w"), indent=1, ensure_ascii=False)
     glyphs = build_glyphs(data["BlackMarketData"])
     json.dump(glyphs, open(out / "glyphs.json", "w"), indent=1, ensure_ascii=False)
+    shards = build_shards(data["ShardData"])
+    json.dump(shards, open(out / "shards.json", "w"), indent=1, ensure_ascii=False)
+    items = build_items(data["BlackMarketData"])
+    json.dump(items, open(out / "items.json", "w"), indent=1, ensure_ascii=False)
     enemies = build_enemies(data, skills, schema["enums"])
     json.dump(enemies, open(out / "enemies.json", "w"), ensure_ascii=False)
     if full:

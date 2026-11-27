@@ -3,16 +3,24 @@
 //! from the game's IL2CPP dump. Values are the game's own: ids, and enums by their names
 //! (`optimiser.account` parses the file).
 //!
-//! - `Snapshot`: everything read, as written
-//! - `read`: one pass over the account
-//! - `main`: `raid-reader <layout.json> <out.json>`
+//! The events go to a file of their own: they change by the minute, the rest only now and then,
+//! so `watch` reads them far more often.
 //!
-//! It runs in the game's Wine prefix (`just read`), so paths are Windows ones (`Z:\...`).
+//! - `Snapshot`: everything read but the events, as written
+//! - `Outputs`: where the account and the events are written
+//! - `read_account`, `read_events`: one pass over each
+//! - `to_json`, `write_json`, `write_text`: writing them (whole, or not at all)
+//! - `read_once`: both, once
+//! - `main`: `raid-reader [--watch] <layout.json> <snapshot.json> <events.json>`
+//!
+//! It runs in the game's Wine prefix (`just read`, `just watch`), so paths are Windows ones
+//! (`Z:\...`).
 
 mod account;
 mod artifacts;
 mod chimera;
 mod collections;
+mod events;
 mod heroes;
 mod il2cpp;
 mod layout;
@@ -20,7 +28,9 @@ mod process;
 mod relics;
 mod roots;
 mod stages;
+mod summons;
 mod teams;
+mod watch;
 
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -58,7 +68,12 @@ struct Snapshot {
     stages: BTreeMap<i32, stages::Progress>,
 }
 
-fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
+pub struct Outputs {
+    pub snapshot: String,
+    pub events: String,
+}
+
+fn read_account(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
     let app = roots::app_model(process, layout)?;
     let user = layout.follow(process, app, &["AppModel._userWrapper"])?;
     let reader = artifacts::Reader::new(layout)?;
@@ -87,15 +102,47 @@ fn read(process: &Process, layout: &Layout) -> Result<Snapshot, String> {
     })
 }
 
-fn run(layout_path: &str, out_path: &str) -> Result<(), String> {
-    let layout = Layout::load(layout_path)?;
+/// What's on, as the game's JSON, and the account's points in each (None if the game has
+/// none loaded).
+fn read_events(process: &Process, layout: &Layout) -> Result<Option<events::Events>, String> {
+    let app = roots::app_model(process, layout)?;
+    let user = layout.follow(process, app, &["AppModel._userWrapper"])?;
+    events::read(process, layout, app, user)
+}
+
+fn to_json<T: Serialize>(value: &T) -> Result<String, String> {
+    serde_json::to_string(value).map_err(|e| e.to_string())
+}
+
+fn write_json<T: Serialize>(path: &str, value: &T) -> Result<(), String> {
+    write_text(path, &to_json(value)?)
+}
+
+/// Written whole, then moved over the old file, so the web server never reads half of one.
+fn write_text(path: &str, text: &str) -> Result<(), String> {
+    let partial = format!("{path}.partial");
+    std::fs::write(&partial, text).map_err(|e| format!("{partial}: {e}"))?;
+    std::fs::rename(&partial, path).map_err(|e| format!("{path}: {e}"))
+}
+
+fn read_once(layout: &Layout, outputs: &Outputs) -> Result<(), String> {
+    let process = open()?;
+    write_json(&outputs.events, &read_events(&process, layout)?)?;
+    write_account(&process, layout, outputs)
+}
+
+fn open() -> Result<Process, String> {
     let process = Process::open(EXE, MODULE)?;
     eprintln!(
         "{EXE} pid {}, {MODULE} at {:#x}",
         process.pid, process.module_base
     );
+    Ok(process)
+}
+
+fn write_account(process: &Process, layout: &Layout, outputs: &Outputs) -> Result<(), String> {
     let started = Instant::now();
-    let snapshot = read(&process, &layout)?;
+    let snapshot = read_account(process, layout)?;
     eprintln!(
         "user {}: {} heroes, {} pieces, {} relics, {} inbox items in {:.2?}",
         snapshot.user_id,
@@ -106,19 +153,30 @@ fn run(layout_path: &str, out_path: &str) -> Result<(), String> {
         started.elapsed(),
     );
 
-    let json = serde_json::to_string(&snapshot).map_err(|e| e.to_string())?;
-    std::fs::write(out_path, json).map_err(|e| format!("{out_path}: {e}"))
+    write_json(&outputs.snapshot, &snapshot)
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let (watching, paths) = match args.split_first() {
+        Some((flag, rest)) if flag == "--watch" => (true, rest),
+        _ => (false, &args[..]),
+    };
 
-    if args.len() != 3 {
-        eprintln!("usage: raid-reader <layout.json> <out.json>");
+    let [layout_path, snapshot, events] = paths else {
+        eprintln!("usage: raid-reader [--watch] <layout.json> <snapshot.json> <events.json>");
         std::process::exit(2);
-    }
+    };
+    let outputs = Outputs {
+        snapshot: snapshot.clone(),
+        events: events.clone(),
+    };
+    let done = Layout::load(layout_path).and_then(|layout| match watching {
+        true => watch::run(&layout, &outputs),
+        false => read_once(&layout, &outputs),
+    });
 
-    if let Err(e) = run(&args[1], &args[2]) {
+    if let Err(e) = done {
         eprintln!("raid-reader: {e}");
         std::process::exit(1);
     }

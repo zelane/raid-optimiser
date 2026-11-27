@@ -150,13 +150,29 @@ reader:
 reader-layout:
     uv run python -m tools.reader_layout "$(ls -d data/dump/*/ | sort -V | tail -1)" data/cache/reader-layout.json
 
-# Read the account out of the running game's memory (read-only) into data/captures/snapshot.json
+# The events (data/captures/events.json) are apart from the account: they change far more often.
+# Read the account and its events out of the running game's memory (read-only) into data/captures
 read: reader
+    just reader-run
+
+# The events every 5 s, the rest once the account has changed and settled for 20 s, each file
+# rewritten only when it changes; waits for the game when it isn't running (reader/src/watch.rs).
+# Keep reading the account while the game runs (read-only), as read does, when it changes
+watch: reader
+    #!/usr/bin/env bash
+    # The reader runs on in the game's container when its launcher is stopped: stop it too
+    trap 'pkill -f "raid-reader[.]exe --watch" || true' EXIT INT TERM
+    just reader-run --watch
+
+# The reader, in the running game's prefix, with the layout and the files it writes
+[private]
+reader-run *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f data/cache/reader-layout.json ] || just reader-layout
     exe="$PWD/reader/target/x86_64-pc-windows-gnu/release/raid-reader.exe"
-    args=("Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json")
+    args=({{flags}} "Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json"
+        "Z:$PWD/data/captures/events.json")
     if command -v plarium-umu >/dev/null; then exec plarium-umu "$exe" "${args[@]}"; fi
     # Inside the running game's umu container, sharing its wineserver (as ~/scripts/hh.sh
     # does): umu names the container's service after the md5 of the resolved prefix path.
@@ -264,7 +280,8 @@ dump:
     echo "$hash" > "$out/source.sha256"
     echo "dumped $version -> $out"
 
-# Regenerate schema/schema.json from an IL2CPP dump (default: the newest in data/dump)
+# Regenerate schema/schema.json (the static data's) and schema/events.json (the events the
+# reader takes as the game's JSON) from an IL2CPP dump (default: the newest in data/dump)
 [private]
 schema dump_cs="":
     #!/usr/bin/env bash
@@ -272,6 +289,8 @@ schema dump_cs="":
     dump_cs="{{dump_cs}}"
     [ -n "$dump_cs" ] || dump_cs=$(ls -d data/dump/*/ | sort -V | tail -1)dump.cs
     uv run python -m tools.gen_schema "$dump_cs" schema/schema.json
+    uv run python -m tools.gen_schema "$dump_cs" schema/events.json \
+        --root UpdatableGlobalEventsData --root GlobalEventInterfaceSettingsDto --attribute Json
 
 # Compare the computed base stats (optimiser/levels.py) with a raider oracle table
 check-levels oracle="data/game/base_stats_6_60.json":

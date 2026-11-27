@@ -1,9 +1,10 @@
 //! The game process, opened for reading only: no injection, no writes.
 //!
 //! - `Process::open`: find a process and one of its modules by name
+//! - `Process::alive`: whether it's still running
 //! - `Process::read`, `read_bytes`, `ptr`, `cstr`: copy values out of its memory
 //! - `Process::block`, `Block`: an object's bytes in one read, its fields decoded from them
-//!   (ints, pointers, `Nullable<int>`, `Fixed`, `DateTime`)
+//!   (ints, doubles, pointers, `Nullable<int>`, `<long>` and `<double>`, `Fixed`, `DateTime`)
 
 use std::ffi::c_void;
 use std::mem::{size_of, MaybeUninit};
@@ -15,7 +16,7 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     MODULEENTRY32W, PROCESSENTRY32W, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
+    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
 };
 
 pub struct Process {
@@ -48,6 +49,12 @@ impl Process {
             pid,
             module_base,
         })
+    }
+
+    pub fn alive(&self) -> bool {
+        let mut code = 0u32;
+        let ok = unsafe { GetExitCodeProcess(self.handle, &mut code) };
+        ok != 0 && code == STILL_ACTIVE
     }
 
     pub fn read_bytes(&self, addr: u64, buf: &mut [u8]) -> Result<(), String> {
@@ -103,6 +110,9 @@ impl Process {
     }
 }
 
+/// The exit code of a process still running
+const STILL_ACTIVE: u32 = 259;
+
 const FIXED_DECIMALS: f64 = 1e6;
 /// `DateTime`: ticks of 100 ns since 0001-01-01 in the low 62 bits (the top two are its kind)
 const DATETIME_TICKS: u64 = 0x3FFF_FFFF_FFFF_FFFF;
@@ -139,6 +149,20 @@ impl Block {
     /// A `Nullable<int>` (or int-sized enum): hasValue, then the value at +4.
     pub fn nullable_i32(&self, offset: u64) -> Option<i32> {
         self.bool(offset).then(|| self.i32(offset + 4))
+    }
+
+    pub fn f64(&self, offset: u64) -> f64 {
+        f64::from_le_bytes(self.at(offset))
+    }
+
+    /// A `Nullable<double>`: hasValue, then the value at +8.
+    pub fn nullable_f64(&self, offset: u64) -> Option<f64> {
+        self.bool(offset).then(|| self.f64(offset + 8))
+    }
+
+    /// A `Nullable<long>`: hasValue, then the value at +8.
+    pub fn nullable_i64(&self, offset: u64) -> Option<i64> {
+        self.bool(offset).then(|| self.i64(offset + 8))
     }
 
     /// A `Fixed` (Q32.32), rounded back to the decimals the game's values hold (0.13 is

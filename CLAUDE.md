@@ -33,7 +33,7 @@ in-game commands below; the account and the game's tables come from the game its
   `ReadProcessMemory`; nothing injected or written), run in the game's prefix via
   `plarium-umu`, into `data/captures/snapshot.json` (`paths.SNAPSHOT`, `account.load_account`
   parses it; the web UI reloads when it changes; the nav's Sync button runs `just read` through
-  `webui/reader.py`). Only what the optimiser uses: champions (static facts from `hero_types.json`;
+  `webui/reader.py`, its Watch button `just watch`, detached, found by its processes). Only what the optimiser uses: champions (static facts from `hero_types.json`;
   unspent mastery scrolls, `scrolls`: `HeroMasteryData.CurrentAmount`), pieces, who wears what,
   relics, Great Hall, arena league, inbox pieces, champion tags (`marker`: `HeroMarker`, one per
   champion; ArenaFirst is "Arena Build I"), gear presets (`gear_presets`:
@@ -45,7 +45,24 @@ in-game commands below; the account and the game's tables come from the game its
   skill id); empty slots are 0 or -1), the Chimera's raid (`chimera`:
   `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
   `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star count;
-  the game keeps the count only, not which battle quests earned it). Values are the game's: ids,
+  the game keeps the count only, not which battle quests earned it). Events go to a file of their
+  own (`paths.EVENTS`, `data/captures/events.json`: they change far more often): what's
+  on as the game's own JSON, `GlobalEventsWrapperReadOnly.DataJson`, kept whole, and the account's
+  progress per event's quest, `UserQuestData.OpenedStates`: a solo event's points are its
+  `EventsProgress` summed, its `ByPoints` staying 0; a tournament's its `GlobalRatingInfo`'s,
+  with its place once the server has sent it; and the texts the server sends for them in the
+  player's language, `AppModel.GlobalEventsExternalLocalizationStorage._storage`, a
+  `ConcurrentDictionary<int, string>`: `collections::concurrent_dict_refs`); and `summons`
+  (`reader/src/summons.rs`): the shards held (`UserShardData.Shards`) and the server events
+  boosting a shard type (`ServerEvent.Shards`: drop rules standing in for its own while they
+  run). Not the account's mercy counters: the server keeps them (`SummonResults` is the last
+  summon's). `just watch`
+  (`reader/src/watch.rs`) keeps both current while the game runs: the events every 5 s, the
+  account once a fingerprint of it (power, experience, resources spent, silver gained:
+  `UserAccount`) has moved and stood still 20 s; each file rewritten only when it changes. Not
+  `ServerTimeManager._lastServerTime`: the client's periodic requests move it. It waits for the
+  game, and its recipe stops the reader on exit (the reader outlives its launcher otherwise).
+  The Events page polls every 15 s. Values are the game's: ids,
   enums by name (the faction's game name, its `account.faction_name`), Fixed rounded to 6 decimals.
   A module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
   object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
@@ -61,7 +78,12 @@ in-game commands below; the account and the game's tables come from the game its
   MessagePack-CSharp Lz4BlockArray, string keys: `tools/static_decode.py`, `msgpack` + `lz4`,
   whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
   `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
-  `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources}.json`.
+  `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,shards}.json`
+  (`items`: the black market's item names by id, for event prizes; `shards`: each shard type's
+  affinities and odds by rarity, with their mercy). `just schema` also writes
+  `schema/events.json` (`--root UpdatableGlobalEventsData --root GlobalEventInterfaceSettingsDto
+  --attribute Json`: the `[Json]` keys of the events' JSON and of the interface settings JSON
+  within each, which `optimiser.events` decodes the snapshot's by).
   Hero types carry their `auras` (`LeaderSkills`: stat, value, flat or not, and the area,
   affinity, faction and rarity they're held to, null for any; `account.Aura`, read by the
   optimiser's battle).
@@ -343,12 +365,34 @@ in-game commands below; the account and the game's tables come from the game its
   bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
   the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the
   champion list, the champion last solved for (`store.latest_champion`), Config; Teams: the finder
-  (the Chimera's trials too) and Gear; Info: Faction Wars, Empower (`/empower`), Masteries,
-  Skill books.
+  (the Chimera's trials too) and Gear; Info: Faction Wars, Events, Empower (`/empower`),
+  Masteries, Skill books.
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still
   need (`enemies.json` stages' `quests`, texts from `BattleQuestData`; a stage one star short is
   missing one of the two after "Beat Stage", shown as its challenge "or 5 Champions, no losses").
+- Events page (`/events`, `optimiser/events.py`, `webui/service/events.py`, `pages/Events.vue`):
+  the events and tournaments the game held at the last sync, running, coming up, and ended with
+  prizes still to claim (each card's header, with the time left, folds the rest: open for those
+  running), each with the account's points and place over its milestones, and what earns
+  points (an action's rules as a table per field set, a grid when they vary along two; what all
+  share said once). Titles and points' names are the game's (`EventTexts`: the settings' `TitleId` and
+  `PointsNameId`, looked up in the snapshot's texts); Plarium's own name ("Fuse 10910 Ice Golem (3d), 26-11-2026") is the title's
+  tooltip, and gives the fusion's champion. Milestones may be per bracket of levels: the account's is the
+  one its standing names (0-based), else the one holding the level its other brackets agree on
+  (`events.account_levels`). An event scoring summons (Champion Chase) shows, under its
+  milestones, the shards reaching one takes (`ShardPlan.vue`, `webui/service/summons.py` over
+  `optimiser/summons.py`): the milestone clicked in its table (else the next not reached),
+  less champions counted by hand (M, VL, L, VE, E: `summons.MANUAL`, their points from the
+  event's summon table); a new shortfall asks `/events/{id}/shards?short=` (`shard_rows`), the
+  page bringing only its first target's. Per shard type, one type alone, at
+  today's odds (a running boost's), typically and nine times in ten, from `TRIALS` simulated
+  openings with mercy (the extra chance taken from the commonest rarity) from none built up;
+  a type with no mercy (Mystery) worked out instead. Points per rarity are the event's summon
+  rules, averaged over the affinities the shard summons. A tournament ends `BracketDuration` after its start, a day past its
+  stored `End` (`events.event_end`), as the game's timer (the tournaments web view's) shows and
+  points keep counting; `End` + `RewardDuration` gives the same time today. Co-op events' points are the team's damage, and their prizes aren't
+  read.
 - Skill books page (`/books`, `webui/service/books.py`): the champions with a skill below
   its top, as at the last sync, the champion filter bar above them narrowing it by stars
   too (`service.finder`'s `matches` and `FilterChoices`). `forms.books`'s `DEFAULTS` start
@@ -497,6 +541,7 @@ just install          # a fresh checkout: paths, Il2CppDumper, the Rust target, 
 just update           # after a pull, game update (launch it once first) or HH update: deps, HH patch,
                       # dump (when the code changed), reader layout + build, schema, static, assets, front end
 just read             # the account, from the running game's memory (read-only)
+just watch            # keep reading it while the game runs, when it changes (Ctrl-C stops it)
 just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
 just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs frontend-build
 just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)
