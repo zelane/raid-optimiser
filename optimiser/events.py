@@ -50,10 +50,19 @@ class Condition:
 
 @dataclass(frozen=True)
 class TurnPoints:
-    """A fight scored by its turns: from `most` (fewest turns) down to `least`."""
+    """A fight scored by its turns: round(`scale` × `x` × turns^`y`), `y` below 0 so the fewer
+    the more, held between `least` and `most`. The server scores it, so this is read off fights:
+    Sand Devil 25 (scale 30), 44 turns for 43 points and 22 for 48."""
 
     least: int
     most: int
+    x: float
+    y: float
+    scale: float
+
+    def points(self, turns: int) -> int:
+        earned = round(self.scale * self.x * max(turns, 1) ** self.y)
+        return min(max(earned, self.least), self.most)
 
 
 @dataclass(frozen=True)
@@ -322,8 +331,8 @@ def parse_rule(action: str, raw: dict) -> Rule:
     )
 
     match raw.get(TURN_SCORED):
-        case {"MinPoints": int(least), "MaxPoints": int(most)}:
-            points: int | TurnPoints = TurnPoints(least, most)
+        case {"MinPoints": int(least), "MaxPoints": int(most), "X": x, "Y": y, "S": scale}:
+            points: int | TurnPoints = TurnPoints(least, most, float(x), float(y), float(scale))
 
         case _:
             points = raw.get(POINTS) or 0

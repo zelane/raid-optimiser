@@ -6,6 +6,7 @@ points tables the page draws.
 - `test_texts_from_settings_ids`: title and points' name by id, none without settings
 - `test_tournament_ends_with_its_bracket`: start + bracket, a day past its stored end
 - `test_rule_conditions_and_turn_points`: a rule's set fields, a turn-scored fight's range
+- `test_turn_points_match_real_fights`: Sand Devil 25 as fought: 44 turns 43 points, 22 turns 48
 - `test_bracket_from_standing_else_levels`: the standing's bracket, else the levels' one
 - `test_points_grid_when_rules_vary_along_two`: rank × level, zero rows dropped
 - `test_points_rows_share_what_every_rule_sets`: the dungeon said once, stages as one field
@@ -95,9 +96,18 @@ def test_rule_conditions_and_turn_points() -> None:
 
     turns = parse_rule(
         "Battle_DungeonTurn",
-        {"Dungeon": {"Number": 25}, "TurnAttackParameters": {"MinPoints": 24, "MaxPoints": 80}},
+        {
+            "Dungeon": {"Number": 25},
+            "TurnAttackParameters": {
+                "X": 2.68,
+                "Y": -0.166,
+                "S": 30,
+                "MinPoints": 24,
+                "MaxPoints": 80,
+            },
+        },
     )
-    assert turns.points == TurnPoints(24, 80)
+    assert turns.points == TurnPoints(24, 80, 2.68, -0.166, 30)
     assert turns.conditions == (Condition("Dungeon", "Number", 25),)
 
 
@@ -157,7 +167,7 @@ def artifact(field: str, value: str | int) -> Condition:
 
 
 def turns(least: int, most: int) -> TurnPoints:
-    return TurnPoints(least, most)
+    return TurnPoints(least, most, 2.68, -0.166, most / 2.68)
 
 
 def stage(field: str, value: int) -> Condition:
@@ -183,3 +193,10 @@ def event(prototype_id: int, brackets: tuple[Bracket, ...]) -> GameEvent:
         max_points_per_day=None,
         rating_size=100,
     )
+
+
+def test_turn_points_match_real_fights() -> None:
+    sand_devil_25 = TurnPoints(24, 80, 2.68, -0.166, 30)
+
+    assert (sand_devil_25.points(44), sand_devil_25.points(22)) == (43, 48)
+    assert sand_devil_25.points(1) == 80 and sand_devil_25.points(5_000) == 24

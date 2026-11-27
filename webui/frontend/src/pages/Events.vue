@@ -1,13 +1,17 @@
 <script setup lang="ts">
 // The events page: the events and tournaments on in the game (running, coming up, ended with
-// prizes to claim), refreshed every 15 s, a panel each: its kind, time left and title, then
-// (open for those running, folded for the rest) the account's points and place over its
-// milestones (and for one scoring summons, the shards each milestone takes: `ShardPlan`), and
-// what earns points folded away.
+// prizes to claim), refreshed every 15 s, a panel each: its kind, time left and title, then (open
+// for those running with a milestone left, folded for the rest) the account's points and place
+// over its milestones (and for one scoring summons, level-ups, dungeon runs or upgrades, what
+// each milestone takes: `ShardPlan`, `BrewPlan`, `FightPlan`, `UpgradePlan`), and what earns
+// points folded away.
 import { Head, usePoll } from "@inertiajs/vue3";
 import { computed, ref } from "vue";
 import PageHead from "../components/PageHead.vue";
+import BrewPlan from "../components/BrewPlan.vue";
+import FightPlan from "../components/FightPlan.vue";
 import ShardPlan from "../components/ShardPlan.vue";
+import UpgradePlan from "../components/UpgradePlan.vue";
 import Tally from "../components/Tally.vue";
 import type { EventCard, EventsPage, MilestoneRow } from "../types/generated/webui.service.events";
 
@@ -38,11 +42,17 @@ function target(event: EventCard): MilestoneRow | undefined {
 }
 
 function pickable(event: EventCard, milestone: MilestoneRow) {
-  return event.summons !== null && !milestone.reached;
+  const planned = [event.summons, event.brews, event.fights, event.upgrades].some(Boolean);
+  return planned && !milestone.reached;
 }
 
 function pick(event: EventCard, milestone: MilestoneRow) {
   if (pickable(event, milestone)) picked.value[event.id] = milestone.points;
+}
+
+// Every milestone reached: nothing left to play for, so its card starts folded.
+function complete(event: EventCard) {
+  return event.milestones.length > 0 && event.reached === event.milestones.length;
 }
 
 function progress(event: EventCard) {
@@ -90,7 +100,7 @@ function points(count: number) {
 
       <div class="event-grid">
         <article v-for="event in section.events" :key="event.id" class="panel event">
-          <details :open="section.key === 'running'">
+          <details :open="section.key === 'running' && !complete(event)">
             <summary class="stack" style="--space: var(--space-3xs)">
               <div class="cluster" style="--space: var(--space-xs)">
                 <span class="badge" :class="{ info: event.tournament }">{{ event.kind }}</span>
@@ -154,7 +164,7 @@ function points(count: number) {
                         picked: pickable(event, milestone) && target(event) === milestone,
                       }"
                       :tabindex="pickable(event, milestone) ? 0 : undefined"
-                      :title="pickable(event, milestone) ? 'Aim the shards below at it' : undefined"
+                      :title="pickable(event, milestone) ? 'Aim the plan below at it' : undefined"
                       @click="pick(event, milestone)"
                       @keydown.enter.space.prevent="pick(event, milestone)"
                     >
@@ -174,6 +184,25 @@ function points(count: number) {
               <ShardPlan
                 v-if="event.summons && target(event) && section.key === 'running'"
                 :plan="event.summons"
+                :target="target(event)!"
+                :points="event.points ?? 0"
+              />
+              <BrewPlan
+                v-if="event.brews && target(event) && section.key === 'running'"
+                :plan="event.brews"
+                :target="target(event)!"
+                :points="event.points ?? 0"
+              />
+              <FightPlan
+                v-if="event.fights && target(event) && section.key === 'running'"
+                :plan="event.fights"
+                :target="target(event)!"
+                :points="event.points ?? 0"
+                :per-day="event.max_points_per_day"
+              />
+              <UpgradePlan
+                v-if="event.upgrades && target(event) && section.key === 'running'"
+                :plan="event.upgrades"
                 :target="target(event)!"
                 :points="event.points ?? 0"
               />

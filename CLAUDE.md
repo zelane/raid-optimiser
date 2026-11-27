@@ -78,9 +78,11 @@ in-game commands below; the account and the game's tables come from the game its
   MessagePack-CSharp Lz4BlockArray, string keys: `tools/static_decode.py`, `msgpack` + `lz4`,
   whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
   `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
-  `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,shards}.json`
+  `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,shards,levelling,loot}.json`
   (`items`: the black market's item names by id, for event prizes; `shards`: each shard type's
-  affinities and odds by rarity, with their mercy). `just schema` also writes
+  affinities and odds by rarity, with their mercy; `levelling`: the XP each level takes by grade,
+  `HeroExperienceByKey`, and a brew's XP, more on its own affinity; `loot`: each stage's gear, by
+  region and difficulty, from its `Reward`: pieces a run drops and their odds by rank and rarity). `just schema` also writes
   `schema/events.json` (`--root UpdatableGlobalEventsData --root GlobalEventInterfaceSettingsDto
   --attribute Json`: the `[Json]` keys of the events' JSON and of the interface settings JSON
   within each, which `optimiser.events` decodes the snapshot's by).
@@ -389,7 +391,21 @@ in-game commands below; the account and the game's tables come from the game its
   today's odds (a running boost's), typically and nine times in ten, from `TRIALS` simulated
   openings with mercy (the extra chance taken from the commonest rarity) from none built up;
   a type with no mercy (Mystery) worked out instead. Points per rarity are the event's summon
-  rules, averaged over the affinities the shard summons. A tournament ends `BracketDuration` after its start, a day past its
+  rules, averaged over the affinities the shard summons. An event scoring level-ups (Champion
+  Training) shows the champions to brew instead (`BrewPlan.vue`, `webui/service/training.py` over
+  `optimiser/levelling.py`): per grade (3★–5★), a new champion brewed to half its top level with
+  brews of its own affinity (2, 4, 7), what that earns, and how many of them the milestone takes. A Turn
+  Attack (`TurnAttackParameters`) shows the runs instead (`FightPlan.vue`, `webui/service/fights.py`):
+  a stage and the turns a run takes, what one earns and how many the milestone takes; so does an
+  event scoring the gear runs drop (`Battle_DungeonReward`: Ice Golem, Dragon, Fire Knight), a
+  run's average from the stage's drop odds (`optimiser/loot.py`: each rule a piece matches adds
+  its points, rank and rarity drawn apart; rules on what the odds don't give, a piece's set or
+  slot, earn nothing; accessories aren't read). A Gear Enhancement (`Artifact_Upgrade`) shows the
+  pieces instead (`UpgradePlan.vue`, `webui/service/upgrades.py`): new 5★ or 6★ pieces taken
+  from +0 to +12, each level's points for its rank summed, and how many of one rank the
+  milestone takes. The server
+  scores turns, not the client; `TurnPoints.points` is round(S × X × turns^Y) held between its
+  min and max, read off two real fights (Sand Devil 25: 44 turns 43 points, 22 turns 48). A tournament ends `BracketDuration` after its start, a day past its
   stored `End` (`events.event_end`), as the game's timer (the tournaments web view's) shows and
   points keep counting; `End` + `RewardDuration` gives the same time today. Co-op events' points are the team's damage, and their prizes aren't
   read.

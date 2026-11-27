@@ -459,6 +459,8 @@ def events(request: Request):
         found,
         names,
         summoning,
+        current.current_levelling(),
+        current.current_loot(),
         datetime.now(UTC),
         reader.age_text(EVENTS),
     )

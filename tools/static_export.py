@@ -6,7 +6,7 @@ The cache (`LocalLow/Plarium/Raid_ Shadow Legends/static-data`) is decoded by
 `tools.static_decode`; given the directory, its newest file is read.
 
 Writes out/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,
-shards}.json (and out/static.json with --full).
+shards,levelling,loot}.json (and out/static.json with --full).
 Exits non-zero if validation fails, which usually means the schema came from a dump
 older than the game version: run `just update`.
 """
@@ -393,6 +393,69 @@ def build_shards(shard_data):
         }
         for shard in shard_data["ShardTypes"]
     ]
+
+
+def build_levelling(hero_data, market):
+    """The XP each level takes, by grade (`HeroExperienceByKey`, keyed grade × 1000 + level: from
+    that level to the next, so the top level is one past the last), and what a brew gives
+    (`HeroLevelUpData`, alike for each affinity's: more on a champion of its own), for the
+    Champion Training plan (`optimiser.levelling`)."""
+    by_grade = {}
+    for key, xp in sorted(hero_data["HeroExperienceByKey"].items(), key=lambda kv: int(kv[0])):
+        by_grade.setdefault(f"Stars{int(key) // 1000}", []).append(xp)
+
+    brew = next(
+        item["HeroLevelUpData"] for item in market["Items"] if item["Id"] == "HeroLevelUpItemMagic"
+    )
+    return {"xp": by_grade, "brew": brew["Xp"], "matching": brew["XpOnCorrectElement"]}
+
+
+def build_loot(stage_data, enums):
+    """The gear each dungeon stage drops, by region and difficulty (stages in order): `pieces`
+    a run gives on average (`Reward`: `Count` draws among its rewards by weight, an artifact's
+    count its min–max), and their odds by rank and rarity (`ArtifactProbsByRankId`, `ByRarityId`,
+    drawn apart). A region with one difficulty lists it as "None"; it's written "Normal", as
+    events name it. For the events scoring gear by rank and rarity (`optimiser.loot`)."""
+    stages = {stage["Id"]: stage for stage in stage_data["Stages"]}
+    ranks, rarities = enums["ArtifactRankId"], enums["ItemRarity"]
+    loot = {}
+
+    for area in stage_data["Areas"]:
+        for region in area.get("Regions") or []:
+            for difficulty, ids in (region.get("StageIdsByDifficulty") or {}).items():
+                drops = [stage_loot(stages[i].get("Reward") or {}, ranks, rarities) for i in ids]
+                if any(drops):
+                    named = "Normal" if difficulty == "None" else difficulty
+                    loot.setdefault(region["Id"], {})[named] = drops
+
+    return loot
+
+
+def stage_loot(reward, ranks, rarities):
+    """A stage's gear: pieces a run gives, and their odds by rank and rarity (None if none)."""
+    by_rank = reward.get("ArtifactProbsByRankId") or {}
+    by_rarity = reward.get("ArtifactProbsByRarityId") or {}
+    rewards = reward.get("Rewards") or []
+    weights = sum(r["Probability"] for r in rewards)
+
+    if not (by_rank and by_rarity and weights):
+        return None
+
+    pieces = sum(
+        r["Probability"] / weights * (r["MinCount"] + r["MaxCount"]) / 2
+        for r in rewards
+        if r["Type"] == "Artifact"
+    )
+
+    def shares(odds, names):
+        total = sum(odds.values())
+        return {names[str(key)]: value / total for key, value in odds.items()}
+
+    return {
+        "pieces": reward.get("Count", 1) * pieces,
+        "ranks": shares(by_rank, ranks),
+        "rarities": shares(by_rarity, rarities),
+    }
 
 
 def build_gear(art):
@@ -1169,6 +1232,10 @@ def main(static_data: Path, schema_path: str, out_dir: str, full: bool) -> None:
     json.dump(glyphs, open(out / "glyphs.json", "w"), indent=1, ensure_ascii=False)
     shards = build_shards(data["ShardData"])
     json.dump(shards, open(out / "shards.json", "w"), indent=1, ensure_ascii=False)
+    loot = build_loot(data["StageData"], schema["enums"])
+    json.dump(loot, open(out / "loot.json", "w"), indent=1)
+    levelling = build_levelling(data["HeroData"], data["BlackMarketData"])
+    json.dump(levelling, open(out / "levelling.json", "w"), indent=1)
     items = build_items(data["BlackMarketData"])
     json.dump(items, open(out / "items.json", "w"), indent=1, ensure_ascii=False)
     enemies = build_enemies(data, skills, schema["enums"])

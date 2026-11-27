@@ -15,13 +15,13 @@ Titles and points' names are the game's, in its language; Plarium's own name
 - `events_page`: what the page shows
 - `Names`: what prizes and rules name (champions, items, sets, relics)
 - `event_card`, `points_tables`, `points_table`, `milestone_rows`, `prize_text`: its pieces
-- `row_label`, `condition_labels`, `stages_text`, `points_text`, `prize_item_text`, `when_text`,
+- `row_label`, `condition_labels`, `points_text`, `prize_item_text`, `when_text`,
   `levels_text`, `event_name`, `kind_label`, `words`: the words
   they're shown with
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import assert_never
@@ -47,8 +47,13 @@ from optimiser.events import (
     account_levels,
     milestones_for,
 )
+from optimiser.levelling import Levelling
+from optimiser.loot import Loot
 from optimiser.summons import Summoning
+from webui.service.fights import STAGE_FIELDS, FightPlan, fight_plan, stages_text
 from webui.service.summons import SummonPlan, summon_plan
+from webui.service.training import BrewPlan, brew_plan
+from webui.service.upgrades import UpgradePlan, upgrade_plan
 from webui.service.views import span_text
 
 ACTIONS = {
@@ -81,7 +86,6 @@ TOURNAMENT_KINDS = {
 }
 RESOURCES = {"Gem": "Gems"}
 RANKS = {"One": 1, "Two": 2, "Three": 3, "Four": 4, "Five": 5, "Six": 6}
-STAGE_FIELDS = ("Number", "MinNumber", "MaxNumber")  # a dungeon rule's stages
 FUSION = re.compile(r"^Fuse (\d+)\s*")  # Plarium's names for a fusion's events
 NAME_DATE = re.compile(r"\s*,\s*\d{2}-\d{2}-\d{4}\s*$")
 
@@ -137,6 +141,9 @@ class EventCard:
     highlights: tuple[str, ...]
     max_points_per_day: int | None
     summons: SummonPlan | None  # the shards reaching each milestone takes, when it scores them
+    brews: BrewPlan | None  # what brewing a champion earns, when it scores level-ups
+    fights: FightPlan | None  # what a dungeon run earns, when it scores its turns or its gear
+    upgrades: UpgradePlan | None  # what upgrading a piece earns, when it scores upgrades
 
 
 @dataclass(frozen=True)
@@ -173,6 +180,8 @@ def events_page(
     events: Events,
     relic_names: dict[int, str],
     summoning: Summoning | None,
+    levelling: Levelling,
+    loot: Loot,
     now: datetime,
     read_ago: str,
 ) -> EventsPage:
@@ -184,7 +193,14 @@ def events_page(
     def cards(selected: Sequence[GameEvent]) -> tuple[EventCard, ...]:
         return tuple(
             event_card(
-                event, events.standings.get(event.prototype_id), levels, names, summoning, now
+                event,
+                events.standings.get(event.prototype_id),
+                levels,
+                names,
+                summoning,
+                levelling,
+                loot,
+                now,
             )
             for event in selected
         )
@@ -208,6 +224,8 @@ def event_card(
     levels: tuple[int, int] | None,
     names: Names,
     summoning: Summoning | None,
+    levelling: Levelling,
+    loot: Loot,
     now: datetime,
 ) -> EventCard:
     milestones = milestones_for(event, standing, levels)
@@ -240,6 +258,9 @@ def event_card(
             if summoning is None
             else summon_plan(event, points or 0, milestones, summoning, now)
         ),
+        brews=brew_plan(event, levelling),
+        fights=fight_plan(event, loot),
+        upgrades=upgrade_plan(event),
     )
 
 
@@ -326,17 +347,6 @@ def condition_labels(conditions: tuple[Condition, ...], names: Names) -> dict[st
                 labels[words(other.removesuffix("Id"))] = words(str(value))
 
     return labels
-
-
-def stages_text(stages: Mapping[str, object]) -> str:
-    match stages:
-        case {"Number": number}:
-            return f"Stage {number}"
-
-        case {"MinNumber": low, "MaxNumber": high}:
-            return f"Stages {low}–{high}"
-
-    return "Any stage"
 
 
 def points_text(points: int | TurnPoints) -> str:
