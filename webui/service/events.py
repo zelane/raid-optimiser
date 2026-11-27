@@ -27,6 +27,7 @@ from datetime import datetime
 from typing import assert_never
 
 from optimiser.account import Account
+from optimiser.event_tables import PlanTables
 from optimiser.events import (
     Condition,
     Events,
@@ -47,13 +48,8 @@ from optimiser.events import (
     account_levels,
     milestones_for,
 )
-from optimiser.levelling import Levelling
-from optimiser.loot import Loot
-from optimiser.summons import Summoning
-from webui.service.fights import STAGE_FIELDS, FightPlan, fight_plan, stages_text
-from webui.service.summons import SummonPlan, summon_plan
-from webui.service.training import BrewPlan, brew_plan
-from webui.service.upgrades import UpgradePlan, upgrade_plan
+from webui.service.fights import STAGE_FIELDS, stages_text
+from webui.service.plans import EventPlan, event_plans
 from webui.service.views import span_text
 
 ACTIONS = {
@@ -140,10 +136,7 @@ class EventCard:
     turn_scored: bool  # some of its points go by how few turns a fight takes
     highlights: tuple[str, ...]
     max_points_per_day: int | None
-    summons: SummonPlan | None  # the shards reaching each milestone takes, when it scores them
-    brews: BrewPlan | None  # what brewing a champion earns, when it scores level-ups
-    fights: FightPlan | None  # what a dungeon run earns, when it scores its turns or its gear
-    upgrades: UpgradePlan | None  # what upgrading a piece earns, when it scores upgrades
+    plans: tuple[EventPlan, ...]  # what reaching a milestone takes, by what it scores
 
 
 @dataclass(frozen=True)
@@ -179,13 +172,10 @@ def events_page(
     account: Account,
     events: Events,
     relic_names: dict[int, str],
-    summoning: Summoning | None,
-    levelling: Levelling,
-    loot: Loot,
+    tables: PlanTables,
     now: datetime,
     read_ago: str,
 ) -> EventsPage:
-    """`summoning`: what the shard plans need (None if the reader found no summons)."""
     levels = account_levels(events)
     heroes = {type_id: hero.name for type_id, hero in account.tables.hero_types.items()}
     names = Names(heroes, events.item_names, events.set_names, relic_names)
@@ -197,9 +187,7 @@ def events_page(
                 events.standings.get(event.prototype_id),
                 levels,
                 names,
-                summoning,
-                levelling,
-                loot,
+                tables,
                 now,
             )
             for event in selected
@@ -223,9 +211,7 @@ def event_card(
     standing: Standing | None,
     levels: tuple[int, int] | None,
     names: Names,
-    summoning: Summoning | None,
-    levelling: Levelling,
-    loot: Loot,
+    tables: PlanTables,
     now: datetime,
 ) -> EventCard:
     milestones = milestones_for(event, standing, levels)
@@ -253,14 +239,7 @@ def event_card(
         turn_scored=any(isinstance(rule.points, TurnPoints) for rule in event.rules),
         highlights=tuple(text for prize in event.highlights if (text := prize_text(prize, names))),
         max_points_per_day=event.max_points_per_day,
-        summons=(
-            None
-            if summoning is None
-            else summon_plan(event, points or 0, milestones, summoning, now)
-        ),
-        brews=brew_plan(event, levelling),
-        fights=fight_plan(event, loot),
-        upgrades=upgrade_plan(event),
+        plans=event_plans(event, points or 0, milestones, tables, now),
     )
 
 

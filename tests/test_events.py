@@ -6,6 +6,7 @@ points tables the page draws.
 - `test_texts_from_settings_ids`: title and points' name by id, none without settings
 - `test_tournament_ends_with_its_bracket`: start + bracket, a day past its stored end
 - `test_rule_conditions_and_turn_points`: a rule's set fields, a turn-scored fight's range
+- `test_rules_add_where_they_hold`: values, any-of, stage ranges; an unknown fact fails
 - `test_turn_points_match_real_fights`: Sand Devil 25 as fought: 44 turns 43 points, 22 turns 48
 - `test_bracket_from_standing_else_levels`: the standing's bracket, else the levels' one
 - `test_points_grid_when_rules_vary_along_two`: rank × level, zero rows dropped
@@ -24,6 +25,8 @@ from optimiser.events import (
     Rule,
     Standing,
     TurnPoints,
+    holds,
+    rule_points,
     account_levels,
     bracket_for,
     decode,
@@ -200,3 +203,23 @@ def test_turn_points_match_real_fights() -> None:
 
     assert (sand_devil_25.points(44), sand_devil_25.points(22)) == (43, 48)
     assert sand_devil_25.points(1) == 80 and sand_devil_25.points(5_000) == 24
+
+
+def test_rules_add_where_they_hold() -> None:
+    rules = (
+        Rule("Hero_Summon", (Condition("Hero", "Rarity", "Epic"),), 250),
+        Rule("Hero_Summon", (Condition("Hero", "Elements", ("Void",)),), 100),
+        Rule("Hero_Summon", (Condition("Hero", "Fraction", "Undead"),), 1_000),
+        Rule("Hero_LevelUp", (Condition("Hero", "Rarity", "Epic"),), 7),
+    )
+
+    assert rule_points(rules, "Hero_Summon", {"Rarity": "Epic", "Elements": "Void"}) == 350
+    assert rule_points(rules, "Hero_Summon", {"Rarity": "Epic", "Elements": "Magic"}) == 250
+
+    stages = (stage("MinNumber", 4), stage("MaxNumber", 7))
+    assert [all(holds(c, {"Number": n}) for c in stages) for n in (3, 4, 7, 8)] == [
+        False,
+        True,
+        True,
+        False,
+    ]

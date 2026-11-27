@@ -7,6 +7,9 @@
 import { computed, ref, watch } from "vue";
 import type { MilestoneRow } from "../types/generated/webui.service.events";
 import type { FightPlan } from "../types/generated/webui.service.fights";
+import { formatCount } from "../composables/format";
+import PlanPanel from "./PlanPanel.vue";
+import Stat from "./Stat.vue";
 
 const DEFAULT_TURNS = 30;
 const SUPER_RAID_KEY = "events-super-raid"; // remembered in the browser: how the player runs
@@ -49,33 +52,21 @@ const each = computed(() => {
 const perRaid = computed(() => each.value * (superRaid.value ? 2 : 1));
 const runs = computed(() => (perRaid.value ? Math.ceil(short.value / perRaid.value) : null));
 const days = computed(() => (perDay ? Math.ceil(short.value / perDay) : null));
-
-function count(value: number) {
-  return value.toLocaleString();
-}
 </script>
 
 <template>
-  <details class="fight-plan">
-    <summary>
-      Runs
-      <small class="muted">to reach {{ count(target.points) }}: {{ target.prize }}</small>
-    </summary>
-
+  <PlanPanel title="Runs" :target="target">
     <div class="cluster" style="--space: var(--space-m); --align: end">
-      <div>
-        <span class="figure">{{ runs === null ? "–" : count(runs) }}</span>
-        <span class="caps">
-          {{ superRaid ? "super raid" : "run" }}{{ runs === 1 ? "" : "s" }}
-        </span>
-        <small class="muted detail">
-          {{ count(perRaid) }} a {{ superRaid ? "super raid" : "run"
-          }}<template v-if="!plan.by_turns"> on average</template
-          ><template v-if="days && days > 1">
-            · {{ days }} days at {{ count(perDay!) }} a day</template
-          >
-        </small>
-      </div>
+      <Stat
+        :value="runs === null ? '–' : formatCount(runs)"
+        :label="`${superRaid ? 'super raid' : 'run'}${runs === 1 ? '' : 's'}`"
+      >
+        {{ formatCount(perRaid) }} a {{ superRaid ? "super raid" : "run"
+        }}<template v-if="!plan.by_turns"> on average</template
+        ><template v-if="days && days > 1">
+          · {{ days }} days at {{ formatCount(perDay!) }} a day</template
+        >
+      </Stat>
 
       <div class="cluster push" style="--space: var(--space-s)">
         <label class="inline" title="Two runs in one, for twice the energy">
@@ -106,29 +97,12 @@ function count(value: number) {
         </label>
       </div>
     </div>
-  </details>
+  </PlanPanel>
 </template>
 
 <style scoped>
-/* Folded like the card's rules, the milestone aimed at in its summary; the count of fights as a
-   big figure, what one earns under it, the stage and turns beside it. */
-.fight-plan {
-  > summary {
-    font-weight: 700;
-  }
-
-  &[open] > summary {
-    margin-bottom: var(--space-s);
-    color: inherit;
-  }
-
-  input[type="number"] {
-    width: 4.5em;
-  }
-}
-
-.caps,
-.detail {
-  display: block;
+/* The count of runs, big, what one earns under it; the stage and turns beside it. */
+input[type="number"] {
+  width: 4.5em;
 }
 </style>

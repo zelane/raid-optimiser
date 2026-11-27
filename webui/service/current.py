@@ -9,6 +9,7 @@ new snapshot), the game's enemies, the champion locks and the reserve rules.
   and summon boosts (in the events file), and the game's shard odds
 - `current_levelling`, `levelling_for`: the XP champions' levels take, and brews give
 - `current_loot`, `loot_for`: the gear dungeon stages drop
+- `current_summoning`, `current_plan_tables`: those together, as the event plans read them
 - `current_enemies`, `enemies_for`: the game's enemies, reloaded after a game update
 - `current_effect_sources`, `effect_sources_for`: the sets' and relics' skills, likewise
 - `current_locks`: champion locks, kept in the store
@@ -19,6 +20,7 @@ from functools import lru_cache
 
 from optimiser.account import Account, Locks, load_account
 from optimiser.enemies import Enemies, load_enemies
+from optimiser.event_tables import PlanTables
 from optimiser.events import Events, load_events
 from optimiser.levelling import Levelling, load_levelling
 from optimiser.loot import Loot, load_loot
@@ -26,7 +28,7 @@ from optimiser.paths import EVENTS, EVENTS_SCHEMA, GAME, SCHEMA, SNAPSHOT, STORE
 from optimiser.reserve import Rule
 from optimiser.settings import read_reserve_rules
 from optimiser.store import read_locks
-from optimiser.summons import ShardType, Summons, load_shard_types, load_summons
+from optimiser.summons import ShardType, Summoning, Summons, load_shard_types, load_summons
 from optimiser.teams.gear import RelicSource, SetSource, load_effect_sources
 
 
@@ -112,6 +114,16 @@ def current_loot() -> Loot:
 @lru_cache(maxsize=1)
 def loot_for(mtime: int) -> Loot:  # the mtime is only the cache key
     return load_loot(GAME)
+
+
+def current_summoning() -> Summoning | None:
+    """The shards held and their odds; None when the reader found no summons."""
+    summons = current_summons()
+    return None if summons is None else Summoning(current_shard_types(), summons)
+
+
+def current_plan_tables() -> PlanTables:
+    return PlanTables(current_summoning(), current_levelling(), current_loot())
 
 
 def current_locks() -> Locks:

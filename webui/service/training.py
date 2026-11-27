@@ -10,12 +10,13 @@ thirds as much XP (`Levelling.brew`), so takes about half as many brews again.
 - `GRADES`: the grades brewed
 - `BrewRow`, `BrewPlan`: the views
 - `brew_plan`: an event's plan, if it scores level-ups
-- `brew_row`, `level_up_points`: its pieces
+- `brew_row`: one grade's
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
-from optimiser.events import GameEvent, Rule
+from optimiser.events import GameEvent, Rule, rule_points
 from optimiser.levelling import Levelling, brews_to_level, level_after
 
 GRADES = ("Stars3", "Stars4", "Stars5")
@@ -40,6 +41,7 @@ class BrewPlan:
     rows: tuple[BrewRow, ...]
     brew: int  # XP a brew gives: `matching` on a champion of its own affinity
     matching: int
+    kind: Literal["brews"] = "brews"
 
 
 def brew_plan(event: GameEvent, levelling: Levelling) -> BrewPlan | None:
@@ -48,7 +50,7 @@ def brew_plan(event: GameEvent, levelling: Levelling) -> BrewPlan | None:
 
 
 def brew_row(rules: tuple[Rule, ...], grade: str, levelling: Levelling) -> BrewRow | None:
-    if not (per_level := level_up_points(rules, grade)):
+    if not (per_level := rule_points(rules, LEVEL_UP, {"Grade": grade})):
         return None
 
     half = levelling.max_level(grade) // 2
@@ -56,15 +58,3 @@ def brew_row(rules: tuple[Rule, ...], grade: str, levelling: Levelling) -> BrewR
     level = level_after(levelling, grade, brews * levelling.matching)
     points = (level - 1) * per_level
     return BrewRow(int(grade.removeprefix("Stars")), brews, level, points, round(points / brews, 1))
-
-
-def level_up_points(rules: tuple[Rule, ...], grade: str) -> int:
-    """What a level gained by a champion of this grade earns (no rule for it: 0)."""
-    for rule in rules:
-        if rule.action != LEVEL_UP or not isinstance(rule.points, int):
-            continue
-
-        if any(c.field == "Grade" and c.value == grade for c in rule.conditions):
-            return rule.points
-
-    return 0

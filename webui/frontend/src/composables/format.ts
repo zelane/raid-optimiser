@@ -1,9 +1,14 @@
-// Small text and tone helpers the components share: a count with its noun, a score's tone, and
-// what a changed field holds.
+// Small text and tone helpers the components share: a count with its noun, a number grouped in
+// thousands, a score's tone, and what a changed field holds.
 
 // "1 build", "3 builds"; `many` for a plural that isn't the noun plus "s" ("copies").
 export function plural(count: number, noun: string, many = `${noun}s`) {
   return `${count} ${count === 1 ? noun : many}`;
+}
+
+// "6,300": a number as the game shows one.
+export function formatCount(value: number) {
+  return value.toLocaleString();
 }
 
 // A score (%) by how far it can be counted on.

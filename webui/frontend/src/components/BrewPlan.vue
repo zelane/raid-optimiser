@@ -6,6 +6,8 @@
 import { computed } from "vue";
 import type { MilestoneRow } from "../types/generated/webui.service.events";
 import type { BrewPlan } from "../types/generated/webui.service.training";
+import { formatCount } from "../composables/format";
+import PlanPanel from "./PlanPanel.vue";
 
 const { plan, target, points } = defineProps<{
   plan: BrewPlan;
@@ -18,22 +20,13 @@ const short = computed(() => target.points - points);
 function champions(each: number) {
   return Math.ceil(short.value / each);
 }
-
-function count(value: number) {
-  return value.toLocaleString();
-}
 </script>
 
 <template>
-  <details class="brew-plan">
-    <summary>
-      Brews
-      <small class="muted">to reach {{ count(target.points) }}: {{ target.prize }}</small>
-    </summary>
-
+  <PlanPanel title="Brews" :target="target">
     <div class="stack" style="--space: var(--space-s)">
       <p class="note">
-        <strong>{{ count(short) }} to go</strong>
+        <strong>{{ formatCount(short) }} to go</strong>
       </p>
 
       <div class="table-well">
@@ -56,13 +49,13 @@ function count(value: number) {
                 <small class="muted level">to level {{ row.level }}</small>
               </td>
               <td class="num">
-                {{ count(row.points) }}
+                {{ formatCount(row.points) }}
                 <small class="muted level">{{ row.per_brew }} a brew</small>
               </td>
               <td class="num">
-                <strong>{{ count(champions(row.points)) }}</strong>
+                <strong>{{ formatCount(champions(row.points)) }}</strong>
                 <small class="muted level"
-                  >{{ count(champions(row.points) * row.brews) }} brews</small
+                  >{{ formatCount(champions(row.points) * row.brews) }} brews</small
                 >
               </td>
             </tr>
@@ -71,32 +64,20 @@ function count(value: number) {
       </div>
       <p class="note">
         New champions to half their top level, with brews of their own affinity ({{
-          count(plan.matching)
+          formatCount(plan.matching)
         }}
-        XP; {{ count(plan.brew) }} otherwise, so about half as many again). The first brew earns the
-        most: levels cost more XP as they climb.
+        XP; {{ formatCount(plan.brew) }} otherwise, so about half as many again). The first brew
+        earns the most: levels cost more XP as they climb.
       </p>
     </div>
-  </details>
+  </PlanPanel>
 </template>
 
 <style scoped>
-/* Folded like the card's rules, the milestone aimed at in its summary; a row per grade, each
-   count with what it comes to under it. */
-.brew-plan {
-  > summary {
-    font-weight: 700;
-  }
-
-  &[open] > summary {
-    margin-bottom: var(--space-s);
-    color: inherit;
-  }
-
-  tbody th {
-    font-weight: 400;
-    white-space: nowrap;
-  }
+/* A row per grade, each count with what it comes to under it. */
+tbody th {
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .level {

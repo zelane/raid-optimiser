@@ -6,6 +6,9 @@
 import { computed } from "vue";
 import type { MilestoneRow } from "../types/generated/webui.service.events";
 import type { UpgradePlan } from "../types/generated/webui.service.upgrades";
+import { formatCount } from "../composables/format";
+import PlanPanel from "./PlanPanel.vue";
+import Stat from "./Stat.vue";
 
 const { plan, target, points } = defineProps<{
   plan: UpgradePlan;
@@ -14,45 +17,19 @@ const { plan, target, points } = defineProps<{
 }>();
 
 const short = computed(() => target.points - points);
-
-function count(value: number) {
-  return value.toLocaleString();
-}
 </script>
 
 <template>
-  <details class="upgrade-plan">
-    <summary>
-      Upgrades
-      <small class="muted">to reach {{ count(target.points) }}: {{ target.prize }}</small>
-    </summary>
-
+  <PlanPanel title="Upgrades" :target="target">
     <div class="cluster" style="--space: var(--space-l)">
-      <div v-for="row in plan.rows" :key="row.stars">
-        <span class="figure">{{ count(Math.ceil(short / row.points)) }}</span>
-        <span class="caps">{{ row.stars }}★ to +{{ plan.level }}</span>
-        <small class="muted detail">{{ count(row.points) }} each</small>
-      </div>
+      <Stat
+        v-for="row in plan.rows"
+        :key="row.stars"
+        :value="formatCount(Math.ceil(short / row.points))"
+        :label="`${row.stars}★ to +${plan.level}`"
+      >
+        {{ formatCount(row.points) }} each
+      </Stat>
     </div>
-  </details>
+  </PlanPanel>
 </template>
-
-<style scoped>
-/* Folded like the card's rules, the milestone aimed at in its summary; a figure per rank, its
-   label and what one earns under it. */
-.upgrade-plan {
-  > summary {
-    font-weight: 700;
-  }
-
-  &[open] > summary {
-    margin-bottom: var(--space-s);
-    color: inherit;
-  }
-}
-
-.caps,
-.detail {
-  display: block;
-}
-</style>

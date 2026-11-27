@@ -403,7 +403,12 @@ in-game commands below; the account and the game's tables come from the game its
   slot, earn nothing; accessories aren't read). A Gear Enhancement (`Artifact_Upgrade`) shows the
   pieces instead (`UpgradePlan.vue`, `webui/service/upgrades.py`): new 5★ or 6★ pieces taken
   from +0 to +12, each level's points for its rank summed, and how many of one rank the
-  milestone takes. The server
+  milestone takes. Each card's plans come from one hook,
+  `webui/service/plans.py` `event_plans` (`EventCard.plans`, each plan's `kind` telling the page
+  which component draws it, in the shared `PlanPanel.vue` frame; big numbers are `Stat.vue`), over
+  `optimiser/event_tables.py` `PlanTables` (summons, levelling, loot). Every plan reads the rules
+  through `events.rule_points` / `holds`: a rule holds when each condition does for the facts
+  given (a value, one of a list, a stage range), and every rule that holds adds its points. The server
   scores turns, not the client; `TurnPoints.points` is round(S × X × turns^Y) held between its
   min and max, read off two real fights (Sand Devil 25: 44 turns 43 points, 22 turns 48). A tournament ends `BracketDuration` after its start, a day past its
   stored `End` (`events.event_end`), as the game's timer (the tournaments web view's) shows and

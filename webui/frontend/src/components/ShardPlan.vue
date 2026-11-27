@@ -11,6 +11,8 @@ import { computed, reactive, ref, watch } from "vue";
 import { getJson } from "../composables/send";
 import type { MilestoneRow } from "../types/generated/webui.service.events";
 import type { ShardRow, SummonPlan } from "../types/generated/webui.service.summons";
+import { formatCount } from "../composables/format";
+import PlanPanel from "./PlanPanel.vue";
 
 const ASK_AFTER_MS = 250; // typing settles before the server is asked
 
@@ -52,26 +54,17 @@ watch(
   },
   { immediate: true },
 );
-
-function count(value: number) {
-  return value.toLocaleString();
-}
 </script>
 
 <template>
-  <details class="shard-plan">
-    <summary>
-      Shards
-      <small class="muted">to reach {{ count(target.points) }}: {{ target.prize }}</small>
-    </summary>
-
+  <PlanPanel title="Shards" :target="target">
     <div class="stack" style="--space: var(--space-s)">
       <div class="cluster" style="--space: var(--space-s)">
         <label
           v-for="kind in plan.kinds"
           :key="kind.key"
           class="inline"
-          :title="`${kind.label}: ${count(kind.points)} points each`"
+          :title="`${kind.label}: ${formatCount(kind.points)} points each`"
         >
           <span
             class="mark"
@@ -91,9 +84,10 @@ function count(value: number) {
 
       <p class="note">
         <template v-if="byHand">
-          {{ count(target.points - points) }} to go, {{ count(byHand) }} counted by hand:
+          {{ formatCount(target.points - points) }} to go, {{ formatCount(byHand) }} counted by
+          hand:
         </template>
-        <strong v-if="short > 0">{{ count(short) }} to earn from shards</strong>
+        <strong v-if="short > 0">{{ formatCount(short) }} to earn from shards</strong>
         <strong v-else class="good">reached with those</strong>
       </p>
 
@@ -113,19 +107,19 @@ function count(value: number) {
                 {{ shard.name.replace(/ Shard$/, "") }}
                 <span v-if="shard.boost" class="badge good" :title="shard.boost">boosted</span>
               </th>
-              <td class="num">{{ count(shard.per_shard) }}</td>
+              <td class="num">{{ formatCount(shard.per_shard) }}</td>
               <td class="num">
                 <template v-if="shard.reach">
                   <strong :class="{ good: shard.held >= shard.reach.typical }">
-                    ~{{ count(shard.reach.typical) }}
+                    ~{{ formatCount(shard.reach.typical) }}
                   </strong>
-                  <small class="muted"> ≤ {{ count(shard.reach.likely) }}</small>
+                  <small class="muted"> ≤ {{ formatCount(shard.reach.likely) }}</small>
                 </template>
                 <small v-else class="muted">out of reach</small>
               </td>
               <td class="num">
-                {{ count(shard.held) }}
-                <small class="muted earns">≈ {{ count(shard.held_earns) }} pts</small>
+                {{ formatCount(shard.held) }}
+                <small class="muted earns">≈ {{ formatCount(shard.held_earns) }} pts</small>
               </td>
             </tr>
           </tbody>
@@ -136,31 +130,19 @@ function count(value: number) {
         boosted while a summon event runs.
       </p>
     </div>
-  </details>
+  </PlanPanel>
 </template>
 
 <style scoped>
-/* Folded like the card's rules, the milestone aimed at in its summary; inside, a row of counts
-   by hand, then a table of shard types; a count the held shards cover in green, what those
-   held would earn under their count. The table dims while new counts are asked for. */
-.shard-plan {
-  > summary {
-    font-weight: 700;
-  }
+/* A row of counts by hand, then a table of shard types; a count the held shards cover in green,
+   what those held would earn under their count. The table dims while new counts are asked for. */
+tbody th {
+  font-weight: 400;
+  white-space: nowrap;
+}
 
-  &[open] > summary {
-    margin-bottom: var(--space-s);
-    color: inherit;
-  }
-
-  tbody th {
-    font-weight: 400;
-    white-space: nowrap;
-  }
-
-  input {
-    width: 4.5em;
-  }
+input {
+  width: 4.5em;
 }
 
 /* A kind's mark: its rarity's colour; a triangle for Void, a dot for the rest. */

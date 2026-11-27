@@ -10,7 +10,7 @@ asks `/events/{id}/shards` again (`shard_rows`), so only the first target's coun
 the page.
 
 - `MANUAL`: the champion kinds counted by hand: key, rarity, void, label
-- `ShardReach`, `ShardRow`, `ManualKind`, `SummonPlan`: the views
+- `ShardRow`, `ManualKind`, `SummonPlan`: the views
 - `summon_plan`: an event's plan, if it scores summons and has a milestone left
 - `shard_rows`: the shards a shortfall takes, by type
 - `shard_row`, `boost_text`: its pieces
@@ -18,11 +18,13 @@ the page.
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Literal
 
 from optimiser.events import GameEvent, Milestone
 from optimiser.summons import (
     SUMMON,
     Boost,
+    Reach,
     ShardType,
     Summoning,
     Summons,
@@ -46,14 +48,6 @@ NOT_VOID = "Magic"  # any affinity but Void: the events' tables give them one co
 
 
 @dataclass(frozen=True)
-class ShardReach:
-    """Shards a target takes: `typical` half the time, `likely` nine times in ten."""
-
-    typical: int
-    likely: int
-
-
-@dataclass(frozen=True)
 class ShardRow:
     """One shard type: `per_shard` the mean points one earns; `held_earns` what those held
     would; `reach` the shards the shortfall takes, None if they can't (its champions earn
@@ -64,7 +58,7 @@ class ShardRow:
     per_shard: float
     held_earns: int
     boost: str | None
-    reach: ShardReach | None
+    reach: Reach | None
 
 
 @dataclass(frozen=True)
@@ -89,6 +83,7 @@ class SummonPlan:
     rows: tuple[ShardRow, ...]
     kinds: tuple[ManualKind, ...]
     shards_url: str
+    kind: Literal["shards"] = "shards"
 
 
 def summon_plan(
@@ -146,7 +141,7 @@ def shard_row(
         per_shard=round(per_shard, 1),
         held_earns=round(held * per_shard),
         boost=boost_text(boost, now),
-        reach=ShardReach(reach.typical, reach.likely) if reach else None,
+        reach=reach,
     )
 
 

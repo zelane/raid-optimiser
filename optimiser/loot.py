@@ -13,7 +13,7 @@ from pathlib import Path
 
 import orjson
 
-from optimiser.events import Condition, Rule
+from optimiser.events import Condition, Rule, holds
 
 DUNGEON_REWARD = "Battle_DungeonReward"
 
@@ -23,6 +23,10 @@ class Place:
     region: str  # the game's ("IceGolemCave")
     difficulty: str  # "Normal" for a region with one
     number: int  # from 1
+
+    def facts(self) -> dict[str, object]:
+        """Where a run was, as the events' dungeon conditions name it."""
+        return {"RegionTypeId": self.region, "Difficulty": self.difficulty, "Number": self.number}
 
 
 @dataclass(frozen=True)
@@ -57,8 +61,10 @@ def run_points(rules: tuple[Rule, ...], place: Place, loot: StageLoot) -> float:
 
 
 def rule_chance(conditions: tuple[Condition, ...], place: Place, loot: StageLoot) -> float:
-    """How often a piece from this stage meets the rule: 0 for another stage, or a condition on
-    the piece this doesn't know the odds of (its set, its slot)."""
+    """How often a piece from this stage meets the rule: its rank's and rarity's odds, the rest
+    held to where the run was (`events.holds`): 0 for another stage, or for a condition on the
+    piece the odds don't give (its set, its slot)."""
+    facts = place.facts()
     chance = 1.0
 
     for condition in conditions:
@@ -69,22 +75,7 @@ def rule_chance(conditions: tuple[Condition, ...], place: Place, loot: StageLoot
             case Condition("Artifact", "Rarity", str(rarity)):
                 chance *= loot.rarities.get(rarity, 0)
 
-            case Condition("Artifact"):
-                return 0
-
-            case Condition("Dungeon", "RegionTypeId", region) if region != place.region:
-                return 0
-
-            case Condition("Dungeon", "Difficulty", difficulty) if difficulty != place.difficulty:
-                return 0
-
-            case Condition("Dungeon", "Number", int(number)) if number != place.number:
-                return 0
-
-            case Condition("Dungeon", "MinNumber", int(low)) if place.number < low:
-                return 0
-
-            case Condition("Dungeon", "MaxNumber", int(high)) if place.number > high:
+            case _ if not holds(condition, facts):
                 return 0
 
     return chance

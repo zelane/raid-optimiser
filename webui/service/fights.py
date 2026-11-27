@@ -14,6 +14,7 @@ a milestone takes.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Literal
 
 from optimiser.events import GameEvent, Rule, TurnPoints
 from optimiser.loot import DUNGEON_REWARD, Loot, Place, run_points
@@ -36,6 +37,7 @@ class FightStage:
 class FightPlan:
     stages: tuple[FightStage, ...]  # the hardest first
     by_turns: bool
+    kind: Literal["runs"] = "runs"
 
 
 def fight_plan(event: GameEvent, loot: Loot) -> FightPlan | None:
@@ -49,15 +51,16 @@ def fight_plan(event: GameEvent, loot: Loot) -> FightPlan | None:
 
 
 def turn_stages(rules: tuple[Rule, ...]) -> tuple[FightStage, ...]:
-    scored = [rule for rule in rules if isinstance(rule.points, TurnPoints)]
-    difficulties = {c.value for rule in scored for c in rule.conditions if c.field == "Difficulty"}
+    scored = [(rule, points) for rule in rules if isinstance(points := rule.points, TurnPoints)]
+    difficulties = {
+        c.value for rule, _ in scored for c in rule.conditions if c.field == "Difficulty"
+    }
     return tuple(
         FightStage(
             stage_label(rule, len(difficulties) > 1),
-            tuple(float(rule.points.points(turns)) for turns in range(1, MAX_TURNS + 1)),
+            tuple(float(points.points(turns)) for turns in range(1, MAX_TURNS + 1)),
         )
-        for rule in reversed(scored)
-        if isinstance(rule.points, TurnPoints)
+        for rule, points in reversed(scored)
     )
 
 

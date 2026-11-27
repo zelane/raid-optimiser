@@ -37,7 +37,6 @@ from optimiser.enemies import Restriction, team_restriction
 from optimiser.paths import EVENTS
 from optimiser.reserve import reservations
 from optimiser.solve import Stopped, stop
-from optimiser.summons import Summoning
 from optimiser.teams.gear import gear_options
 from optimiser.teams.kits import wantable
 from webui import extractor, inertia, reader
@@ -452,15 +451,11 @@ def events(request: Request):
 
     _, relics = current.current_effect_sources()
     names = {relic.id: relic.name for relic in relics}
-    summons = current.current_summons()
-    summoning = None if summons is None else Summoning(current.current_shard_types(), summons)
     page = event_pages.events_page(
         current.current_account(),
         found,
         names,
-        summoning,
-        current.current_levelling(),
-        current.current_loot(),
+        current.current_plan_tables(),
         datetime.now(UTC),
         reader.age_text(EVENTS),
     )
@@ -472,13 +467,12 @@ def event_shards(event_id: int, short: int):
     """The shards each type takes to earn `short` more points in the event (the shard plan
     asks as its target or the champions counted by hand change), as JSON."""
     found = current.current_events()
-    summons = current.current_summons()
+    summoning = current.current_summoning()
     event = next((e for e in found.events if e.id == event_id), None) if found else None
 
-    if event is None or summons is None:
+    if event is None or summoning is None:
         raise HTTPException(404, f"no event {event_id} with summons")
 
-    summoning = Summoning(current.current_shard_types(), summons)
     return view_json(summon_pages.shard_rows(event, summoning, short, datetime.now(UTC)))
 
 

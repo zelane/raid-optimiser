@@ -17,8 +17,8 @@ as a sum of many.
 - `odds_now`, `summon_points`, `champion_points`: a shard's odds at a moment, what each rarity
   earns from it, and what one champion earns
 - `Reach`, `shards_to_reach`, `points_per_shard`: how many shards a score takes, and the mean
-- `simulate`, `reach`, `worked_out`, `next_rarity`, `chances`: their steps
-- `matches`, `parse_rules`: what the others share
+- `simulate`, `reach`, `worked_out`, `draw_rarity`, `chances`: their steps
+- `parse_rules`: what the loaders share
 """
 
 import math
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import orjson
 
-from optimiser.events import Condition, Rule
+from optimiser.events import Rule, rule_points
 
 SUMMON = "Hero_Summon"  # the event action a shard's champion scores by
 TRIALS = 400
@@ -150,26 +150,7 @@ def summon_points(rules: tuple[Rule, ...], shard: ShardType) -> dict[str, float]
 
 def champion_points(rules: tuple[Rule, ...], rarity: str, element: str) -> int:
     """What summoning a champion of this rarity and affinity earns (no rule for it: 0)."""
-    for rule in rules:
-        if rule.action == SUMMON and matches(rule.conditions, rarity, element):
-            if isinstance(rule.points, int):
-                return rule.points
-
-    return 0
-
-
-def matches(conditions: tuple[Condition, ...], rarity: str, element: str) -> bool:
-    """Whether a summon rule holds for a champion of this rarity and affinity (a rule naming
-    no affinity holds for any)."""
-    for condition in conditions:
-        match condition:
-            case Condition(field="Rarity", value=value) if value != rarity:
-                return False
-
-            case Condition(field="Elements", value=tuple(elements)) if element not in elements:
-                return False
-
-    return True
+    return rule_points(rules, SUMMON, {"Rarity": rarity, "Elements": element})
 
 
 @dataclass(frozen=True)
@@ -202,7 +183,7 @@ def points_per_shard(rules: tuple[DropRule, ...], points: tuple[tuple[str, float
     by_rarity = dict(points)
     generator = random.Random(SEED)
     since = {rule.rarity: 0 for rule in rules}
-    total = sum(by_rarity.get(next_rarity(rules, since, generator), 0) for _ in range(LONG_RUN))
+    total = sum(by_rarity.get(draw_rarity(rules, since, generator), 0) for _ in range(LONG_RUN))
     return total / LONG_RUN
 
 
@@ -224,7 +205,7 @@ def simulate(
         earned, opened = 0.0, 0
 
         while target is not None and opened < MAX_SHARDS:
-            earned += by_rarity.get(next_rarity(rules, since, generator), 0)
+            earned += by_rarity.get(draw_rarity(rules, since, generator), 0)
             opened += 1
 
             while target is not None and earned >= targets[target]:
@@ -253,10 +234,10 @@ def worked_out(rules: tuple[DropRule, ...], points: dict[str, float], target: in
     return Reach(math.ceil(typical), math.ceil(likely))
 
 
-def next_rarity(
+def draw_rarity(
     rules: tuple[DropRule, ...], since: dict[str, int], generator: random.Random
 ) -> str:
-    """The rarity the next shard gives; `since` (shards since each rarity came) moves on."""
+    """Opens a shard: the rarity it gives, moving `since` (shards since each rarity came) on."""
     roll = generator.random()
     drawn = rules[-1].rarity
 

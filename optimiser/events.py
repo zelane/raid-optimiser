@@ -19,11 +19,14 @@ the one holding the level the other events' brackets agree on (`account_levels`)
   account's place in each, and the item and set names prizes are shown with
 - `load_events`: the loader (None when the reader found no events)
 - `account_levels`, `bracket_for`, `milestones_for`: the account's bracket and its milestones
+- `rule_points`, `holds`: what an action earns for something, by the rules whose conditions
+  hold for it (the event plans' one way of reading the rules)
 - `decode`, `parse_event`, `parse_texts`, `parse_rule`, `parse_milestones`, `parse_prize`,
   `parse_standing`, `event_end`, `moment`: its steps
 """
 
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -267,6 +270,39 @@ def milestones_for(
         return bracket.milestones or event.milestones
 
     return event.milestones
+
+
+def rule_points(rules: tuple[Rule, ...], action: str, facts: Mapping[str, object]) -> int:
+    """What an action earns for something with these facts (`{"Grade": "Stars3"}`): every rule
+    for it whose conditions all hold adds its points, as the game adds a piece's rank and rarity
+    (a rule scored by turns adds none)."""
+    return sum(
+        rule.points
+        for rule in rules
+        if rule.action == action
+        and isinstance(rule.points, int)
+        and all(holds(condition, facts) for condition in rule.conditions)
+    )
+
+
+def holds(condition: Condition, facts: Mapping[str, object]) -> bool:
+    """Whether a condition holds for these facts: its value, one of its values (affinities), or
+    a stage range (`MinNumber`/`MaxNumber` against `Number`). One on a fact not given fails:
+    a rule this can't check doesn't count."""
+    match condition:
+        case Condition(field="MinNumber", value=int(low)):
+            return isinstance(number := facts.get("Number"), int) and number >= low
+
+        case Condition(field="MaxNumber", value=int(high)):
+            return isinstance(number := facts.get("Number"), int) and number <= high
+
+        case Condition(field=name, value=tuple(values)):
+            return name in facts and facts[name] in values
+
+        case Condition(field=name, value=value):
+            return name in facts and facts[name] == value
+
+    return False
 
 
 def parse_event(raw: dict, schema: dict, texts: dict[int, str]) -> GameEvent:

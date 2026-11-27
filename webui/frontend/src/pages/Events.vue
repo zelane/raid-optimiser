@@ -11,9 +11,11 @@ import PageHead from "../components/PageHead.vue";
 import BrewPlan from "../components/BrewPlan.vue";
 import FightPlan from "../components/FightPlan.vue";
 import ShardPlan from "../components/ShardPlan.vue";
+import Stat from "../components/Stat.vue";
 import UpgradePlan from "../components/UpgradePlan.vue";
 import Tally from "../components/Tally.vue";
 import type { EventCard, EventsPage, MilestoneRow } from "../types/generated/webui.service.events";
+import { formatCount } from "../composables/format";
 
 const POLL_MS = 15_000;
 
@@ -42,8 +44,7 @@ function target(event: EventCard): MilestoneRow | undefined {
 }
 
 function pickable(event: EventCard, milestone: MilestoneRow) {
-  const planned = [event.summons, event.brews, event.fights, event.upgrades].some(Boolean);
-  return planned && !milestone.reached;
+  return event.plans.length > 0 && !milestone.reached;
 }
 
 function pick(event: EventCard, milestone: MilestoneRow) {
@@ -58,10 +59,6 @@ function complete(event: EventCard) {
 function progress(event: EventCard) {
   const last = event.milestones[event.milestones.length - 1];
   return last && event.points !== null ? Math.min(100, (100 * event.points) / last.points) : 0;
-}
-
-function points(count: number) {
-  return count.toLocaleString();
 }
 </script>
 
@@ -111,25 +108,18 @@ function points(count: number) {
             </summary>
 
             <div class="stack" style="--space: var(--space-s)">
-              <div
-                v-if="event.points !== null"
-                class="cluster standing"
-                style="--space: var(--space-l)"
-              >
-                <div>
-                  <span class="figure">{{ points(event.points) }}</span>
-                  <span class="caps">{{ event.points_name }}</span>
-                </div>
-                <div v-if="event.position !== null">
-                  <span class="figure">#{{ event.position }}</span>
-                  <span class="caps">
-                    place<template v-if="event.rating_size"> of {{ event.rating_size }}</template>
-                  </span>
-                </div>
-                <div v-if="event.to_next !== null">
-                  <span class="figure">{{ points(event.to_next) }}</span>
-                  <span class="caps">to the next</span>
-                </div>
+              <div v-if="event.points !== null" class="cluster" style="--space: var(--space-l)">
+                <Stat :value="formatCount(event.points)" :label="event.points_name" />
+                <Stat
+                  v-if="event.position !== null"
+                  :value="`#${event.position}`"
+                  :label="event.rating_size ? `place of ${event.rating_size}` : 'place'"
+                />
+                <Stat
+                  v-if="event.to_next !== null"
+                  :value="formatCount(event.to_next)"
+                  label="to the next"
+                />
               </div>
               <p v-else class="note">Not joined yet.</p>
 
@@ -168,7 +158,7 @@ function points(count: number) {
                       @click="pick(event, milestone)"
                       @keydown.enter.space.prevent="pick(event, milestone)"
                     >
-                      <td class="num">{{ points(milestone.points) }}</td>
+                      <td class="num">{{ formatCount(milestone.points) }}</td>
                       <td>
                         {{ milestone.prize }}
                         <span v-if="milestone.reached" class="good" title="Reached">✓</span>
@@ -181,37 +171,41 @@ function points(count: number) {
                 Milestones come when it starts.
               </p>
 
-              <ShardPlan
-                v-if="event.summons && target(event) && section.key === 'running'"
-                :plan="event.summons"
-                :target="target(event)!"
-                :points="event.points ?? 0"
-              />
-              <BrewPlan
-                v-if="event.brews && target(event) && section.key === 'running'"
-                :plan="event.brews"
-                :target="target(event)!"
-                :points="event.points ?? 0"
-              />
-              <FightPlan
-                v-if="event.fights && target(event) && section.key === 'running'"
-                :plan="event.fights"
-                :target="target(event)!"
-                :points="event.points ?? 0"
-                :per-day="event.max_points_per_day"
-              />
-              <UpgradePlan
-                v-if="event.upgrades && target(event) && section.key === 'running'"
-                :plan="event.upgrades"
-                :target="target(event)!"
-                :points="event.points ?? 0"
-              />
+              <template v-if="target(event) && section.key === 'running'">
+                <template v-for="plan in event.plans" :key="plan.kind">
+                  <ShardPlan
+                    v-if="plan.kind === 'shards'"
+                    :plan="plan"
+                    :target="target(event)!"
+                    :points="event.points ?? 0"
+                  />
+                  <BrewPlan
+                    v-else-if="plan.kind === 'brews'"
+                    :plan="plan"
+                    :target="target(event)!"
+                    :points="event.points ?? 0"
+                  />
+                  <FightPlan
+                    v-else-if="plan.kind === 'runs'"
+                    :plan="plan"
+                    :target="target(event)!"
+                    :points="event.points ?? 0"
+                    :per-day="event.max_points_per_day"
+                  />
+                  <UpgradePlan
+                    v-else
+                    :plan="plan"
+                    :target="target(event)!"
+                    :points="event.points ?? 0"
+                  />
+                </template>
+              </template>
 
               <details v-if="event.points_tables.length">
                 <summary>
                   Rules
                   <small v-if="event.max_points_per_day" class="muted">
-                    (at most {{ points(event.max_points_per_day) }} a day)
+                    (at most {{ formatCount(event.max_points_per_day) }} a day)
                   </small>
                 </summary>
                 <div class="stack" style="--space: var(--space-m)">
@@ -301,10 +295,6 @@ function points(count: number) {
   font-size: var(--text-sm);
   color: var(--on-surface);
   white-space: nowrap;
-}
-
-.standing > div {
-  display: grid;
 }
 
 .reached td {

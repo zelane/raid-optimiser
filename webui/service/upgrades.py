@@ -11,8 +11,9 @@ many reaching a milestone takes, all of one rank: enough without overshooting.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
-from optimiser.events import GameEvent, Rule
+from optimiser.events import GameEvent, Rule, rule_points
 
 UPGRADE = "Artifact_Upgrade"
 TO_LEVEL = 12
@@ -29,6 +30,7 @@ class UpgradeRow:
 class UpgradePlan:
     level: int
     rows: tuple[UpgradeRow, ...]
+    kind: Literal["upgrades"] = "upgrades"
 
 
 def upgrade_plan(event: GameEvent) -> UpgradePlan | None:
@@ -41,18 +43,9 @@ def upgrade_plan(event: GameEvent) -> UpgradePlan | None:
 
 
 def upgrade_points(rules: tuple[Rule, ...], rank: str, to_level: int) -> int:
-    """What a piece of this rank earns going from +0 to `to_level`: each level's rule for its
-    rank (a rule held to anything else, its rarity or set, is left out)."""
-    total = 0
-
-    for rule in rules:
-        if rule.action != UPGRADE or not isinstance(rule.points, int):
-            continue
-
-        fields = {c.field: c.value for c in rule.conditions}
-        level = fields.get("Level")
-
-        if fields.keys() == {"Rank", "Level"} and fields["Rank"] == rank:
-            total += rule.points if isinstance(level, int) and level <= to_level else 0
-
-    return total
+    """What a piece of this rank earns going from +0 to `to_level`: what each level reached on
+    the way earns (a rule held to anything else, its rarity or set, is left out)."""
+    return sum(
+        rule_points(rules, UPGRADE, {"Rank": rank, "Level": level})
+        for level in range(1, to_level + 1)
+    )
