@@ -734,3 +734,6 @@ Shell: `grep` is aliased to ugrep, so use `/usr/bin/grep`.
 - **Solver:** the MILP in HiGHS: its variables, lexicographic ranking, damage ranked by log tangents.
 - **Raider oracle:** calling game code from an injected DLL, to check formulas against the game.
 - **Assets:** how the extracted portraits, art, icons and banners are named.
+
+`docs/sim-service.md` — the plan for a hosted, paid sim: our own Rust engine checked against the
+battle host, the reader as a local server for a static site, no game data kept on our servers.
