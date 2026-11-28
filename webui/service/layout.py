@@ -63,6 +63,7 @@ def nav_sections(path: str, optimiser_link: str) -> tuple[NavSection, ...]:
             (
                 ("/teams", "Finder", path.startswith("/teams")),
                 ("/team-gear", "Gear", path.startswith("/team-gear")),
+                ("/sims", "Sim", path.startswith("/sims")),
             ),
         ),
         (

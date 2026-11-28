@@ -118,7 +118,7 @@ def print_report(fights: list[Fight]) -> None:
         print(f"    9 in 10 over {deciles[0] / 1e6:.1f}M, 1 in 10 over {deciles[-1] / 1e6:.1f}M")
         turns = [f.boss_turns for f in fights]
 
-        if any(turns):  # a boss fight (the co-op boss's World-Killer counts them)
+        if all(turns):  # a boss counting its turns in every fight (the co-op boss's World-Killer)
             print(f"  boss turns: {statistics.mean(turns):.1f} ({min(turns)} to {max(turns)})")
 
     print(f"  {'':24} {'dealt':>13} {'taken':>10} {'healed':>11}   (seed 0 | average)")

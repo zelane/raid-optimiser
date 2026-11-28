@@ -333,6 +333,10 @@ in-game commands below; the account and the game's tables come from the game its
   counted once, in its producer's statistics; `DamageDealt` is in full past the boss's HP) and
   reports how often a fight is won and its turns (`BattleState.CurrentTurn`, everyone's, and
   `PlayerTurnCount`, the team's).
+  The web UI's Sim page (`/sims`: `webui/routes/sims.py`, `forms/sims.py`, `service/sims.py`,
+  `pages/Sims.vue`) runs `just sim` for a saved team against the target picker's stage
+  (`webui/sims.py`, one at a time, in a worker thread; `paths.LAST_SIM` records what it was of)
+  and shows the last sim's clears, turns per win, damage and each champion's average rows.
   Real fights are captured whole by `just capture`: it waits for a new one (a setup id, `z`,
   neither cached when it starts nor saved: the cache isn't always emptied between fights), saves
   its setup from the game's PlayerPrefs (`tools/capture_setup.py`: `BattleSetupCache_<user>` in
@@ -431,7 +435,7 @@ in-game commands below; the account and the game's tables come from the game its
   bar (`subbar`), unless the page has its own (`composables/subnav.ts`: `usePageSubnav` hands
   the layout its tabs as data, which it draws like its own; Accessories' steps). Optimiser: the
   champion list, the champion last solved for (`store.latest_champion`), Config; Teams: the finder
-  (the Chimera's trials too) and Gear; Info: Faction Wars, Events, Empower (`/empower`),
+  (the Chimera's trials too), Gear and Sim; Info: Faction Wars, Events, Empower (`/empower`),
   Masteries, Skill books.
 - Info page (`/info`, `webui/service/info.py`): the account's progress from the snapshot.
   Faction Wars Hard: per crypt, stages short of their stars and the battle quests they may still

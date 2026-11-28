@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.types import Scope
 
-from webui.routes import accessories, champions, config, game, info, teams
+from webui.routes import accessories, champions, config, game, info, sims, teams
 
 HERE = Path(__file__).resolve().parent
 
@@ -45,5 +45,6 @@ app.include_router(champions.router)
 app.include_router(config.router)
 app.include_router(accessories.router)
 app.include_router(teams.router)
+app.include_router(sims.router)
 app.include_router(info.router)
 app.include_router(game.router)

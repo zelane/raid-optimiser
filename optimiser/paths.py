@@ -4,7 +4,7 @@ schemas they're decoded with, and the store. Everything that isn't code is under
 (gitignored); the schema is tracked.
 
 - `ROOT`, `DATA`, `SNAPSHOT`, `EVENTS`, `GAME`, `SCHEMA`, `EVENTS_SCHEMA`, `STORE`,
-  `WATCH_LOG`, `POTENTIALS`: the paths
+  `WATCH_LOG`, `POTENTIALS`, `HOST_RESULTS`, `LAST_SIM`: the paths
 """
 
 from pathlib import Path
@@ -19,3 +19,5 @@ EVENTS_SCHEMA = ROOT / "schema" / "events.json"  # the snapshot's events, the ga
 STORE = DATA / "state" / "optimiser.sqlite"
 WATCH_LOG = DATA / "cache" / "watch.log"  # what just watch, started from the web UI, says
 POTENTIALS = DATA / "cache" / "potentials.pickle"  # accessory scores, kept by piece state
+HOST_RESULTS = DATA / "cache" / "host" / "results"  # the battle host's last fights (just fight)
+LAST_SIM = DATA / "cache" / "host" / "last-sim.json"  # what the web UI's last sim was of
