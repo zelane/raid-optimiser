@@ -176,6 +176,7 @@ def build_raid_timing(settings):
         "hours_between_raids": settings["HoursBetweenRaids"],
         "activity_hours": settings["RaidActivityHours"],
         "max_prize_offset": settings["MaxChimeraPrizeOffset"],
+        "max_boss_turns": settings["MaxBossBattleTurns"],  # a fight's: the setup's `bt`
     }
 
 

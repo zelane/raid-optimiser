@@ -20,4 +20,4 @@ STORE = DATA / "state" / "optimiser.sqlite"
 WATCH_LOG = DATA / "cache" / "watch.log"  # what just watch, started from the web UI, says
 POTENTIALS = DATA / "cache" / "potentials.pickle"  # accessory scores, kept by piece state
 HOST_RESULTS = DATA / "cache" / "host" / "results"  # the battle host's last fights (just fight)
-LAST_SIM = DATA / "cache" / "host" / "last-sim.json"  # what the web UI's last sim was of
+LAST_SIM = DATA / "cache" / "host" / "last-sim.json"  # the web UI's last sim, summed up

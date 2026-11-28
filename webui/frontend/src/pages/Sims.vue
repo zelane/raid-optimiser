@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // The sim page: a saved team against a stage (the target picker's), fought many times on the
-// game's own battle engine, and the last sim's results: how often it cleared, the turns a win
-// took, the damage, each champion's result-screen rows on average.
+// game's own battle engine, and the last sim's results: how often it cleared (against a boss
+// that can't die, lasted to the turn limit), the turns, the damage, the Chimera's trials
+// completed, each champion's result-screen rows on average.
 import { Head, router } from "@inertiajs/vue3";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import PageHead from "../components/PageHead.vue";
 import SentNote from "../components/SentNote.vue";
 import Stat from "../components/Stat.vue";
@@ -16,6 +17,7 @@ const props = defineProps<{ page: SimPage; picker: Picker }>();
 
 const team = ref(props.page.team === null ? "" : String(props.page.team));
 const runs = ref(String(props.page.seeds));
+const target = ref(props.picker.target);
 const running = ref(false);
 const sent = ref<Sent | null>(null);
 
@@ -29,25 +31,33 @@ const areas = computed(() => {
 const chosen = computed(() => props.page.teams.find((option) => String(option.id) === team.value));
 const result = computed(() => props.page.result);
 
-function fields(target: string): Record<string, string> {
-  return { team: team.value, runs: runs.value, target };
+function fields(): Record<string, string> {
+  return { team: team.value, runs: runs.value, target: target.value };
 }
 
-// The page's state rides in its URL: a target, team or run count changed visits it again.
-function visit(target = props.picker.target) {
-  const query = new URLSearchParams(fields(target));
-  router.get(`/sims?${query}`, {}, { preserveState: true, preserveScroll: true });
-}
+// Choices stay on the page (only Run asks the server for anything), kept in the address bar
+// so a reload keeps them: the history entry is replaced in place, Inertia's page state with it.
+watch([team, runs, target], () => {
+  const url = `/sims?${new URLSearchParams(fields())}`;
+  window.history.replaceState(window.history.state, "", url);
+});
 
 async function run() {
   running.value = true;
   sent.value = null;
-  sent.value = await sendToGame("/sims/run", fields(props.picker.target));
+  sent.value = await sendToGame("/sims/run", fields());
   running.value = false;
   if (!sent.value.error) router.reload({ only: ["page"] });
 }
 
 const number = (value: number) => value.toLocaleString("en-GB");
+
+// The fights not cleared, the first dozen by seed, with how each ended.
+const uncleared = computed(() => {
+  const misses = props.page.result?.uncleared ?? [];
+  const shown = misses.slice(0, 12).map((f) => `${f.seed} (${f.ending}, ${f.turns} turns)`);
+  return shown.join(", ") + (misses.length > 12 ? ` and ${misses.length - 12} more` : "");
+});
 </script>
 
 <template>
@@ -61,14 +71,14 @@ const number = (value: number) => value.toLocaleString("en-GB");
     </PageHead>
 
     <section class="target-section" aria-label="Opponent">
-      <TargetPicker :picker="picker" @picked="(_, target) => visit(target)" />
+      <TargetPicker :picker="picker" @picked="(_, picked) => (target = picked)" />
     </section>
 
     <section class="stack panel" aria-label="Team">
       <div class="cluster" style="--space: var(--space-s); --align: end">
         <label class="stack" style="--space: var(--space-3xs)">
           <span class="caps">Saved team</span>
-          <select v-model="team" @change="visit()">
+          <select v-model="team">
             <option value="">Pick a team…</option>
             <optgroup v-for="[area, options] in areas" :key="area" :label="area">
               <option v-for="option in options" :key="option.id" :value="String(option.id)">
@@ -79,7 +89,7 @@ const number = (value: number) => value.toLocaleString("en-GB");
         </label>
         <label class="stack" style="--space: var(--space-3xs)">
           <span class="caps">Runs</span>
-          <input v-model="runs" class="runs" type="number" min="1" max="3000" @change="visit()" />
+          <input v-model="runs" class="runs" type="number" min="1" max="3000" />
         </label>
         <button type="button" :disabled="running || !team" @click="run">
           {{ running ? "Running…" : "Run" }}
@@ -87,7 +97,8 @@ const number = (value: number) => value.toLocaleString("en-GB");
       </div>
       <p v-if="chosen" class="note">{{ chosen.champions.join(" · ") }}</p>
       <p v-if="running" class="note">
-        About a second a fight per process, six at once: 300 runs take a minute or so.
+        Six fights at once: 300 dungeon runs take a minute or so; a Chimera fight is about 15 s, so
+        100 of them take about 4 minutes.
       </p>
       <SentNote :sent="sent" done="Done." />
     </section>
@@ -97,20 +108,48 @@ const number = (value: number) => value.toLocaleString("en-GB");
       <div class="cluster" style="--space: var(--space-xl)">
         <Stat
           :value="`${result.cleared} of ${result.fights}`"
-          :label="`cleared (${((100 * result.cleared) / result.fights).toFixed(1)} %)`"
+          :label="`${result.unkillable ? 'lasted to the turn limit' : 'cleared'} (${((100 * result.cleared) / result.fights).toFixed(1)} %)`"
+        />
+        <Stat
+          v-if="result.trials_count"
+          :value="`${result.trials_mean} of ${result.trials_count}`"
+          label="trials a fight"
         />
         <Stat
           v-if="result.turns_mean !== null"
           :value="String(result.turns_mean)"
-          label="turns per win"
+          :label="result.unkillable ? 'turns' : 'turns per win'"
         >
           {{ result.turns_min }} to {{ result.turns_max }}
         </Stat>
         <Stat :value="number(result.damage_mean)" label="damage, average" />
       </div>
-      <p v-if="result.lost_seeds.length" class="note bad">
-        Not cleared: seeds {{ result.lost_seeds.join(", ") }}
+      <p v-if="result.uncleared.length" class="note bad">Not cleared, by seed: {{ uncleared }}</p>
+      <p v-if="result.unkillable" class="note">
+        The boss can't die: the game ends the fight at its turn limit and calls it a defeat. Here
+        that's a clear; a fight ends short of it when the team is defeated.
       </p>
+      <div v-if="result.trials_count" class="table-well">
+        <table>
+          <thead>
+            <tr>
+              <th>Trial completed</th>
+              <th class="num">Fights</th>
+              <th class="num">Boss turn, average</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="trial in result.trials" :key="trial.name">
+              <td>{{ trial.name }}</td>
+              <td class="num">{{ trial.completed }} of {{ result.fights }}</td>
+              <td class="num">{{ trial.boss_turn }}</td>
+            </tr>
+            <tr v-if="!result.trials.length">
+              <td colspan="3" class="note">None completed in any fight.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       <div class="table-well">
         <table>
           <thead>

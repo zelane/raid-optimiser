@@ -8,9 +8,18 @@ test_setups.py - writing the account as the game's JSON for the battle host
 - `test_relic_setup`: skills at the level the relic's level reaches, stones' skills, crit as a
   percentage
 - `test_team_setup`: the template's enemies stay, the team's slots are numbered
+- `test_turn_limit`: everyone's turns, an area's own, the co-op boss's turns
 """
 
-from optimiser.setups import Enums, Relics, game_bonus, relic_setup, skill_setups, team_setup
+from optimiser.setups import (
+    Enums,
+    Relics,
+    game_bonus,
+    relic_setup,
+    skill_setups,
+    team_setup,
+    turn_limit,
+)
 
 ENUMS = Enums({"StatKindId": {"Speed": 4, "CriticalDamage": 8}})
 
@@ -80,3 +89,16 @@ def test_team_setup() -> None:
 
     assert setup["s"] == template["s"]
     assert setup["f"]["h"] == [{"h": 1, "t": 1}, {"h": 2, "t": 2}]
+
+
+def test_turn_limit() -> None:
+    enums = Enums({"AreaTypeId": {"Dungeon": 2, "Hydra": 8}})
+    settings = {
+        "MaxTurnsInBattle": 1500,
+        "SpecificMaxTurnsInBattleByArea": {"8": 1000},
+        "WorldBossTurnLimit": 75,
+    }
+
+    assert turn_limit("Dungeon", settings, enums) == {"mt": 1500}
+    assert turn_limit("Hydra", settings, enums) == {"mt": 1000}
+    assert turn_limit("CooperationEventWorldBoss", settings, enums) == {"bt": 75}

@@ -14,6 +14,7 @@ enemies are as the server sent them: the template.
 - `Enums`: the game's enums by name (schema/schema.json)
 - `build_request`: what the host's `build` needs for some champions
 - `stage_setup`: a stage's setup with no team yet, from the static data
+- `turn_limit`, `chimera_fields`: what the server adds for a stage's area
 - `team_setup`: the template with the player's team made of the champions given
 - `slot`, `skill_setups`: one champion's slot, from the account and its built parts
 - `Relics`, `relic_setup`: a worn relic's skills and its stones' (the game's builder gives only
@@ -32,7 +33,10 @@ from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 from optimiser.tables import faction_name
 
 CRIT_KEYS = frozenset({"u", "m"})  # BattleStats' C.RATE and C.DMG
+# A built setup's own seed (`r`), the host's seed 0: one no numbered seed (1, 2, …) repeats
+OWN_SEED = 2**31 - 1
 ENEMY = -1  # the enemy side's owner id
+FIXED_ONE = 2**32  # 1 as the game's Fixed (Q32.32)
 
 
 @dataclass(frozen=True)
@@ -80,14 +84,15 @@ def build_request(snapshot: dict, champion_ids: list[int], enums: Enums) -> dict
     }
 
 
-PVE = 1  # BattleKindId
+PVE, ALLIANCE_CHIMERA = 1, 8  # BattleKindId
 
 
 def stage_setup(stage_id: int, snapshot: dict, enums: Enums, preset: int | None) -> dict:
     """A `BattleSetup` for a stage, as the server would send it, the player's team still
     empty: the stage's enemies (its first formation, every wave), with their skills at level 1,
     its stat modifiers, and the server's turn limit. Checked against a captured Ice Golem Hard 10
-    setup: the same but for the fields about rewards (multiplier, double runs, run number)."""
+    setup: the same but for the fields about rewards (multiplier, double runs, run number). A
+    Chimera stage's replays a quick battle exactly once the Chimera starts at the clan's HP."""
     stage = json.loads((GAME / "enemies.json").read_text())["stages"][str(stage_id)]
     types = {t["id"]: t for t in json.loads((GAME / "hero_types.json").read_text())}
 
@@ -118,10 +123,9 @@ def stage_setup(stage_id: int, snapshot: dict, enums: Enums, preset: int | None)
         for m in stage["modifiers"]
     ]
     league = enums.value("ArenaLeagueId", snapshot["arena_league"] or "GoldV")
-    max_turns = (snapshot.get("battle_settings") or {}).get("MaxTurnsInBattle")
 
-    return {
-        "r": 1,
+    setup = {
+        "r": OWN_SEED,
         "k": PVE,
         "f": {"p": 0, "i": snapshot["user_id"], "l": league, "h": [], "ls": 0},
         "s": {
@@ -135,9 +139,53 @@ def stage_setup(stage_id: int, snapshot: dict, enums: Enums, preset: int | None)
         "i": stage_id,
         "d": 0,
         **({"pi": preset} if preset else {}),
-        **({"mt": max_turns} if max_turns else {}),  # the server's turn limit for a stage
+        **turn_limit(stage["area"], snapshot.get("battle_settings") or {}, enums),
         "bm": 1,
     }
+
+    if stage["area"] == "Chimera":
+        setup |= chimera_fields(stage_id, snapshot, enums, setup["s"]["h"])
+
+    return setup
+
+
+def chimera_fields(stage_id: int, snapshot: dict, enums: Enums, enemies: list[dict]) -> dict:
+    """What the server adds to a Chimera fight: its kind and difficulty, and the Chimera
+    starting at the HP the clan's has left this raid (`InitialState.HealthModifier`: that less
+    its top, in `Fixed`; the reader's `chimera.health_left`, full if it has none). The HP
+    changes the fight; a captured quick battle replays exactly only with it."""
+    tier = next(
+        t
+        for t in json.loads((GAME / "enemies.json").read_text())["chimera"]["tiers"]
+        if stage_id in t["stages"]
+    )
+    left = ((snapshot.get("chimera") or {}).get("health_left") or {}).get(tier["difficulty"])
+    taken = tier["health"] - left if left is not None else 0
+
+    for enemy in enemies:  # the Chimera alone
+        enemy["f"] = {"c": {"h": -round(taken * FIXED_ONE)}}
+
+    return {
+        "k": ALLIANCE_CHIMERA,
+        "c": enums.value("AllianceChimeraDifficulty", tier["difficulty"]),
+    }
+
+
+def turn_limit(area: str, settings: dict, enums: Enums) -> dict:
+    """The server's turn limit for a stage in `area`, as captured setups have it: the boss's
+    turns for the Chimera (its static settings) and the co-op boss (`WorldBossTurnLimit`), else
+    everyone's (`MaxTurnsInBattle`, or the area's own: Hydra's 1,000)."""
+    match area:
+        case "Chimera":
+            raw = json.loads((GAME / "enemies.json").read_text())
+            return {"bt": raw["chimera"]["timing"]["max_boss_turns"]}
+        case "CooperationEventWorldBoss":
+            return {"bt": settings["WorldBossTurnLimit"]}
+
+    by_area = settings.get("SpecificMaxTurnsInBattleByArea") or {}
+    area_id = str(enums.by_name["AreaTypeId"].get(area))
+    limit = by_area.get(area_id, settings.get("MaxTurnsInBattle"))
+    return {"mt": limit} if limit else {}
 
 
 def team_setup(template: dict, slots: list[dict]) -> dict:

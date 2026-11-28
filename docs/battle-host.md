@@ -86,6 +86,7 @@ Golem Hard 10 run.
 | Ice Golem Hard 10, same seed (2031540557) | Captured setup vs built setup, fought | Identical: Victory in 27 turns (25 the team's), 14,298,111 dealt |
 | Fire Knight Hard 10, a real fight replayed (seed 1992284312), and built from stage data | Host's result vs the game's record (`just capture`); built setup vs captured | Exact: Victory, 52 turns, every row; setups identical but for reward fields |
 | Ice Golem Hard 10, a real fight replayed (seed 1062678995) | Host's result vs the game's result screen | Exact: Victory, 34 turns; every champion's dealt, taken and healed |
+| UNM Chimera quick battle (team 802, seed 1123672800), setup built from the account and stage data | Host's result vs the game's record, read from memory | Exact: team defeated at 553 turns, every row, all 27 trials; only with the Chimera starting at the clan's HP left (0 then) |
 
 ## Results so far
 
@@ -181,8 +182,13 @@ Settled by the Ice Golem result screen: the game's "Turns" is the battle's turn 
 
 - [ ] **What-ifs:** change gear or relics before a sim ("does relic X raise damage"), as an
   option on `just sim`.
-- [ ] **Chimera trials:** capture a Chimera fight, then read which trials a run clears from its
-  result.
+- [x] **Chimera trials:** a full UNM Chimera fight (team 803, seed 455380958) replays exactly:
+  defeat by turn limit at 1,059 turns (994 the team's), and all 18 Lion and Snake trials the
+  same (started, progress, the boss turn each was completed on). It was a quick battle: its
+  record had no statistics and its Ram trials' objects had been reused by the time the reader
+  got to it, so neither could be compared (a later quick battle's had both). Sims report trials
+  per fight; this team completes Lion Tail Easy and Snake Wing Easy every time, Snake Paw Easy
+  in about half, 2.4 of 27 a fight.
 - [ ] **More bosses:** stages work from static data; check Clan Boss, Hydra and Chimera setups
   against one capture each, as for Ice Golem.
 - [ ] **Optimiser stats:** add the Academy and Blessings to `stats.py`, which the optimiser's

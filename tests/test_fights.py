@@ -7,6 +7,9 @@ test_fights.py - reading the battle host's results (`optimiser.fights`) on a mad
 - `test_dealt_taken_healed`: hits on the boss are dealt, the boss's hits taken, heals healed
 - `test_boss_turns`: the boss's turns, summed over rounds
 - `test_differences`: a replay against the game's record, row by row
+- `test_turn_limit_clears_unkillable`: lasting to the turn limit clears a boss that can't die,
+  not one that can
+- `test_trials`: the Chimera's trials from the final state, and a replay's checked against them
 """
 
 import json
@@ -14,9 +17,11 @@ from pathlib import Path
 
 from dataclasses import replace
 
-from optimiser.fights import differences, read_fight
+from optimiser.fights import HeroTypes, differences, read_fight
 
-NAMES = {3506: "Venus", 9956: "Donatello", 28016: "Tainted Demon Lord"}
+TYPES = HeroTypes(
+    {3506: "Venus", 9956: "Donatello", 28016: "Tainted Demon Lord"}, frozenset({28016})
+)
 
 
 def row(producer: int, target: int, damage: int = 0, healed: int = 0) -> dict:
@@ -28,20 +33,20 @@ def hero(owner: int, type_id: int, turns: list[list[dict]], boss_turns: int = 0)
     return {"o": owner, "t": type_id, "r": {"1": {"r": by_turn, "t": boss_turns}}}
 
 
-def write(tmp_path: Path, heroes: dict[int, dict]) -> Path:
+def write(tmp_path: Path, heroes: dict[int, dict], **result) -> Path:
     path = tmp_path / "result-0.json"
-    path.write_text(json.dumps({"x": {"d": {str(i): h for i, h in heroes.items()}}}))
+    path.write_text(json.dumps({"x": {"d": {str(i): h for i, h in heroes.items()}}, **result}))
     return path
 
 
-def fight(tmp_path: Path):
+def fight(tmp_path: Path, boss: int = 28016, **result):
     poison = row(0, 5, damage=50_000)
     heroes = {
         0: hero(1, 3506, [[poison, dict(poison)]]),
         4: hero(1, 9956, [[row(4, 5, damage=20_000), row(4, 0, healed=3_000)]]),
-        5: hero(-1, 28016, [[row(5, 0, damage=700), row(0, 5, damage=50_000)]], boss_turns=7),
+        5: hero(-1, boss, [[row(5, 0, damage=700), row(0, 5, damage=50_000)]], boss_turns=7),
     }
-    return read_fight(write(tmp_path, heroes), NAMES)
+    return read_fight(write(tmp_path, heroes, **result), TYPES)
 
 
 def test_rows_count_once_each(tmp_path: Path) -> None:
@@ -71,3 +76,22 @@ def test_differences(tmp_path: Path) -> None:
 
     assert differences(real, real) == []
     assert differences(sim, real) == ["turns: game 0, replay 1", "Venus dealt: game 100,000, replay 99"]
+
+
+def test_turn_limit_clears_unkillable(tmp_path: Path) -> None:
+    lasted = fight(tmp_path, i=2, c=2)
+    wiped = fight(tmp_path, i=2, c=0)
+    dungeon = fight(tmp_path, boss=9956, i=2, c=2)
+
+    assert (lasted.cleared, lasted.unkillable) == (True, True)
+    assert (wiped.cleared, wiped.ending) == (False, "team defeated")
+    assert (dungeon.cleared, dungeon.ending) == (False, "turn limit")
+
+
+def test_trials(tmp_path: Path) -> None:
+    trials = {"8000613": {"s": 1, "t": 16}, "8000602": {"s": 0}}
+    real = fight(tmp_path, s={"s": {"h": [{"ch": trials}]}})
+    sim = replace(real, trials={8000613: 16, 8000602: 40})
+
+    assert real.trials == {8000613: 16, 8000602: None}
+    assert differences(sim, real) == ["trial 8000602 completed: game None, replay 40"]

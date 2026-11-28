@@ -1,19 +1,18 @@
 """
 sims.py - running a sim from the web UI: `just sim` (the battle host, the game's own engine, on
-a saved team against a stage; the justfile knows the paths), one at a time, then a record of
-what it was of beside its results (`paths.LAST_SIM`), for the page to show with them.
+a saved team against a stage; the justfile knows the paths), one at a time. The page sums its
+results up as soon as it's done (`service.sims.record_result`).
 
 - `TIMEOUT`: how long a sim may take (300 fights take about 40 s, plus building the team)
 - `Sim`: what's simmed
 - `run`: the sim, done or why not
 """
 
-import json
 import subprocess
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
-from optimiser.paths import LAST_SIM, ROOT
+from optimiser.paths import ROOT
 from webui.result import Err, Result
 
 TIMEOUT = 1800.0
@@ -53,5 +52,4 @@ def run(sim: Sim) -> Result[None]:
         lines = [line for line in (done.stdout + done.stderr).splitlines() if line.strip()]
         return Err(" / ".join(lines[-LINES:]) or f"`just sim` exited {done.returncode}")
 
-    LAST_SIM.write_text(json.dumps(asdict(sim)))
     return None

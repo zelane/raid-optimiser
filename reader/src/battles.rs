@@ -6,7 +6,7 @@
 //! either), with its setup's id, so a captured fight's replay can be checked against the real one.
 //!
 //! - `read`: every finished fight found, by its setup's id
-//! - `fight`, `setup`, `heroes`, `rounds`, `row`: one fight's parts
+//! - `fight`, `setup`, `heroes`, `rounds`, `row`, `trials`: one fight's parts
 //! - `guid`: a .NET `Guid` as text
 
 use std::collections::BTreeMap;
@@ -20,13 +20,20 @@ use crate::process::Process;
 
 const RESULT: &str = "SharedModel.Battle.Core.Result.BattleResult";
 const SETUP: &str = "SharedModel.Battle.Core.Setup.BattleSetup";
+const CHALLENGE: &str = "SharedModel.Battle.Core.Hero.Challenge";
 
 offsets!(ResultFields, "BattleResult" {
-    outcome: "ResultType", setup: "Setup", state: "FinalState", statistics: "Statistics",
+    outcome: "ResultType", finish: "FinishCause", setup: "Setup", state: "FinalState",
+    statistics: "Statistics",
 });
 offsets!(SetupFields, "BattleSetup" { id: "Id", seed: "RandomSeed", stage: "StageId", start: "StartTime" });
 offsets!(StateFields, "BattleState" {
     turn: "CurrentTurn", team_turns: "PlayerTurnCount", finished: "BattleFinished",
+    enemies: "SecondTeam",
+});
+offsets!(ChallengeFields, "Challenge" {
+    started: "IsStarted", target: "TargetProgress", progress: "CurrentProgress",
+    completed: "SelfTurnWhichCompleted",
 });
 offsets!(HeroFields, "HeroStatistics" {
     owner: "TeamOwnerId", id: "Id", type_id: "TypeId", rounds: "_statsPerRound",
@@ -75,11 +82,13 @@ fn fight(process: &Process, layout: &Layout, addr: u64) -> Result<Option<(String
         id,
         json!({
             "i": outcome,
+            "c": b.i32(fields.finish),
             "p": setup,
             "s": {
                 "t": state.i32(state_fields.turn),
                 "pt": state.i32(state_fields.team_turns),
                 "b": state.bool(state_fields.finished),
+                "s": {"h": trials(process, layout, state.ptr(state_fields.enemies))?},
             },
             "x": {"d": heroes(process, layout, by_hero)?},
         }),
@@ -156,6 +165,45 @@ fn row(process: &Process, layout: &Layout, addr: u64) -> Result<Value, String> {
         "d": b.nullable_i32(fields.dealt),
         "h": b.nullable_i32(fields.restored),
     }))
+}
+
+/// The enemy team's heroes with their trials (`BattleHero.Challenges`: the Chimera's), each as
+/// the game's JSON has it: started `s`, target `mp` and progress `cp` (raw `Fixed`), the boss's
+/// turn it was completed on `t`. Other enemies come out with none. An entry whose object is no
+/// longer a `Challenge` (the game reuses some after the fight) is left out.
+fn trials(process: &Process, layout: &Layout, team: u64) -> Result<Value, String> {
+    let fields = ChallengeFields::new(layout)?;
+    let mut heroes = Vec::new();
+
+    if team == 0 {
+        return Ok(Value::Array(heroes));
+    }
+
+    for hero in list_refs(process, process.read(team + layout.field("BattleTeam.Heroes")?)?)? {
+        let by_skill = process.read(hero + layout.field("BattleHero.Challenges")?)?;
+        let mut challenges = Map::new();
+
+        for (skill, addr) in if by_skill == 0 { Vec::new() } else { dict_refs(process, by_skill)? } {
+            if addr == 0 || object_class(process, addr)?.full_name(process)? != CHALLENGE {
+                continue;
+            }
+
+            let b = process.block(addr, fields.span)?;
+            challenges.insert(
+                skill.to_string(),
+                json!({
+                    "s": b.bool(fields.started),
+                    "mp": b.i64(fields.target),
+                    "cp": b.i64(fields.progress),
+                    "t": b.nullable_i32(fields.completed),
+                }),
+            );
+        }
+
+        heroes.push(json!({"ch": challenges}));
+    }
+
+    Ok(Value::Array(heroes))
 }
 
 /// A `System.Guid`'s 16 bytes (an int, two shorts, eight bytes) as its text.

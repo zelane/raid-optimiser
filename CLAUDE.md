@@ -44,7 +44,9 @@ in-game commands below; the account and the game's tables come from the game its
   defenses, each 3v3 defender's skill settings (`arena3x3_priorities`: its slot's
   `PrioritiesSetup`, the game's settings in its `sequences`: openers and `SkillPriorityType` by
   skill id); empty slots are 0 or -1), the Chimera's raid (`chimera`:
-  `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
+  `SharedModelManager.DynamicData.StageData.AllianceChimeraData`; and `health_left`, the clan's
+  Chimera's HP left this raid by difficulty, `UserWrapper.Alliance` → `Alliance.GameData.
+  ChimeraData.Chimeras`) and stage progress (`stages`:
   `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star count;
   the game keeps the count only, not which battle quests earned it), and the server's battle
   settings (`battle_settings`: `SharedModelManager.GameParameters.BattleSettings`, what changes how
@@ -331,12 +333,26 @@ in-game commands below; the account and the game's tables come from the game its
   seed); the report lists the seeds that weren't cleared.
   `optimiser/fights.py` reads the results (`BattleResult` JSON: each `TurnStatistics` row
   counted once, in its producer's statistics; `DamageDealt` is in full past the boss's HP) and
-  reports how often a fight is won and its turns (`BattleState.CurrentTurn`, everyone's, and
-  `PlayerTurnCount`, the team's).
+  reports how often a fight is cleared and its turns (`BattleState.CurrentTurn`, everyone's, and
+  `PlayerTurnCount`, the team's), how the rest ended (`FinishCause`), and the Chimera's trials
+  completed (`BattleHero.Challenges` on the boss in the final state: each one's
+  `SelfTurnWhichCompleted`, `tally_trials`). Against a boss the game won't let die
+  (`BossData.IsUnkillable`: the Chimera, the co-op boss) the game calls every fight a defeat;
+  lasting to the turn limit is the clear. Stage setups carry the server's turn limit
+  (`setups.turn_limit`, as captured setups have it): the Chimera's boss turns (`bt`,
+  `AllianceChimeraSettings.MaxBossBattleTurns`, 65), the co-op boss's (`WorldBossTurnLimit`,
+  75), else everyone's (`mt`, `MaxTurnsInBattle` or the area's own: Hydra's 1,000). A Chimera
+  stage's also its kind and difficulty, and the Chimera starting at the clan's HP left
+  (`setups.chimera_fields`: `InitialState.HealthModifier`, from the snapshot's `health_left`):
+  the HP changes the fight, and with it a quick battle rebuilt from the account replays exactly
+  (a quick battle's setup isn't cached where `just capture` looks: it waits on).
   The web UI's Sim page (`/sims`: `webui/routes/sims.py`, `forms/sims.py`, `service/sims.py`,
   `pages/Sims.vue`) runs `just sim` for a saved team against the target picker's stage
   (`webui/sims.py`, one at a time, in a worker thread; `paths.LAST_SIM` records what it was of)
-  and shows the last sim's clears, turns per win, damage and each champion's average rows.
+  and shows the last sim's clears (how the rest ended), turns, damage, the Chimera's trials and
+  each champion's average rows: summed up as soon as it's done (`service.sims.record_result`),
+  so a terminal run of the host can't change it. Only Run talks to the server; the form's
+  choices ride in the address bar.
   Real fights are captured whole by `just capture`: it waits for a new one (a setup id, `z`,
   neither cached when it starts nor saved: the cache isn't always emptied between fights), saves
   its setup from the game's PlayerPrefs (`tools/capture_setup.py`: `BattleSetupCache_<user>` in
@@ -348,8 +364,11 @@ in-game commands below; the account and the game's tables come from the game its
   found by searching the heap for objects of that class (`Process::find_words`, committed
   private read-write regions, ~6 s; read only), validated (its setup's class, an outcome) and
   written to `data/captures/results/<setup id>.json` in the host's result shape, so
-  `optimiser.fights` reads either. Checked against result screens: a co-op run and an Ice Golem
-  Hard 10 run replay exactly; the screen's "Turns" is `CurrentTurn` (everyone's), not
+  `optimiser.fights` reads either; with its finish cause and the enemy's trials (objects the
+  game has reused since are left out: a Chimera fight's first-form trials; one quick battle's
+  record had no statistics, so `check-capture` compares what's there). Checked against result screens: a
+  co-op run and an Ice Golem Hard 10 run replay exactly, and a full Chimera fight against the
+  game's record (1,059 turns, every Lion and Snake trial); the screen's "Turns" is `CurrentTurn` (everyone's), not
   `PlayerTurnCount`. Not yet: changes to gear
   or relics before a sim.
 - `optimiser/hit.py`: the reference model of a hit (`DamageCalculator`, `DamageContext`, the

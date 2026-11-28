@@ -217,6 +217,7 @@ class RaidTiming:
     hours_between_raids: float
     activity_hours: float
     max_prize_offset: int
+    max_boss_turns: int  # a fight's turn limit, in the Chimera's turns
 
 
 @dataclass(frozen=True)

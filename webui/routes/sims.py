@@ -13,7 +13,7 @@ from webui.forms.common import FormErrors
 from webui.forms.sims import parse_sim_ask
 from webui.forms.targets import parse_target_query
 from webui.responses import inertia_page, read_form, sent
-from webui.result import Err
+from webui.result import Err, failed
 from webui.service import current
 from webui.service import sims as sim_pages
 from webui.service import targets as target_pages
@@ -59,4 +59,9 @@ async def run_sim(request: Request):
     preset = account.preset(asked.team)
     assert preset is not None  # parse_sim_ask checked it
     sim = sims.Sim(picker.stage, picker.title, preset.id, preset.champion_ids, asked.runs)
-    return sent(await run_in_threadpool(sims.run, sim))
+    outcome = await run_in_threadpool(sims.run, sim)
+
+    if not failed(outcome):
+        sim_pages.record_result(account, preset.id, picker.title)
+
+    return sent(outcome)

@@ -109,7 +109,7 @@ fn read_account(process: &Process, layout: &Layout) -> Result<Snapshot, String> 
         arena_defense: teams::arena_defense(process, layout, user)?,
         arena3x3_defense: teams::arena3x3_defense(process, layout, user)?,
         arena3x3_priorities: teams::arena3x3_priorities(process, layout, user)?,
-        chimera: chimera::read(process, layout)?,
+        chimera: chimera::read(process, layout, user)?,
         stages: stages::read(process, layout, user)?,
         battle_settings: settings::read(process, layout)?,
     })

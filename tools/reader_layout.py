@@ -27,6 +27,7 @@ CLASSES = {
     ),
     ("Client.Model.Common.Localization.External", "ExternalStringStorage"): ("_storage",),
     ("Client.Model.Guard", "UserWrapper"): (
+        "Alliance",
         "Heroes",
         "Artifacts",
         "Village",
@@ -166,6 +167,7 @@ CLASSES = {
     ("SharedModel", "SharedModelManager"): ("DynamicData", "GameParameters"),
     ("SharedModel.Battle.Core.Result", "BattleResult"): (
         "ResultType",
+        "FinishCause",
         "Setup",
         "FinalState",
         "Statistics",
@@ -175,6 +177,15 @@ CLASSES = {
         "CurrentTurn",
         "PlayerTurnCount",
         "BattleFinished",
+        "SecondTeam",
+    ),
+    ("SharedModel.Battle.Core.Hero", "BattleTeam"): ("Heroes",),
+    ("SharedModel.Battle.Core.Hero", "BattleHero"): ("Challenges",),
+    ("SharedModel.Battle.Core.Hero", "Challenge"): (
+        "IsStarted",
+        "TargetProgress",
+        "CurrentProgress",
+        "SelfTurnWhichCompleted",
     ),
     ("SharedModel.Battle.Core", "BattleStatistics"): ("StatisticsByHero",),
     ("SharedModel.Battle.Core.Hero.Statistics", "HeroStatistics"): (
@@ -215,6 +226,11 @@ CLASSES = {
     ),
     ("SharedModel.Meta", "DynamicData"): ("StageData",),
     ("SharedModel.Meta.Stages", "DynamicStageData"): ("AllianceChimeraData",),
+    ("Client.Model.Gameplay.Alliance", "AllianceWrapperReadonly"): ("Alliance",),
+    ("Client.Model.Gameplay.Alliance.Data", "Alliance"): ("GameData",),
+    ("SharedModel.Meta.Alliances", "AllianceGameData"): ("ChimeraData",),
+    ("SharedModel.Meta.Alliances.Chimera", "AllianceChimeraData"): ("Chimeras",),
+    ("SharedModel.Meta.Alliances.Chimera", "AllianceChimera"): ("Difficulty", "HealthLeft"),
     ("SharedModel.Meta.Stages.Entities", "ChimeraData"): (
         "RaidStartTime",
         "RaidNumber",
@@ -270,6 +286,7 @@ ROOTS = (
     "SharedModel.Meta.Heroes.HeroesAiPreset",
 )
 ENUMS = {
+    ("SharedModel.Meta.Alliances.Chimera.Enums", "AllianceChimeraDifficulty"),
     ("SharedModel.Battle.Effects", "StatKindId"),
     ("SharedModel.Meta.Artifacts.Sets", "ArtifactSetKindId"),
     ("SharedModel.Meta.Artifacts", "ArtifactKindId"),
