@@ -14,8 +14,8 @@ boundary into the shapes the stat model and solver use, over the game's tables (
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
 - `great_hall_by_affinity`, `parse_relics` (`relic_stats`), `parse_champion`, `parse_artifact`
-  (`parse_line`), `parse_preset` (`parse_skill_settings`), `parse_gear_preset`, `parse_raid`,
-  `team`: its steps
+  (`parse_line`), `parse_preset` (`parse_skill_settings`, `parse_sequence`), `parse_gear_preset`,
+  `parse_raid`, `team`: its steps
 """
 
 from collections.abc import Mapping
@@ -155,10 +155,9 @@ type Locks = Mapping[int, int]
 
 @dataclass(frozen=True)
 class SkillSettings:
-    """A champion's skill settings in a saved team, as auto plays them: `priorities` by skill
-    id, the game's `SkillPriorityType` names (Default, First, Second, Third, NotUsed), and the
-    skills it opens with (`openers`, in order). The game keeps them in a list of sequences;
-    only the first is read."""
+    """A champion's skill settings for one wave of a saved team, as auto plays them:
+    `priorities` by skill id, the game's `SkillPriorityType` names (Default, First, Second,
+    Third, NotUsed), and the skills it opens with (`openers`, in order)."""
 
     priorities: Mapping[int, str]
     openers: tuple[int, ...] = ()
@@ -167,14 +166,14 @@ class SkillSettings:
 @dataclass(frozen=True)
 class Preset:
     """A saved team: `area` is the game's preset type (Pvp for arena attack, Chimera, Hydra,
-    DoomTower, …); `skill_settings` by champion id (empty in snapshots from before the reader
-    read them)."""
+    DoomTower, …); `skill_settings` by champion id, one per wave (the game's sequences; empty
+    in snapshots from before the reader read them)."""
 
     id: int
     name: str
     area: str
     champion_ids: tuple[int, ...]
-    skill_settings: Mapping[int, SkillSettings] = field(default_factory=dict)
+    skill_settings: Mapping[int, tuple[SkillSettings, ...]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -430,12 +429,15 @@ def parse_preset(raw: dict) -> Preset:
     return Preset(raw["id"], raw["name"], raw["area"], team(raw["heroes"]), settings)
 
 
-def parse_skill_settings(setup: dict) -> SkillSettings:
-    first = setup["sequences"][0] if setup["sequences"] else setup
-    openers = first.get("starters") or ([first["starter"]] if first.get("starter") else [])
+def parse_skill_settings(setup: dict) -> tuple[SkillSettings, ...]:
+    """One per wave; a record from before the game kept sequences is one."""
+    return tuple(parse_sequence(sequence) for sequence in setup["sequences"] or [setup])
 
+
+def parse_sequence(sequence: dict) -> SkillSettings:
+    openers = sequence.get("starters") or ([sequence["starter"]] if sequence.get("starter") else [])
     return SkillSettings(
-        priorities={int(skill_id): name for skill_id, name in first["priorities"].items()},
+        priorities={int(skill_id): name for skill_id, name in sequence["priorities"].items()},
         openers=tuple(openers),
     )
 

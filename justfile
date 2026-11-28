@@ -369,7 +369,8 @@ fight setup seeds="600" jobs="6":
 # Any of the account's champions, in what they wear now, against a stage (its id: the enemies
 # from its static data) or a captured fight's enemies (its setup's file): their slots built by
 # the game's own code, then fought like `fight` (just sim 2072010 22704,16470,21539,16536,21504
-# 20 5 — skill settings from that saved team, else the captured fight's, else auto's defaults)
+# 20 5 — skill settings from that saved team (or a file of them in its shape), else the captured
+# fight's, else auto's defaults)
 sim against champions seeds="600" preset="":
     #!/usr/bin/env bash
     set -eu
@@ -377,8 +378,9 @@ sim against champions seeds="600" preset="":
     ids=$(echo "{{champions}}" | tr ',' ' ')
     uv run python -m optimiser.setups request "$work/request.json" $ids
     just host-run build "$work/request.json" "$work/parts.json"
-    uv run python -m optimiser.setups assemble "{{against}}" "$work/parts.json" "$work/setup.json" $ids \
-        $([ -n "{{preset}}" ] && echo --preset "{{preset}}")
+    team=""  # a saved team's id, or a file of skill settings in its shape
+    case "{{preset}}" in "") ;; *[!0-9]*) team="--settings {{preset}}" ;; *) team="--preset {{preset}}" ;; esac
+    uv run python -m optimiser.setups assemble "{{against}}" "$work/parts.json" "$work/setup.json" $ids $team
     just fight "$work/setup.json" "{{seeds}}"
 
 # The battle host on a command (fight, build) with POSIX paths: plain Wine in a prefix of its

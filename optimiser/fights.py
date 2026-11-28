@@ -167,7 +167,9 @@ def trials_of(state: dict) -> dict[int, int | None]:
 
 
 def rows_of(hero: dict) -> list[dict]:
-    return [row for rnd in hero["r"].values() for rows in rnd["r"].values() for row in rows]
+    """A hero's rows, every round's turns'; the game's JSON leaves out a round's `r` when the
+    hero took no turn in it (a Hydra head grown again)."""
+    return [row for rnd in hero["r"].values() for rows in rnd.get("r", {}).values() for row in rows]
 
 
 @dataclass(frozen=True)

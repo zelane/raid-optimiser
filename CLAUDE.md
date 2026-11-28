@@ -345,17 +345,38 @@ in-game commands below; the account and the game's tables come from the game its
   stage's also its kind and difficulty, and the Chimera starting at the clan's HP left
   (`setups.chimera_fields`: `InitialState.HealthModifier`, from the snapshot's `health_left`):
   the HP changes the fight, and with it a quick battle rebuilt from the account replays exactly
-  (a quick battle's setup isn't cached where `just capture` looks: it waits on).
+  (a quick battle's setup isn't cached where `just capture` looks: it waits on). A Hydra stage's
+  enemy team carries the heads it can grow (`setups.hydra_pool`, `TeamSetup.HydraPool`: from the
+  static data's formation, `enemies.json` `hydra_pools`; without it the game's code fails when a
+  head grows). Not yet checked against a captured Hydra setup: a TODO in `docs/battle-host.md`.
   The web UI's Sim page (`/sims`: `webui/routes/sims.py`, `forms/sims.py`, `service/sims.py`,
-  `pages/Sims.vue`) runs `just sim` for a saved team against the target picker's stage
+  `pages/Sims.vue`) runs `just sim` for a team against the target picker's stage. A saved team
+  loads the configurator (`TeamConfigurator.vue`: five slots, Swap through the champion finder,
+  a swapped-in champion from `/sims/slot` with auto's defaults for each wave; under each tile a
+  Skills dropdown, `SkillPriorities.vue`: each wave's priority and openers per active skill, by
+  form, copies of a skill the game swaps in itself left out, `Skill.copy_of`), and the run posts
+  that team (`forms.sims.parse_sim_run`: `slots` as JSON, a `SkillSettings` per wave, `Preset.skill_settings` keeping them all), written
+  for the host as a saved team's settings (`paths.SIM_TEAM`; `setups.py assemble --settings`,
+  `just sim`'s last argument a file instead of a saved team's id); the result names it "…, edited"
+  once changed (`service.sims.team_label`). While it runs the page polls `/sims/progress`
+  (`SimProgress.vue`, `service.sims.sim_progress`: building the slots, then the fights done,
+  counted from the host's results directory, emptied as the fighting starts, a file per fight),
+  and picks it up again after a reload (`SimPage.running`). Stop (`/sims/stop`, `webui.sims.stop`:
+  the sim runs in a process group of its own, ended; Wine needs the KILL) keeps the fights done
+  by then as the result. The result is recorded in the run's worker thread
+  (`routes.sims.run_and_record`), so a page reloaded mid-run still gets it, and while the sim
+  still counts as running (`webui.sims.run`'s `record`; progress shows it summing up: 100 Hydra
+  results are about 1.8 GB), so the page doesn't reload before it's there.
   (`webui/sims.py`, one at a time, in a worker thread; `paths.LAST_SIM` records what it was of)
   and shows the last sim's clears (how the rest ended), turns, damage, the Chimera's trials and
   each champion's average rows: summed up as soon as it's done (`service.sims.record_result`),
   so a terminal run of the host can't change it. Only Run talks to the server; the form's
-  choices ride in the address bar. The team dropdown puts first the saved-team list the stage's
-  own team screen offers (`enemies.team_list`, the picker's `team_list`: the game's
-  `StageExtensions.GetHeroesAiPresetType`, by region then area, else GeneralPve; read from its
-  code, so recheck after a game update), the other lists under it.
+  choices ride in the address bar. The team picker (`TeamPicker.vue`: each team its name over
+  its champions' tiles) shows only the saved-team list the stage's own team screen offers (`enemies.team_list`, the
+  picker's `team_list`: the game's `StageExtensions.GetHeroesAiPresetType`, by region then area,
+  else GeneralPve; read from its code, so recheck after a game update); "Show all" adds the other
+  lists under it. The game copied the GeneralPve teams into each dungeon list when it made them,
+  so the same names recur across lists (3, 1103 … 1503 "Fire Knight").
   Real fights are captured whole by `just capture`: it waits for a new one (a setup id, `z`,
   neither cached when it starts nor saved: the cache isn't always emptied between fights), saves
   its setup from the game's PlayerPrefs (`tools/capture_setup.py`: `BattleSetupCache_<user>` in

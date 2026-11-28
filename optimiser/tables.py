@@ -234,6 +234,7 @@ class Skill:
     placements: tuple[Placement, ...] = ()
     books: tuple[Book, ...] = ()
     description: str = ""  # the game's text, markup stripped
+    copy_of: int | None = None  # a variant of that skill the game swaps in (`use_level_of`)
 
     def damage_bonus_at(self, level: int) -> float:
         """What the books a skill at `level` has had add to its damage."""
@@ -447,6 +448,7 @@ def parse_skills(static: Path) -> dict[int, Skill]:
                 for p in raw["placements"]
             ),
             books=tuple(Book(b["type"], b["value"]) for b in raw["books"]),
+            copy_of=raw.get("use_level_of"),
         )
         for skill_id, raw in read_json(static / "skills.json").items()
     }

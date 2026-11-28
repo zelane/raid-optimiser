@@ -114,7 +114,8 @@ class EnemyCard:
 @dataclass(frozen=True)
 class TargetPicker:
     """`target` ("<stage>:<wave>:<slot>") names the pick, for a form to keep; `stage` is its
-    stage's id, `team_list` the saved-team list its team screen offers (`enemies.team_list`)."""
+    stage's id, `team_list` the saved-team list its team screen offers (`enemies.team_list`),
+    `team_size` how many champions it takes (Hydra 6, arena 4 …)."""
 
     zones: tuple[Option, ...]
     groups: tuple[Option, ...]
@@ -127,6 +128,7 @@ class TargetPicker:
     target: str
     stage: int
     team_list: str
+    team_size: int
 
 
 def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
@@ -155,6 +157,7 @@ def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
         target=f"{stage.id}:{picked.key.replace('-', ':')}",
         stage=stage.id,
         team_list=team_list(stage),
+        team_size=stage.team_size,
     )
 
 

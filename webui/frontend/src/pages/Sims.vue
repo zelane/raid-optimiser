@@ -1,16 +1,20 @@
 <script setup lang="ts">
-// The sim page: a saved team against a stage (the target picker's), fought many times on the
-// game's own battle engine, and the last sim's results: how often it cleared (against a boss
+// The sim page: a team against a stage (the target picker's), fought many times on the game's
+// own battle engine: a saved team loads the configurator (champions swapped in and out, each's
+// skill priorities under their tile), whose team is what runs; and the last sim's results: how often it cleared (against a boss
 // that can't die, lasted to the turn limit), the turns, the damage, the Chimera's trials
 // completed, each champion's result-screen rows on average.
 import { Head, router } from "@inertiajs/vue3";
-import { computed, ref, watch } from "vue";
+import { computed, ref, toRaw, watch } from "vue";
 import PageHead from "../components/PageHead.vue";
 import SentNote from "../components/SentNote.vue";
+import SimProgress from "../components/SimProgress.vue";
 import Stat from "../components/Stat.vue";
 import TargetPicker from "../components/TargetPicker.vue";
+import TeamConfigurator from "../components/TeamConfigurator.vue";
+import TeamPicker from "../components/TeamPicker.vue";
 import { type Sent, sendToGame } from "../composables/send";
-import type { SimPage } from "../types/generated/webui.service.sims";
+import type { SimPage, SlotView } from "../types/generated/webui.service.sims";
 import type { TargetPicker as Picker } from "../types/generated/webui.service.targets";
 
 const props = defineProps<{ page: SimPage; picker: Picker }>();
@@ -18,34 +22,40 @@ const props = defineProps<{ page: SimPage; picker: Picker }>();
 const team = ref(props.page.team === null ? "" : String(props.page.team));
 const runs = ref(String(props.page.seeds));
 const target = ref(props.picker.target);
-const running = ref(false);
+const running = ref(props.page.running); // a sim under way, maybe started before a reload
+const stopped = ref(false);
 const sent = ref<Sent | null>(null);
 
 const teamList = ref(props.picker.team_list);
-
-// The saved teams by list, for the dropdown's groups: first the one the opponent's team screen
-// offers (as the game picks it), then the rest.
-const lists = computed(() => {
-  const groups = new Map<string, typeof props.page.teams>([[teamList.value, []]]);
-  for (const option of props.page.teams)
-    groups.set(option.area, [...(groups.get(option.area) ?? []), option]);
-  return [...groups.entries()]
-    .filter(([, options]) => options.length)
-    .map(
-      ([list, options]) =>
-        [list === teamList.value ? `${list} (this stage's)` : list, options] as const,
-    );
-});
+const waves = ref(props.picker.waves.length);
+const teamSize = ref(props.picker.team_size);
 
 function picked(pick: string, view: Picker) {
   target.value = pick;
   teamList.value = view.team_list;
+  waves.value = view.waves.length;
+  teamSize.value = view.team_size;
 }
-const chosen = computed(() => props.page.teams.find((option) => String(option.id) === team.value));
+
+// The team as the configurator has it: the saved team's, loaded whenever one is picked.
+const savedSlots = (id: string) =>
+  structuredClone(toRaw(props.page.teams.find((option) => String(option.id) === id)?.slots ?? []));
+const slots = ref<SlotView[]>(savedSlots(team.value));
+watch(team, (id) => (slots.value = savedSlots(id)));
+
 const result = computed(() => props.page.result);
 
 function fields(): Record<string, string> {
   return { team: team.value, runs: runs.value, target: target.value };
+}
+
+function teamJson(): string {
+  return JSON.stringify(
+    slots.value.map((slot) => ({
+      champion: slot.champion.id,
+      waves: slot.waves.map(({ openers, priorities }) => ({ openers, priorities })),
+    })),
+  );
 }
 
 // Choices stay on the page (only Run asks the server for anything), kept in the address bar
@@ -57,13 +67,29 @@ watch([team, runs, target], () => {
 
 async function run() {
   running.value = true;
+  stopped.value = false;
   sent.value = null;
-  sent.value = await sendToGame("/sims/run", fields());
+  sent.value = await sendToGame("/sims/run", { ...fields(), slots: teamJson() });
+  finished();
+}
+
+// The sim's over: its results, unless it failed.
+function finished() {
+  if (!running.value) return;
   running.value = false;
-  if (!sent.value.error) router.reload({ only: ["page"] });
+  if (!sent.value?.error) router.reload({ only: ["page"] });
+}
+
+// Ends the sim under way; the fights done by then are its result.
+async function stop() {
+  stopped.value = true;
+  const outcome = await sendToGame("/sims/stop", {});
+  if (outcome.error) sent.value = outcome;
 }
 
 const number = (value: number) => value.toLocaleString("en-GB");
+const short = (value: number) =>
+  value.toLocaleString("en-US", { notation: "compact", maximumSignificantDigits: 3 }); // 9.02M, 10.8B
 
 // The fights not cleared, the first dozen by seed, with how each ended.
 const uncleared = computed(() => {
@@ -78,8 +104,9 @@ const uncleared = computed(() => {
   <div class="stack" style="--space: var(--space-2xl)">
     <PageHead title="Sim">
       <template #lede>
-        A saved team against a stage, fought many times on the game's own battle engine, as auto
-        plays it with the team's skill settings: how often it clears, and how fast.
+        A team against a stage, fought many times on the game's own battle engine, as auto plays it
+        with the team's skill settings: how often it clears, and how fast. Start from a saved team,
+        then swap champions and change their skills.
       </template>
     </PageHead>
 
@@ -88,32 +115,35 @@ const uncleared = computed(() => {
     </section>
 
     <section class="stack panel" aria-label="Team">
+      <div class="stack" style="--space: var(--space-3xs)">
+        <span class="caps">Load a saved team</span>
+        <TeamPicker v-model="team" :teams="page.teams" :list="teamList" />
+      </div>
+      <TeamConfigurator v-model="slots" :waves="waves" :size="teamSize" />
+      <p v-if="slots.length > teamSize" class="note bad">
+        This stage takes {{ teamSize }} champions: take {{ slots.length - teamSize }} out.
+      </p>
       <div class="cluster" style="--space: var(--space-s); --align: end">
-        <label class="stack" style="--space: var(--space-3xs)">
-          <span class="caps">Saved team</span>
-          <select v-model="team">
-            <option value="">Pick a team…</option>
-            <optgroup v-for="[list, options] in lists" :key="list" :label="list">
-              <option v-for="option in options" :key="option.id" :value="String(option.id)">
-                {{ option.name }}: {{ option.champions.join(", ") }}
-              </option>
-            </optgroup>
-          </select>
-        </label>
         <label class="stack" style="--space: var(--space-3xs)">
           <span class="caps">Runs</span>
           <input v-model="runs" class="runs" type="number" min="1" max="3000" />
         </label>
-        <button type="button" :disabled="running || !team" @click="run">
+        <button
+          type="button"
+          :disabled="running || !slots.length || slots.length > teamSize"
+          @click="run"
+        >
           {{ running ? "Running…" : "Run" }}
         </button>
+        <button v-if="running" type="button" class="quiet" :disabled="stopped" @click="stop">
+          {{ stopped ? "Stopping…" : "Stop" }}
+        </button>
       </div>
-      <p v-if="chosen" class="note">{{ chosen.champions.join(" · ") }}</p>
-      <p v-if="running" class="note">
-        Six fights at once: 300 dungeon runs take a minute or so; a Chimera fight is about 15 s, so
-        100 of them take about 4 minutes.
-      </p>
-      <SentNote :sent="sent" done="Done." />
+      <SimProgress v-if="running" @finished="finished" />
+      <SentNote
+        :sent="sent"
+        :done="stopped ? 'Stopped: the fights done by then are below.' : 'Done.'"
+      />
     </section>
 
     <section v-if="result" class="stack" aria-label="Last sim">
@@ -135,7 +165,11 @@ const uncleared = computed(() => {
         >
           {{ result.turns_min }} to {{ result.turns_max }}
         </Stat>
-        <Stat :value="number(result.damage_mean)" label="damage, average" />
+        <Stat :value="number(result.damage_mean)" label="damage, average">
+          <span :title="`${number(result.damage_min)} to ${number(result.damage_max)}`">
+            {{ short(result.damage_min) }} to {{ short(result.damage_max) }}
+          </span>
+        </Stat>
       </div>
       <p v-if="result.uncleared.length" class="note bad">Not cleared, by seed: {{ uncleared }}</p>
       <p v-if="result.unkillable" class="note">

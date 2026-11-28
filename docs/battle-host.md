@@ -191,5 +191,10 @@ Settled by the Ice Golem result screen: the game's "Turns" is the battle's turn 
   in about half, 2.4 of 27 a fight.
 - [ ] **More bosses:** stages work from static data; check Clan Boss, Hydra and Chimera setups
   against one capture each, as for Ice Golem.
+- [ ] **Capture a Hydra fight after the keys reset** (`just capture`, then any Hydra fight, even
+  one abandoned): built Hydra setups run, but unchecked. Compare the heads it can grow (built from
+  the stage's `HydraPool` in the static data, `setups.hydra_pool`: the server may send its own),
+  the turn limit (1,000, `SpecificMaxTurnsInBattleByArea`, never seen in a capture), and which
+  season the target picker should default to (it picks Season 1).
 - [ ] **Optimiser stats:** add the Academy and Blessings to `stats.py`, which the optimiser's
   solves use.

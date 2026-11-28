@@ -103,12 +103,19 @@ def build_enemies(data, skills, enums):
                 [build_placement(p) for p in f["HeroSlotsSetup"] or []]
                 for f in stage.get("Formations") or []
             ],
+            # the heads a Hydra can grow, per formation (`StageHeroesFormation.HydraPool`)
+            "hydra_pools": [
+                [build_placement(p) for p in f.get("HydraPool") or []]
+                for f in stage.get("Formations") or []
+            ],
             "quests": [
                 {"id": q["QuestId"], "parameter": q["Parameter"]}
                 for q in stage.get("BattleQuests") or []
             ],
         }
-    enemy_types = {p["type"] for s in stages.values() for f in s["formations"] for p in f}
+    enemy_types = {
+        p["type"] for s in stages.values() for f in s["formations"] + s["hydra_pools"] for p in f
+    }
     heroes = {h["Id"]: h for h in data["HeroData"]["HeroTypes"]}
     bosses = {
         str(t): {
@@ -258,11 +265,11 @@ def build_placement(p):
         "type": p["HeroTypeId"],
         "grade": GRADE_NAMES[p["Grade"]],
         "level": p["Level"],
-        "boss": bool(p["IsHeroBoss"] or p["IsMainBoss"]),
+        "boss": bool(p.get("IsHeroBoss") or p.get("IsMainBoss")),
         "modifiers": slot_modifiers(p.get("Modifiers") or {}, p["Round"]),
         # as the game's slot has them, for the battle host
-        "hero_boss": bool(p["IsHeroBoss"]),
-        "main_boss": bool(p["IsMainBoss"]),
+        "hero_boss": bool(p.get("IsHeroBoss")),
+        "main_boss": bool(p.get("IsMainBoss")),
         **({"awakened": GRADE_NAMES[p["DoubleAscendGrade"]]} if p.get("DoubleAscendGrade") else {}),
     }
 

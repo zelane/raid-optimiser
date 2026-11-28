@@ -14,7 +14,7 @@ enemies are as the server sent them: the template.
 - `Enums`: the game's enums by name (schema/schema.json)
 - `build_request`: what the host's `build` needs for some champions
 - `stage_setup`: a stage's setup with no team yet, from the static data
-- `turn_limit`, `chimera_fields`: what the server adds for a stage's area
+- `turn_limit`, `chimera_fields`, `hydra_pool`: what the server adds for a stage's area
 - `team_setup`: the template with the player's team made of the champions given
 - `slot`, `skill_setups`: one champion's slot, from the account and its built parts
 - `Relics`, `relic_setup`: a worn relic's skills and its stones' (the game's builder gives only
@@ -22,6 +22,7 @@ enemies are as the server sent them: the template.
 - `assemble`: a whole setup from the account, the host's parts and a template (`main`)
 - `game_hero`, `game_artifact`, `game_bonus`, `game_relic`, `game_village`, `game_guardians`,
   `skill_settings`: the snapshot's records as the game's JSON
+- `preset_settings`: a saved team's skill settings
 """
 
 import argparse
@@ -135,6 +136,8 @@ def stage_setup(stage_id: int, snapshot: dict, enums: Enums, preset: int | None)
             "h": [enemy(p) for p in stage["formations"][0]],
             "m": modifiers,
             "ls": 0,
+            # the heads a Hydra can grow (`TeamSetup.HydraPool`); the game's code needs it
+            **({"o": [enemy(p) for p in pool]} if (pool := hydra_pool(stage)) else {}),
         },
         "i": stage_id,
         "d": 0,
@@ -147,6 +150,13 @@ def stage_setup(stage_id: int, snapshot: dict, enums: Enums, preset: int | None)
         setup |= chimera_fields(stage_id, snapshot, enums, setup["s"]["h"])
 
     return setup
+
+
+def hydra_pool(stage: dict) -> list[dict]:
+    """The first formation's Hydra heads to grow, from the static data. TODO: check against a
+    captured Hydra setup (`just capture` on a Hydra fight, after the keys reset): the server may
+    send its own."""
+    return (stage.get("hydra_pools") or [[]])[0]
 
 
 def chimera_fields(stage_id: int, snapshot: dict, enums: Enums, enemies: list[dict]) -> dict:
@@ -380,10 +390,17 @@ def game_guardians(guardians: dict, enums: Enums) -> dict:
     }
 
 
-def skill_settings(snapshot: dict, preset_id: int, hero_id: int) -> dict | None:
-    """A champion's skill settings in a saved team, as a slot's `SkillPrioritiesSetup`."""
+def preset_settings(snapshot: dict, preset_id: int) -> list[dict]:
+    """A saved team's skill settings, as the snapshot has them: per champion (`hero_id`), a
+    sequence per wave (`starters`, `priorities`)."""
     preset = next((p for p in snapshot["presets"] if p["id"] == preset_id), None)
-    setup = next((s for s in (preset or {}).get("priorities", []) if s["hero_id"] == hero_id), None)
+    return (preset or {}).get("priorities", [])
+
+
+def skill_settings(settings: list[dict], hero_id: int) -> dict | None:
+    """A champion's skill settings (`preset_settings`' shape, or a settings file's, the same),
+    as a slot's `SkillPrioritiesSetup`."""
+    setup = next((s for s in settings if s["hero_id"] == hero_id), None)
 
     if setup is None:
         return None
@@ -400,11 +417,11 @@ def skill_settings(snapshot: dict, preset_id: int, hero_id: int) -> dict | None:
 
 
 def assemble(
-    snapshot: dict, parts: list[dict], template: dict, champion_ids: list[int], preset: int | None
+    snapshot: dict, parts: list[dict], template: dict, champion_ids: list[int], settings: list[dict]
 ) -> dict:
     """The template with the champions as its team: each slot from the account and its built
-    parts, with skill settings from the saved team `preset`, else the template's own for the
-    same champion, else none (auto's defaults)."""
+    parts, with skill settings from `settings` (`skill_settings`), else the template's own for
+    the same champion, else none (auto's defaults)."""
     heroes = {h["id"]: h for h in snapshot["heroes"]}
     types = {t["id"]: t for t in json.loads((GAME / "hero_types.json").read_text())}
     skills = json.loads((GAME / "skills.json").read_text())
@@ -425,15 +442,13 @@ def assemble(
             if worn
             else None
         )
-        settings = (
-            skill_settings(snapshot, preset, hero_id) if preset else None
-        ) or template_settings.get(hero_id)
+        hero_settings = skill_settings(settings, hero_id) or template_settings.get(hero_id)
         form_skills = [form["skills"] for form in hero_type["forms"]]
         return slot(
             hero,
             skill_setups(hero, form_skills, skills),
             built,
-            settings,
+            hero_settings,
             snapshot["user_id"],
             relic,
         )
@@ -454,7 +469,11 @@ def main() -> None:
     setup.add_argument("parts", type=Path)
     setup.add_argument("out", type=Path)
     setup.add_argument("champions", type=int, nargs="+")
-    setup.add_argument("--preset", type=int, help="the saved team whose skill settings to use")
+    team = setup.add_mutually_exclusive_group()
+    team.add_argument("--preset", type=int, help="the saved team whose skill settings to use")
+    team.add_argument(
+        "--settings", type=Path, help="skill settings to use: a JSON list, as a saved team's"
+    )
     args = parser.parse_args()
     snapshot = json.loads(SNAPSHOT.read_text())
 
@@ -470,7 +489,12 @@ def main() -> None:
                 if args.against.isdigit()
                 else json.loads(Path(args.against).read_text())
             )
-            setup_json = assemble(snapshot, parts, template, args.champions, args.preset)
+            settings = (
+                json.loads(args.settings.read_text())
+                if args.settings
+                else preset_settings(snapshot, args.preset) if args.preset else []
+            )
+            setup_json = assemble(snapshot, parts, template, args.champions, settings)
             args.out.write_text(json.dumps(setup_json))
 
 
