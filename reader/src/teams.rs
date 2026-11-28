@@ -1,6 +1,7 @@
 //! Saved teams: the presets (`UserHeroData.HeroesAiPresets`) and the arena defenses.
 //!
-//! - `Preset`: a saved team, its area (`HeroesAiPresetType`) and its champions
+//! - `Preset`: a saved team, its area (`HeroesAiPresetType`), its champions and their skill
+//!   settings (each slot's `SkillPrioritiesSetup`, as the 3v3 defenders')
 //! - `presets`: every preset; an area from the id, as `HeroesAiPreset.get_Type` finds it
 //! - `arena_defense`: the classic arena's defense team (`UserArenaData.DefenseHeroIds`)
 //! - `arena3x3_defense`: the 3v3 arena's teams (a `TeamSetup` each)
@@ -51,6 +52,7 @@ pub struct Preset {
     pub name: String,
     pub area: String,
     pub heroes: Vec<i32>,
+    pub priorities: Vec<SkillPriorities>,
 }
 
 /// A champion's skill settings: skill id → `SkillPriorityType` by name (Default, First…,
@@ -72,7 +74,8 @@ pub struct Sequence {
 
 pub fn presets(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Preset>, String> {
     let fields = PresetFields::new(layout)?;
-    let hero_id = layout.field("SkillPrioritiesSetup.HeroId")?;
+    let setup_fields = PrioritiesFields::new(layout)?;
+    let sequence = SequenceFields::new(layout)?;
     let ranges = type_ranges(process, layout)?;
     let list = layout.follow(process, user, &PRESETS)?;
 
@@ -82,17 +85,18 @@ pub fn presets(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Pres
         .map(|addr| {
             let b = process.block(addr, fields.span)?;
             let id = b.i32(fields.id);
-            let heroes = list_refs(process, b.ptr(fields.setups))?
+            let priorities: Vec<SkillPriorities> = list_refs(process, b.ptr(fields.setups))?
                 .into_iter()
                 .filter(|&setup| setup != 0) // an empty slot
-                .map(|setup| process.read(setup + hero_id))
+                .map(|setup| skill_priorities(process, layout, &setup_fields, &sequence, setup))
                 .collect::<Result<_, _>>()?;
 
             Ok(Preset {
                 id,
                 name: string(process, b.ptr(fields.name))?,
                 area: layout.name("HeroesAiPresetType", area_of(id, &ranges)?)?,
-                heroes,
+                heroes: priorities.iter().map(|p| p.hero_id).collect(),
+                priorities,
             })
         })
         .collect()

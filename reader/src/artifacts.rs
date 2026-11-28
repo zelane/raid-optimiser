@@ -35,6 +35,7 @@ offsets!(ArtifactFields, "Artifact" {
 });
 offsets!(BonusFields, "ArtifactBonus" {
     stat: "_kindId", value: "_value", glyph: "_powerUpValue", rolls: "_level",
+    rarity_glyph: "_rarityBasedPowerUpValue", glyph_rarity: "_powerUpRarityId",
 });
 const PRESETS: [&str; 2] = [
     "ExternalArtifactsStorage._presets",
@@ -56,6 +57,13 @@ pub struct Bonus {
     pub value: f64,
     pub glyph: f64,
     pub rolls: i32,
+    /// `value` and `glyph` as the game holds them (`Fixed`, Q32.32), for the battle host:
+    /// a value summed from rolls isn't the rounded value's `Fixed`
+    pub value_fixed: i64,
+    pub glyph_fixed: i64,
+    /// a glyph by rarity (Mythical pieces' upgraded lines): its `Fixed` value and its rarity
+    pub rarity_glyph_fixed: Option<i64>,
+    pub glyph_rarity: Option<i32>,
 }
 
 #[derive(Serialize)]
@@ -134,6 +142,10 @@ impl<'a> Reader<'a> {
             value: v.fixed(self.value.value),
             glyph: b.fixed(self.bonus.glyph),
             rolls: b.i32(self.bonus.rolls),
+            value_fixed: v.i64(self.value.value),
+            glyph_fixed: b.i64(self.bonus.glyph),
+            rarity_glyph_fixed: b.nullable_i64(self.bonus.rarity_glyph),
+            glyph_rarity: b.nullable_i32(self.bonus.glyph_rarity),
         })
     }
 }

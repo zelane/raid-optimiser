@@ -235,6 +235,20 @@ class Skill:
     books: tuple[Book, ...] = ()
     description: str = ""  # the game's text, markup stripped
 
+    def damage_bonus_at(self, level: int) -> float:
+        """What the books a skill at `level` has had add to its damage."""
+        return sum(self.book_damage[: level - 1])
+
+    def chance_bonus_at(self, level: int) -> float:
+        """What they add to its effects' chances."""
+        return sum(book.value for book in self.books[: level - 1] if book.type == "EffectChance")
+
+    def cooldown_at(self, level: int) -> int:
+        """Its cooldown after them, each cooldown book a turn less."""
+        taken = self.books[: level - 1]
+        turns = sum(round(book.value) for book in taken if book.type == "CooltimeTurn")
+        return max(self.cooldown - turns, 0)
+
 
 @dataclass(frozen=True)
 class HeroForm:

@@ -15,8 +15,9 @@ webui/static/assets/
 # Machine-specific paths (see .env.example)
 .env
 
-# The memory reader's build
+# The memory reader's build, and the battle host's
 reader/target/
+host/target/
 
 # The front end's build and its generated prop types (just frontend-build)
 webui/static/dist/

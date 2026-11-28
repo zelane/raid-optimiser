@@ -167,13 +167,36 @@ watch: reader
 # The reader, in the running game's prefix, with the layout and the files it writes
 [private]
 reader-run *flags:
+    just reader-exec {{flags}} "Z:$PWD/data/cache/reader-layout.json" \
+        "Z:$PWD/data/captures/snapshot.json" "Z:$PWD/data/captures/events.json"
+
+# The finished fights the game still holds in memory (the last one's, kept for its result
+# screen; background runs'), each written to data/captures/results/<setup id>.json, read only:
+# `just check-capture` replays a captured fight and compares
+results: reader
+    mkdir -p data/captures/results
+    just reader-exec --results "Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/results"
+
+# A captured fight replayed on its own seed and compared with what the game recorded for it
+# (`just results` after the fight): outcome, turns, each champion's result-screen rows
+check-capture setup:
+    #!/usr/bin/env bash
+    set -eu
+    id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["z"])' "{{setup}}")
+    recorded="data/captures/results/$id.json"
+    [ -f "$recorded" ] || { echo "no recorded result for $id: just results, after the fight" >&2; exit 1; }
+    rm -rf data/cache/host/results && mkdir -p data/cache/host/results
+    just host-run fight "{{setup}}" 1 data/cache/host/results
+    uv run python -m optimiser.fights data/cache/host/results --against "$recorded"
+
+# The reader exe with these arguments, run in the running game's prefix
+[private]
+reader-exec *args:
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f data/cache/reader-layout.json ] || just reader-layout
     exe="$PWD/reader/target/x86_64-pc-windows-gnu/release/raid-reader.exe"
-    args=({{flags}} "Z:$PWD/data/cache/reader-layout.json" "Z:$PWD/data/captures/snapshot.json"
-        "Z:$PWD/data/captures/events.json")
-    if command -v plarium-umu >/dev/null; then exec plarium-umu "$exe" "${args[@]}"; fi
+    if command -v plarium-umu >/dev/null; then exec plarium-umu "$exe" "$@"; fi
     # Inside the running game's umu container, sharing its wineserver (as ~/scripts/hh.sh
     # does): umu names the container's service after the md5 of the resolved prefix path.
     client="$HOME/.local/share/umu/steamrt4/pressure-vessel/bin/steam-runtime-launch-client"
@@ -183,7 +206,7 @@ reader-run *flags:
         exit 1
     fi
     exec "$client" --bus-name="$bus" --directory="$PWD" -- \
-        "{{RAID_PROTON}}/proton" runinprefix "$exe" "${args[@]}"
+        "{{RAID_PROTON}}/proton" runinprefix "$exe" "$@"
 
 # Start the web UI on http://127.0.0.1:<port> (WEB_PORT or 8000), auto-reloading (--no-reload)
 web port=web_port *args:
@@ -323,3 +346,77 @@ exceptions *args:
 # (just enemies area CooperationEventWorldBoss; stage 13019006 --skills; chimera --difficulty Hard)
 enemies *args:
     uv run python -m optimiser.enemy_report "$@"
+
+# The game's own battle engine (host/) on a fight's setup, on auto, once per seed (seed 0 is the
+# setup's own: a captured fight replays exactly): each champion's result-screen rows and the
+# spread, and which seeds lost (just fight data/captures/setups/<file>.json 300 6: the seeds split
+# over 6 host processes at once)
+fight setup seeds="600" jobs="6":
+    #!/usr/bin/env bash
+    set -eu
+    rm -rf data/cache/host/results && mkdir -p data/cache/host/results
+    just host
+    per=$(( ({{seeds}} + {{jobs}} - 1) / {{jobs}} ))
+    for (( job = 0; job < {{jobs}}; job++ )); do
+        first=$(( job * per )); count=$(( {{seeds}} - first < per ? {{seeds}} - first : per ))
+        [ "$count" -gt 0 ] || break
+        HOST_JOB=$job just host-run fight "{{setup}}" "$count" data/cache/host/results "$first" \
+            > "data/cache/host/job-$job.log" 2>&1 &
+    done
+    wait
+    uv run python -m optimiser.fights data/cache/host/results
+
+# Any of the account's champions, in what they wear now, against a stage (its id: the enemies
+# from its static data) or a captured fight's enemies (its setup's file): their slots built by
+# the game's own code, then fought like `fight` (just sim 2072010 22704,16470,21539,16536,21504
+# 20 5 — skill settings from that saved team, else the captured fight's, else auto's defaults)
+sim against champions seeds="600" preset="":
+    #!/usr/bin/env bash
+    set -eu
+    work=data/cache/host
+    ids=$(echo "{{champions}}" | tr ',' ' ')
+    uv run python -m optimiser.setups request "$work/request.json" $ids
+    just host-run build "$work/request.json" "$work/parts.json"
+    uv run python -m optimiser.setups assemble "{{against}}" "$work/parts.json" "$work/setup.json" $ids \
+        $([ -n "{{preset}}" ] && echo --preset "{{preset}}")
+    just fight "$work/setup.json" "{{seeds}}"
+
+# The battle host on a command (fight, build) with POSIX paths: plain Wine in a prefix of its
+# own, the static data a fresh copy each run (the game's loader deletes a cache it can't load)
+[private]
+host-run command *args: host
+    #!/usr/bin/env bash
+    set -eu
+    work=data/cache/host
+    local_low="$work/LocalLow${HOST_JOB:+-$HOST_JOB}"  # a copy per job: one may delete its own
+    rm -rf "$local_low" && mkdir -p "$local_low" "$work/prefix"
+    cp -r "{{static_cache}}" "$local_low/"
+    win() { echo "Z:$(realpath -m "$1")" | sed 's#/#\\#g'; }
+    shift
+    paths=()
+    for arg in "$@"; do
+        case "$arg" in */*) paths+=("$(win "$arg")") ;; *) paths+=("$arg") ;; esac
+    done
+    WINEPREFIX="$(realpath "$work/prefix")" WINEDEBUG=-all wine host/target/x86_64-pc-windows-gnu/release/raid-host.exe \
+        "$(win "{{game}}/GameAssembly.dll")" "$(win "{{game}}/Raid_Data/il2cpp_data")" "$(win "$local_low")" \
+        "$(ls "{{static_cache}}" | sort -V | tail -1)" "$(win data/captures/snapshot.json)" "{{command}}" "${paths[@]}"
+
+# Capture the next fight in the game whole: its setup as it starts (from the game's registry,
+# read only) into data/captures/setups, its result once it's over (`just results`, polled), then
+# the replay checked against it (`just check-capture`). Ctrl-C stops
+capture:
+    #!/usr/bin/env bash
+    set -eu
+    setup=$(uv run python -m tools.capture_setup "{{RAID_PREFIX}}/user.reg" data/captures/setups | tail -1)
+    id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["z"])' "$setup")
+    echo "waiting for the fight to finish (its result, $id)" >&2
+    until [ -f "data/captures/results/$id.json" ]; do
+        sleep 15
+        just results >/dev/null 2>&1 || true
+    done
+    just check-capture "$setup"
+
+# The battle host (host/), built for Windows like the reader
+[private]
+host:
+    cd host && cargo build --release

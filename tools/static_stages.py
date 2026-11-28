@@ -259,6 +259,10 @@ def build_placement(p):
         "level": p["Level"],
         "boss": bool(p["IsHeroBoss"] or p["IsMainBoss"]),
         "modifiers": slot_modifiers(p.get("Modifiers") or {}, p["Round"]),
+        # as the game's slot has them, for the battle host
+        "hero_boss": bool(p["IsHeroBoss"]),
+        "main_boss": bool(p["IsMainBoss"]),
+        **({"awakened": GRADE_NAMES[p["DoubleAscendGrade"]]} if p.get("DoubleAscendGrade") else {}),
     }
 
 

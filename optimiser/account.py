@@ -6,14 +6,16 @@ boundary into the shapes the stat model and solver use, over the game's tables (
   which slots
 - `LOCK_LEVELS`, `Locks`: champion locks, which keep gear on its champion
 - `Relic`: a relic the account has
-- `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams, global gear presets,
-  the Chimera's current raid, and progress on a stage
+- `SkillSettings`, `Preset`, `GearPreset`, `ChimeraRaid`, `StageProgress`: saved teams (and
+  how auto plays each champion in them), global gear presets, the Chimera's current raid, and
+  progress on a stage
 - `Account`: everything a solve needs, and the account's saved teams (`preset`: one by id)
 - `DEFAULT_LEAGUE`: the arena league when the game doesn't say
 - `load_account`: the loader
 - `worn_gear`: what a champion wears
 - `great_hall_by_affinity`, `parse_relics` (`relic_stats`), `parse_champion`, `parse_artifact`
-  (`parse_line`), `parse_preset`, `parse_gear_preset`, `parse_raid`, `team`: its steps
+  (`parse_line`), `parse_preset` (`parse_skill_settings`), `parse_gear_preset`, `parse_raid`,
+  `team`: its steps
 """
 
 from collections.abc import Mapping
@@ -152,14 +154,27 @@ type Locks = Mapping[int, int]
 
 
 @dataclass(frozen=True)
+class SkillSettings:
+    """A champion's skill settings in a saved team, as auto plays them: `priorities` by skill
+    id, the game's `SkillPriorityType` names (Default, First, Second, Third, NotUsed), and the
+    skills it opens with (`openers`, in order). The game keeps them in a list of sequences;
+    only the first is read."""
+
+    priorities: Mapping[int, str]
+    openers: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
 class Preset:
     """A saved team: `area` is the game's preset type (Pvp for arena attack, Chimera, Hydra,
-    DoomTower, …)."""
+    DoomTower, …); `skill_settings` by champion id (empty in snapshots from before the reader
+    read them)."""
 
     id: int
     name: str
     area: str
     champion_ids: tuple[int, ...]
+    skill_settings: Mapping[int, SkillSettings] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -409,7 +424,20 @@ def parse_line(raw: dict) -> StatLine:
 
 
 def parse_preset(raw: dict) -> Preset:
-    return Preset(raw["id"], raw["name"], raw["area"], team(raw["heroes"]))
+    settings = {
+        setup["hero_id"]: parse_skill_settings(setup) for setup in raw.get("priorities", ())
+    }
+    return Preset(raw["id"], raw["name"], raw["area"], team(raw["heroes"]), settings)
+
+
+def parse_skill_settings(setup: dict) -> SkillSettings:
+    first = setup["sequences"][0] if setup["sequences"] else setup
+    openers = first.get("starters") or ([first["starter"]] if first.get("starter") else [])
+
+    return SkillSettings(
+        priorities={int(skill_id): name for skill_id, name in first["priorities"].items()},
+        openers=tuple(openers),
+    )
 
 
 def parse_gear_preset(raw: dict) -> GearPreset:

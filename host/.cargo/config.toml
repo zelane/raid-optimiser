@@ -1,0 +1,3 @@
+# The host runs under plain Wine, in a prefix of its own (data/cache/host), never the game's.
+[build]
+target = "x86_64-pc-windows-gnu"

@@ -6,7 +6,7 @@ defines for it (a book a level), so a skill with none is already there.
 - `SLOT_KINDS`: the game's skill group -> how the pages label its skills
 - `SkillLevel`: the view
 - `form_skills`: a form's skills in slot order, each at its level
-- `slot_labels`, `slot_order`, `top_level`, `booked_cooldown`: their pieces
+- `slot_labels`, `slot_order`, `top_level`: their pieces
 
 The skill books page (`service.books`) and the champion page (`service.champions`) share them.
 """
@@ -47,7 +47,7 @@ def form_skills(form: HeroForm, levels: dict[int, int], tables: Tables) -> list[
                 level,
                 top_level(skill),
                 skill.cooldown,
-                booked_cooldown(skill, level),
+                skill.cooldown_at(level),
             )
             for skill_id in form.skills
             if (skill := tables.skills.get(skill_id)) and (level := levels.get(skill_id, 1))
@@ -80,12 +80,3 @@ def top_level(skill: Skill) -> int:
     """The level all a skill's books reach: a book is a level past 1, and a skill the game gives
     no books to is already there."""
     return len(skill.books) + 1
-
-
-def booked_cooldown(skill: Skill, level: int) -> int:
-    """The skill's cooldown after the books it's had (the first level - 1), each cooldown book
-    a turn less."""
-    taken = skill.books[: level - 1]
-    turns = sum(round(book.value) for book in taken if book.type == "CooltimeTurn")
-
-    return max(skill.cooldown - turns, 0)

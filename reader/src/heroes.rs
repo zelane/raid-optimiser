@@ -32,6 +32,8 @@ pub struct Hero {
     pub empower: i32,
     /// `DoubleAscendGrade` (0: not awakened)
     pub awakened_grade: i32,
+    /// `BlessingTypeId`, the Blessing chosen (none before one is)
+    pub blessing: Option<i32>,
     /// skill type id → level
     pub skills: BTreeMap<i32, i32>,
     pub masteries: Vec<i32>,
@@ -48,6 +50,7 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
     let masteries = layout.field("HeroMasteryData.Masteries")?;
     let scrolls = layout.field("HeroMasteryData.CurrentAmount")?;
     let awakened = layout.field("HeroDoubleAscendData.Grade")?;
+    let blessing = layout.field("HeroDoubleAscendData.BlessingId")?;
     let by_id = layout.follow(process, user, &PATH)?;
 
     dict_refs(process, by_id)?
@@ -73,9 +76,12 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
                         .collect::<Result<_, String>>()?,
                 ),
             };
-            let awakened_grade = match b.ptr(hero.double_ascend) {
-                0 => 0,
-                data => process.read(data + awakened)?,
+            let (awakened_grade, blessing) = match b.ptr(hero.double_ascend) {
+                0 => (0, None),
+                data => {
+                    let ascended = process.block(data, blessing + 8)?;
+                    (ascended.i32(awakened), ascended.nullable_i32(blessing))
+                }
             };
 
             Ok(Hero {
@@ -85,6 +91,7 @@ pub fn read(process: &Process, layout: &Layout, user: u64) -> Result<Vec<Hero>, 
                 level: b.i32(hero.level),
                 empower: b.i32(hero.empower),
                 awakened_grade,
+                blessing,
                 skills,
                 masteries,
                 scrolls,

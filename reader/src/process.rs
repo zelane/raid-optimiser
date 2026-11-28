@@ -5,6 +5,8 @@
 //! - `Process::read`, `read_bytes`, `ptr`, `cstr`: copy values out of its memory
 //! - `Process::block`, `Block`: an object's bytes in one read, its fields decoded from them
 //!   (ints, doubles, pointers, `Nullable<int>`, `<long>` and `<double>`, `Fixed`, `DateTime`)
+//! - `Process::find_words`: every place its heap holds a value (objects of a class, by the
+//!   class pointer in their header)
 
 use std::ffi::c_void;
 use std::mem::{size_of, MaybeUninit};
@@ -15,9 +17,15 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Module32FirstW, Module32NextW, Process32FirstW, Process32NextW,
     MODULEENTRY32W, PROCESSENTRY32W, TH32CS_SNAPMODULE, TH32CS_SNAPMODULE32, TH32CS_SNAPPROCESS,
 };
-use windows_sys::Win32::System::Threading::{
-    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
+use windows_sys::Win32::System::Memory::{
+    VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_PRIVATE, PAGE_READWRITE,
 };
+use windows_sys::Win32::System::Threading::{
+    GetExitCodeProcess, OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ,
+};
+
+/// How much of the heap one read takes while searching it.
+const SEARCH_CHUNK: usize = 1 << 20;
 
 pub struct Process {
     handle: HANDLE,
@@ -38,7 +46,7 @@ impl Process {
         let module_base =
             find_module(pid, module).ok_or_else(|| format!("{module} not loaded in {exe}"))?;
         let handle =
-            unsafe { OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+            unsafe { OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, 0, pid) };
 
         if handle.is_null() {
             return Err(format!("can't open {exe} ({pid}) for reading"));
@@ -55,6 +63,63 @@ impl Process {
         let mut code = 0u32;
         let ok = unsafe { GetExitCodeProcess(self.handle, &mut code) };
         ok != 0 && code == STILL_ACTIVE
+    }
+
+    /// Every 8-aligned address in the heap (committed, private, read-write memory) that holds
+    /// `value`. Read only, like everything here; regions that can't be read are skipped.
+    pub fn find_words(&self, value: u64) -> Vec<u64> {
+        let mut found = Vec::new();
+        let mut buffer = vec![0u8; SEARCH_CHUNK];
+
+        for (base, size) in self.heap_regions() {
+            let mut offset = 0u64;
+
+            while offset < size {
+                let len = SEARCH_CHUNK.min((size - offset) as usize);
+                let chunk = &mut buffer[..len];
+
+                if self.read_bytes(base + offset, chunk).is_ok() {
+                    found.extend(
+                        chunk
+                            .chunks_exact(8)
+                            .enumerate()
+                            .filter(|(_, word)| u64::from_le_bytes((*word).try_into().unwrap()) == value)
+                            .map(|(i, _)| base + offset + 8 * i as u64),
+                    );
+                }
+
+                offset += len as u64;
+            }
+        }
+
+        found
+    }
+
+    fn heap_regions(&self) -> Vec<(u64, u64)> {
+        let mut regions = Vec::new();
+        let mut addr = 0u64;
+
+        loop {
+            let mut info = MaybeUninit::<MEMORY_BASIC_INFORMATION>::zeroed();
+            let size = size_of::<MEMORY_BASIC_INFORMATION>();
+            let got = unsafe { VirtualQueryEx(self.handle, addr as *const c_void, info.as_mut_ptr(), size) };
+
+            if got == 0 {
+                return regions;
+            }
+
+            let info = unsafe { info.assume_init() };
+            let (base, length) = (info.BaseAddress as u64, info.RegionSize as u64);
+
+            if info.State == MEM_COMMIT && info.Type == MEM_PRIVATE && info.Protect == PAGE_READWRITE {
+                regions.push((base, length));
+            }
+
+            match base.checked_add(length) {
+                Some(next) if next > addr => addr = next,
+                _ => return regions,
+            }
+        }
     }
 
     pub fn read_bytes(&self, addr: u64, buf: &mut [u8]) -> Result<(), String> {
@@ -129,6 +194,11 @@ impl Block {
         self.bytes[offset as usize..][..N].try_into().unwrap()
     }
 
+    /// Raw bytes (a `Guid`, say).
+    pub fn bytes(&self, offset: u64, len: usize) -> Vec<u8> {
+        self.bytes[offset as usize..][..len].to_vec()
+    }
+
     pub fn i32(&self, offset: u64) -> i32 {
         i32::from_le_bytes(self.at(offset))
     }
@@ -149,6 +219,11 @@ impl Block {
     /// A `Nullable<int>` (or int-sized enum): hasValue, then the value at +4.
     pub fn nullable_i32(&self, offset: u64) -> Option<i32> {
         self.bool(offset).then(|| self.i32(offset + 4))
+    }
+
+    /// A `Nullable<bool>`: hasValue, then the value at +1.
+    pub fn nullable_bool(&self, offset: u64) -> Option<bool> {
+        self.bool(offset).then(|| self.bool(offset + 1))
     }
 
     pub fn f64(&self, offset: u64) -> f64 {

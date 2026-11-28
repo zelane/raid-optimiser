@@ -39,13 +39,19 @@ in-game commands below; the account and the game's tables come from the game its
   champion; ArenaFirst is "Arena Build I"), gear presets (`gear_presets`:
   `ExternalArtifactsStorage._presets`, per champion or global (`hero_id` null, the game's key -1),
   artifact or accessory), saved teams (`teams`: presets with their area, from
-  `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp; classic and 3v3 arena
+  `HeroesAiPreset.TypeRanges` as `get_Type` reads it, ids 0/301/601–603 Pvp, and each slot's
+  skill settings, `priorities`: as the 3v3 defenders', `account.SkillSettings`; classic and 3v3 arena
   defenses, each 3v3 defender's skill settings (`arena3x3_priorities`: its slot's
   `PrioritiesSetup`, the game's settings in its `sequences`: openers and `SkillPriorityType` by
   skill id); empty slots are 0 or -1), the Chimera's raid (`chimera`:
   `SharedModelManager.DynamicData.StageData.AllianceChimeraData`) and stage progress (`stages`:
   `UserWrapper.Stages` → `UserStageData.BattleResultsByStageId`, stage id → passed and star count;
-  the game keeps the count only, not which battle quests earned it). Events go to a file of their
+  the game keeps the count only, not which battle quests earned it), and the server's battle
+  settings (`battle_settings`: `SharedModelManager.GameParameters.BattleSettings`, what changes how
+  a fight plays out, under the game's field names, for the battle host); for the host too, each
+  champion's Blessing (`blessing`: `HeroDoubleAscendData.BlessingId`), each relic's `sockets` and
+  the account's `relic_stones`, the Academy's guardians (`academy_guardians`: faction → rarity →
+  slots), and each stat line's raw `Fixed` values. Events go to a file of their
   own (`paths.EVENTS`, `data/captures/events.json`: they change far more often): what's
   on as the game's own JSON, `GlobalEventsWrapperReadOnly.DataJson`, kept whole, and the account's
   progress per event's quest, `UserQuestData.OpenedStates`: a solo event's points are its
@@ -286,6 +292,62 @@ in-game commands below; the account and the game's tables come from the game its
   `min_resisting` in %, against `enemy_res`/`enemy_acc`, which the target picker fills like
   `enemy_def`): a rate minimum is turned into the stat's at the form; ranked, the stat is capped
   where the rate stops rising and held within the slack of its best rate (`solve.held_floor`).
+- Battle host (`host/`, Rust for Windows like the reader): **the game's own battle engine, run
+  outside the game**, to sim any team against a fight's enemies (the story, checks and results so
+  far: `docs/battle-host.md`). Plain Wine, a prefix of its own
+  (`data/cache/host/prefix`), loads the installed GameAssembly.dll and starts il2cpp
+  (`il2cpp_init` works without Unity), answers the three Unity calls the code makes (data
+  folder, version, a buffer free: `unity`), runs two of the game's startup steps
+  (`SharedModelLogger.Configure`, `MessagePack.Init`), loads the static data with the game's own
+  cache loader from **a fresh copy** of the cache (`data/cache/host/LocalLow`: that loader deletes
+  a cache it fails to load; it once emptied the real one), and sets the server's `BattleSettings`
+  (the reader's `battle_settings`: turn limits, `WarmupBattleRandomCount`, …) as
+  `SharedModelManager.GameParameters`. Objects pass as the game's JSON (`JsonMain`: its short
+  keys, enums as numbers, values as raw `Fixed`). Commands:
+  - `fight`: a `BattleSetup` in `BattleProcessor`, each turn the game's AI's choice
+    (`EnemyTurnActionGenerator.GenerateNext`, either side, by the slots' skill settings)
+    applied as the commands the game records (`GetDefaultSkill` is the A1, not auto's pick; the
+    client's background mode needs client singletons). ~4 s a fight, deterministic; seed 0
+    keeps the setup's own, and a captured fight replays exactly (checked: a co-op run's
+    197,696,419 and every result-screen row).
+  - `build`: the parts of a slot the game computes, by the shared model's own builders (the
+    server's): gear (`ArtifactExtensions.ToArtifactSetups`, `GetArtifactSetBonuses`), Blessing
+    (`BlessingSetup.From`), Academy (`AcademySetup.Create`, from the guardians), Great Hall
+    (`BuildingSetup.FromVillageData`), relic stats (`RelicExtensions.ToRelicSetups`: partial).
+  `optimiser/setups.py` writes the account as those objects (`request`: the reader's
+  `value_fixed`/`glyph_fixed` and Mythical pieces' `rarity_glyph_fixed`/`glyph_rarity` keep
+  values exact) and puts slots together (`assemble`): rank, level, empower, awakening, masteries;
+  skills in the hero type's order, a copy skill at its source's level (`skills.json`
+  `use_level_of`); the relic's skills at the level its level reaches, its stones' skills
+  (`effect_sources.json` `relic_stones`), crit as a percentage; skill settings from a saved team,
+  else the captured fight's (a saved team's settings are per wave: one sequence each). The enemy
+  side is a stage's static data (`stage_setup`: its first formation, every wave, enemies' skills
+  at level 1, awakening and boss flags from `enemies.json` placements' `awakened`, `hero_boss`,
+  `main_boss`, the stage's modifiers; `KindId` Pve) or a captured setup's. Checked: the 907
+  team built from the account replays that fight exactly; stage setups aren't checked against a
+  captured one yet. `just sim <stage id | setup file> <ids> [seeds] [preset]` builds and fights;
+  `just fight <setup> [seeds] [jobs]` (600 over 6 by default) fights a setup as is, the seeds split over `jobs` host
+  processes (each its own static-data copy, `LocalLow-<job>`; the host's `fight` takes a first
+  seed); the report lists the seeds that weren't cleared.
+  `optimiser/fights.py` reads the results (`BattleResult` JSON: each `TurnStatistics` row
+  counted once, in its producer's statistics; `DamageDealt` is in full past the boss's HP) and
+  reports how often a fight is won and its turns (`BattleState.CurrentTurn`, everyone's, and
+  `PlayerTurnCount`, the team's).
+  Real fights are captured whole by `just capture`: it waits for a new one (a setup id, `z`,
+  neither cached when it starts nor saved: the cache isn't always emptied between fights), saves
+  its setup from the game's PlayerPrefs (`tools/capture_setup.py`: `BattleSetupCache_<user>` in
+  the prefix's `user.reg`, base64 gzip JSON, read only) to `data/captures/setups`, waits for its
+  result (`just results`, polled), then runs `just check-capture`: the replay on the fight's own
+  seed against the game's record, outcome, turns and every result-screen row
+  (`fights.differences`). `just results` is the reader's `--results` (`reader/src/battles.rs`):
+  every live `BattleResult` (the last fight's, kept for its result screen; background runs')
+  found by searching the heap for objects of that class (`Process::find_words`, committed
+  private read-write regions, ~6 s; read only), validated (its setup's class, an outcome) and
+  written to `data/captures/results/<setup id>.json` in the host's result shape, so
+  `optimiser.fights` reads either. Checked against result screens: a co-op run and an Ice Golem
+  Hard 10 run replay exactly; the screen's "Turns" is `CurrentTurn` (everyone's), not
+  `PlayerTurnCount`. Not yet: changes to gear
+  or relics before a sim.
 - `optimiser/hit.py`: the reference model of a hit (`DamageCalculator`, `DamageContext`, the
   multiplier hooks) in the game's `Fixed` arithmetic (`optimiser/fixed.py`), bit for bit; the
   solver doesn't use it. `just test-game` (tests/test_game_code.py) checks it against the game's
@@ -433,7 +495,7 @@ in-game commands below; the account and the game's tables come from the game its
   reader doesn't say which form the champion is in), so one short in both shows a labelled
   block per form on its card. Slots and tops are `service.skills` (`form_skills`), which the
   champion page's Skills card (under the profile: a tab per skill of the picked form, its books as
-  "1/3", its cooldown after the books it's had (`booked_cooldown`) and the game's text,
+  "1/3", its cooldown after the books it's had (`Skill.cooldown_at`) and the game's text,
   `skills.json` `description`) shares.
 - Masteries page (`/masteries`, `webui/service/masteries.py`): the 6★ champions with no mastery
   in a tree's last row (Helmsmasher's), split into those holding enough scrolls to reach it and
@@ -566,6 +628,11 @@ just update           # after a pull, game update (launch it once first) or HH u
                       # dump (when the code changed), reader layout + build, schema, static, assets, front end
 just read             # the account, from the running game's memory (read-only)
 just watch            # keep reading it while the game runs, when it changes (Ctrl-C stops it)
+just capture          # capture the next fight whole (setup, then its result) and check its replay
+just results          # the finished fights the game still holds, from its memory (read-only)
+just check-capture <setup> # a captured fight's replay against the game's record of it
+just fight <setup> 300 6 # the game's own battle engine on a setup, on auto, per seed (6 processes at once): clears, turns, rows
+just sim <stage> <ids> 600 [preset] # any champions, as they are, against a stage (or a captured fight)
 just proxy            # the HH extractor's game commands: equip, preview, sell (extractor + game running)
 just web              # http://127.0.0.1:8000 (web-restart, web-stop); needs frontend-build
 just web-dev          # the same with Vite's dev server (Vue pages reload as you edit)

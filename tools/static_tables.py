@@ -427,8 +427,9 @@ def build_bonuses(data, strings):
 def build_effect_sources(data):
     """What else can bring buffs, debuffs and effects to a team: each artifact set's set
     skills (the pieces they take), and each relic type's skills, with those only a champion of
-    one faction gets (by the factions' display names, `faction_name`), and the relic skill
-    level each relic level reaches (`relic_skill_levels`). The skills are in skills.json."""
+    one faction gets (by the factions' display names, `faction_name`), the relic skill level
+    each relic level reaches (`relic_skill_levels`), and each relic stone type's skills
+    (`relic_stones`, by type id). The skills are in skills.json."""
     sets = []
     for s in data["ArtifactData"]["SetInfos"]:
         tiers = [s] + (s.get("SubSetInfos") or [])
@@ -462,7 +463,16 @@ def build_effect_sources(data):
     skill_levels = {
         str(level): skill for level, skill in sorted(levels.items(), key=lambda kv: int(kv[0]))
     }
-    return {"sets": sets, "relics": relics, "relic_skill_levels": skill_levels}
+    stones = {
+        str(s["Id"]): {"name": s["Name"], "skills": s.get("SkillIds") or []}
+        for s in data["RelicData"].get("RelicStoneTypes") or []
+    }
+    return {
+        "sets": sets,
+        "relics": relics,
+        "relic_skill_levels": skill_levels,
+        "relic_stones": stones,
+    }
 
 
 def source_skill_ids(sources):

@@ -11,13 +11,17 @@
 //! - `read_account`, `read_events`: one pass over each
 //! - `to_json`, `write_json`, `write_text`: writing them (whole, or not at all)
 //! - `read_once`: both, once
-//! - `main`: `raid-reader [--watch] <layout.json> <snapshot.json> <events.json>`
+//! - `write_results`: the finished fights the game still holds, a file each (`--results`)
+//! - `main`: `raid-reader [--watch] <layout.json> <snapshot.json> <events.json>`, or
+//!   `raid-reader --results <layout.json> <out dir>`
 //!
 //! It runs in the game's Wine prefix (`just read`, `just watch`), so paths are Windows ones
 //! (`Z:\...`).
 
+mod academy;
 mod account;
 mod artifacts;
+mod battles;
 mod chimera;
 mod collections;
 mod events;
@@ -27,6 +31,7 @@ mod layout;
 mod process;
 mod relics;
 mod roots;
+mod settings;
 mod stages;
 mod summons;
 mod teams;
@@ -56,6 +61,9 @@ struct Snapshot {
     relics: Vec<relics::Relic>,
     /// champion id → the relics they wear
     worn_relics: relics::Worn,
+    relic_stones: Vec<relics::Stone>,
+    /// the Academy's guardians: faction → rarity → slots
+    academy_guardians: academy::Guardians,
     inbox: Vec<account::InboxItem>,
     presets: Vec<teams::Preset>,
     gear_presets: Vec<artifacts::GearPreset>,
@@ -66,6 +74,8 @@ struct Snapshot {
     chimera: Option<chimera::Raid>,
     /// stage id → how far the account has got (stages it has fought)
     stages: BTreeMap<i32, stages::Progress>,
+    /// the server's settings fights run with (for the battle host)
+    battle_settings: Option<settings::BattleSettings>,
 }
 
 pub struct Outputs {
@@ -78,7 +88,7 @@ fn read_account(process: &Process, layout: &Layout) -> Result<Snapshot, String> 
     let user = layout.follow(process, app, &["AppModel._userWrapper"])?;
     let reader = artifacts::Reader::new(layout)?;
     let (artifacts, source) = artifacts::read(process, layout, &reader, user)?;
-    let (relics, worn_relics) = relics::read(process, layout, user)?;
+    let (relics, worn_relics, relic_stones) = relics::read(process, layout, user)?;
     eprintln!("{} pieces from {source}", artifacts.len());
 
     Ok(Snapshot {
@@ -91,6 +101,8 @@ fn read_account(process: &Process, layout: &Layout) -> Result<Snapshot, String> 
         artifacts,
         relics,
         worn_relics,
+        relic_stones,
+        academy_guardians: academy::read(process, layout, user)?,
         inbox: account::inbox(process, layout, &reader, user)?,
         presets: teams::presets(process, layout, user)?,
         gear_presets: artifacts::presets(process, layout)?,
@@ -99,6 +111,7 @@ fn read_account(process: &Process, layout: &Layout) -> Result<Snapshot, String> 
         arena3x3_priorities: teams::arena3x3_priorities(process, layout, user)?,
         chimera: chimera::read(process, layout)?,
         stages: stages::read(process, layout, user)?,
+        battle_settings: settings::read(process, layout)?,
     })
 }
 
@@ -144,6 +157,22 @@ fn open() -> Result<Process, String> {
     Ok(process)
 }
 
+/// Each finished fight the game still holds, as `<out dir>\\<setup id>.json` (its own file
+/// rewritten if it's already there).
+fn write_results(layout: &Layout, out_dir: &str) -> Result<(), String> {
+    let process = open()?;
+    let started = Instant::now();
+    let fights = battles::read(&process, layout)?;
+    eprintln!("{} finished fights found in {:.2?}", fights.len(), started.elapsed());
+
+    for (id, fight) in &fights {
+        write_json(&format!("{out_dir}\\{id}.json"), fight)?;
+        eprintln!("  {id}: stage {}, outcome {}, {} turns", fight["p"]["i"], fight["i"], fight["s"]["t"]);
+    }
+
+    Ok(())
+}
+
 fn write_account(process: &Process, layout: &Layout, outputs: &Outputs) -> Result<(), String> {
     let started = Instant::now();
     let snapshot = read_account(process, layout)?;
@@ -162,6 +191,17 @@ fn write_account(process: &Process, layout: &Layout, outputs: &Outputs) -> Resul
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if let [flag, layout_path, out_dir] = &args[..] {
+        if flag == "--results" {
+            if let Err(e) = Layout::load(layout_path).and_then(|layout| write_results(&layout, out_dir)) {
+                eprintln!("raid-reader: {e}");
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
+
     let (watching, paths) = match args.split_first() {
         Some((flag, rest)) if flag == "--watch" => (true, rest),
         _ => (false, &args[..]),

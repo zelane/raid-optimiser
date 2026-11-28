@@ -44,7 +44,8 @@ def build_skills(skills, heroes, status_names, extra_ids=()):
     Also what it can place and do, whatever the condition or chance: `debuffs` on enemies and
     `buffs` on its team (status effect names), every effect kind it has (`effect_kinds`:
     Revive, TeamAttack, PassiveCounterattack, …) and whether it hits for a share of the
-    target's HP (`target_hp_damage`)."""
+    target's HP (`target_hp_damage`), and the skill whose level it takes (`use_level_of`: a
+    skill's copy for team attacks, Donatello's 99505 at his A1's)."""
     wanted = {skill_id for h in heroes for f in h["forms"] for skill_id in f["skills"]}
     wanted |= set(extra_ids)
     out = {}
@@ -87,6 +88,11 @@ def build_skills(skills, heroes, status_names, extra_ids=()):
                 and OWN_STATS.search(e.get("MultiplierFormula") or "")
             ],
             **skill_kit(skill, status_names),
+            **(
+                {"use_level_of": skill["UseLevelOfSkillId"]}
+                if skill.get("UseLevelOfSkillId")
+                else {}
+            ),
         }
     return out
 

@@ -131,7 +131,7 @@ def damage_goal(skill: Skill, champion: Champion, enemy_defence: float) -> Damag
         formula=total,
         skill_ignore=-skill.hits[0].defence_modifier,
         aoe=skill.aoe,
-        book_bonus=sum(skill.book_damage[: level - 1]),
+        book_bonus=skill.damage_bonus_at(level),
         enemy_defence=enemy_defence,
     )
 
