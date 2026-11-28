@@ -7,12 +7,21 @@ modifiers reach an enemy, the sets' damage bonus, the picker's query and its gro
 - `test_damage_bonus_stacks_per_set_up_to_its_cap`: Zeal per set to its cap, Fury once
 - `test_changed_level_resets_the_ones_under_it`, `test_saved_target_wins`: the picker's query
 - `test_shared_region_names_get_what_tells_them_apart`: Iron Twins, Hydra, Grim Forest
+- `test_team_list_by_region_then_area`: the saved-team list a stage's team screen offers
 """
 
 from dataclasses import dataclass
 
 from optimiser.damage import bonus_from_sets
-from optimiser.enemies import EnemyForm, EnemyType, Modifier, Placement, modifier_applies
+from optimiser.enemies import (
+    EnemyForm,
+    EnemyType,
+    Modifier,
+    Placement,
+    Stage,
+    modifier_applies,
+    team_list,
+)
 from optimiser.tables import DamageBonus, FixedSet, Stat
 from webui.forms.targets import SavedTarget, parse_target_query
 from webui.service.targets import group_labels
@@ -98,3 +107,16 @@ def test_shared_region_names_get_what_tells_them_apart() -> None:
         "FoggyForestExtraHardZone": "Grim Forest: Extra Hard",
         "DragonsLair": "Dragon's Lair",
     }
+
+
+def test_team_list_by_region_then_area() -> None:
+    def stage(area: str | None, region: str | None) -> Stage:
+        return Stage(1, area, region, None, 5, (), (), (), ())
+
+    assert team_list(stage("Dungeon", "IceGolemCave")) == "ArtifactDungeons"
+    assert team_list(stage("Dungeon", "SpiritKeep")) == "PotionKeeps"
+    assert team_list(stage("Dungeon", "MinotaurCave")) == "ArtifactAscendAndMasteries"
+    assert team_list(stage("Fractions", "Fraction_Orcs")) == "Fractions"
+    assert team_list(stage("Chimera", "ChimeraRotation2")) == "Chimera"
+    assert team_list(stage("CursedCity", "CursedCityDistrict1")) == "GeneralPve"
+    assert team_list(stage(None, None)) == "GeneralPve"

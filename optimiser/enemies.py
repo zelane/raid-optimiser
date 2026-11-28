@@ -17,6 +17,8 @@ trials, reward lists and raid timing, and the areas' shield caps.
 - `enemy_stats`: an enemy's stats in a stage
 - `modifier_applies`, `is_boss`: what the stats depend on
 - `Rotating`, `team_restriction`: what a stage holds every champion to
+- `TEAM_LISTS_BY_AREA`, `TEAM_LISTS_BY_REGION`, `GENERAL_TEAM_LIST`, `team_list`: the saved-team
+  list a stage's team screen offers
 - `quest_text`: a battle quest's text with its parameter
 - `parse_stage`, `parse_placement`, `parse_modifier`, `parse_restriction`, `parse_type`,
   `parse_skill`, `parse_area`, `parse_chimera`, `parse_trial`, `parse_rewards`: the loader's
@@ -32,6 +34,46 @@ from optimiser.tables import STAT_NAMES, Stat, Stats, faction_name, read_json
 
 FACTION_WARS = "Fractions"  # the area, whose regions are crypts
 CRYPT = "Fraction_"  # a crypt's region id, before its faction
+
+# The saved-team list (`HeroesAiPresetType`) a stage's team screen offers, as the game's
+# `StageExtensions.GetHeroesAiPresetType` picks it by region: read from its code (its
+# `get_RegionMappings` checks), so recheck after a game update. A region's own list first, then
+# its area's; anything else is GeneralPve. The keeps, ascension, event and gear dungeons fall back
+# to GeneralPve if the server turns their lists off (`GetSpecificAiPresetTypeOrPvE`; not read).
+TEAM_LISTS_BY_AREA = {
+    "Arena": "Pvp",
+    "Arena3X3": "Pvp",
+    "LiveArena": "Pvp",
+    "Fractions": "Fractions",
+    "DoomTower": "DoomTower",
+    "Hydra": "Hydra",
+    "Chimera": "Chimera",
+    "CooperationEventWorldBoss": "CooperationEventWorldBoss",
+    "Siege": "Siege",
+}
+TEAM_LISTS_BY_REGION = {
+    **dict.fromkeys(
+        (
+            "VoidDoubleAscendDungeon",
+            "SpiritDoubleAscendDungeon",
+            "MagicDoubleAscendDungeon",
+            "ForceDoubleAscendDungeon",
+        ),
+        "IronTwins",
+    ),
+    **dict.fromkeys(
+        ("VoidKeep", "SpiritKeep", "MagicKeep", "ForceKeep", "ArcaneKeep"), "PotionKeeps"
+    ),
+    **dict.fromkeys(
+        ("ArtifactAscendDungeon", "AccessoryAscendDungeon", "MinotaurCave"),
+        "ArtifactAscendAndMasteries",
+    ),
+    "EventDungeon": "EventDungeon",
+    **dict.fromkeys(
+        ("DragonsLair", "IceGolemCave", "SpiderCave", "FireGolemCave"), "ArtifactDungeons"
+    ),
+}
+GENERAL_TEAM_LIST = "GeneralPve"
 
 # By their skills (Almighty Chimera, Ram, Lion, Viper); the trials and sequence name them so.
 CHIMERA_FORMS = ("Ultimate", "Ram", "Lion", "Snake")
@@ -303,6 +345,15 @@ def modifier_applies(modifier: Modifier, placement: Placement, enemy: EnemyType)
 
 def is_boss(placement: Placement, enemy: EnemyType) -> bool:
     return placement.boss or enemy.boss_kind is not None
+
+
+def team_list(stage: Stage) -> str:
+    """The saved-team list the stage's team screen offers (`Preset.area`'s values)."""
+    return (
+        TEAM_LISTS_BY_REGION.get(stage.region or "")
+        or TEAM_LISTS_BY_AREA.get(stage.area or "")
+        or GENERAL_TEAM_LIST
+    )
 
 
 def parse_stage(stage_id: int, raw: dict, texts: dict[str, str]) -> Stage:

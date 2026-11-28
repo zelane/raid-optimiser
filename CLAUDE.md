@@ -352,7 +352,10 @@ in-game commands below; the account and the game's tables come from the game its
   and shows the last sim's clears (how the rest ended), turns, damage, the Chimera's trials and
   each champion's average rows: summed up as soon as it's done (`service.sims.record_result`),
   so a terminal run of the host can't change it. Only Run talks to the server; the form's
-  choices ride in the address bar.
+  choices ride in the address bar. The team dropdown puts first the saved-team list the stage's
+  own team screen offers (`enemies.team_list`, the picker's `team_list`: the game's
+  `StageExtensions.GetHeroesAiPresetType`, by region then area, else GeneralPve; read from its
+  code, so recheck after a game update), the other lists under it.
   Real fights are captured whole by `just capture`: it waits for a new one (a setup id, `z`,
   neither cached when it starts nor saved: the cache isn't always emptied between fights), saves
   its setup from the game's PlayerPrefs (`tools/capture_setup.py`: `BattleSetupCache_<user>` in

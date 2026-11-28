@@ -11,7 +11,7 @@ import type { EnemyCard, TargetPicker } from "../types/generated/webui.service.t
 import ChampionTile from "./ChampionTile.vue";
 
 const props = defineProps<{ picker: TargetPicker; detached?: boolean }>();
-const emit = defineEmits<{ picked: [enemy: EnemyCard, target: string] }>();
+const emit = defineEmits<{ picked: [enemy: EnemyCard, target: string, view: TargetPicker] }>();
 
 const shown = ref(props.picker);
 const busy = ref(false);
@@ -45,7 +45,7 @@ async function change(level: Level, value: string) {
     const view = await getJson<TargetPicker>(`/targets?${query}`);
     if (!view) return;
     shown.value = view;
-    emit("picked", view.picked, view.target);
+    emit("picked", view.picked, view.target, view);
   } finally {
     busy.value = false;
   }

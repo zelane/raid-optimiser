@@ -21,13 +21,26 @@ const target = ref(props.picker.target);
 const running = ref(false);
 const sent = ref<Sent | null>(null);
 
-// The saved teams by area, for the dropdown's groups.
-const areas = computed(() => {
-  const groups = new Map<string, typeof props.page.teams>();
+const teamList = ref(props.picker.team_list);
+
+// The saved teams by list, for the dropdown's groups: first the one the opponent's team screen
+// offers (as the game picks it), then the rest.
+const lists = computed(() => {
+  const groups = new Map<string, typeof props.page.teams>([[teamList.value, []]]);
   for (const option of props.page.teams)
     groups.set(option.area, [...(groups.get(option.area) ?? []), option]);
-  return [...groups.entries()];
+  return [...groups.entries()]
+    .filter(([, options]) => options.length)
+    .map(
+      ([list, options]) =>
+        [list === teamList.value ? `${list} (this stage's)` : list, options] as const,
+    );
 });
+
+function picked(pick: string, view: Picker) {
+  target.value = pick;
+  teamList.value = view.team_list;
+}
 const chosen = computed(() => props.page.teams.find((option) => String(option.id) === team.value));
 const result = computed(() => props.page.result);
 
@@ -71,7 +84,7 @@ const uncleared = computed(() => {
     </PageHead>
 
     <section class="target-section" aria-label="Opponent">
-      <TargetPicker :picker="picker" @picked="(_, picked) => (target = picked)" />
+      <TargetPicker :picker="picker" @picked="(_, pick, view) => picked(pick, view)" />
     </section>
 
     <section class="stack panel" aria-label="Team">
@@ -80,7 +93,7 @@ const uncleared = computed(() => {
           <span class="caps">Saved team</span>
           <select v-model="team">
             <option value="">Pick a team…</option>
-            <optgroup v-for="[area, options] in areas" :key="area" :label="area">
+            <optgroup v-for="[list, options] in lists" :key="list" :label="list">
               <option v-for="option in options" :key="option.id" :value="String(option.id)">
                 {{ option.name }}: {{ option.champions.join(", ") }}
               </option>

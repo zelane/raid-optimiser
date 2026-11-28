@@ -21,7 +21,7 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-from optimiser.enemies import Area, Enemies, Placement, Stage, enemy_stats, is_boss
+from optimiser.enemies import Area, Enemies, Placement, Stage, enemy_stats, is_boss, team_list
 from optimiser.labels import STAT_LABELS, format_stat
 from optimiser.tables import Stat
 from webui.forms.targets import TargetQuery
@@ -114,7 +114,7 @@ class EnemyCard:
 @dataclass(frozen=True)
 class TargetPicker:
     """`target` ("<stage>:<wave>:<slot>") names the pick, for a form to keep; `stage` is its
-    stage's id."""
+    stage's id, `team_list` the saved-team list its team screen offers (`enemies.team_list`)."""
 
     zones: tuple[Option, ...]
     groups: tuple[Option, ...]
@@ -126,6 +126,7 @@ class TargetPicker:
     picked: EnemyCard
     target: str
     stage: int
+    team_list: str
 
 
 def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
@@ -153,6 +154,7 @@ def target_picker(enemies: Enemies, query: TargetQuery) -> TargetPicker:
         picked=picked,
         target=f"{stage.id}:{picked.key.replace('-', ':')}",
         stage=stage.id,
+        team_list=team_list(stage),
     )
 
 
