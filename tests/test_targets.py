@@ -11,9 +11,9 @@ modifiers reach an enemy, the sets' damage bonus, the picker's query and its gro
 
 from dataclasses import dataclass
 
-from optimiser.account import DamageBonus, FixedSet, Stat
 from optimiser.damage import bonus_from_sets
 from optimiser.enemies import EnemyForm, EnemyType, Modifier, Placement, modifier_applies
+from optimiser.tables import DamageBonus, FixedSet, Stat
 from webui.forms.targets import SavedTarget, parse_target_query
 from webui.service.targets import group_labels
 

@@ -127,7 +127,11 @@ fn write_text(path: &str, text: &str) -> Result<(), String> {
 
 fn read_once(layout: &Layout, outputs: &Outputs) -> Result<(), String> {
     let process = open()?;
-    write_json(&outputs.events, &read_events(&process, layout)?)?;
+    // None: the game hasn't loaded them (`events::read`); the last file read stays.
+    if let Some(events) = read_events(&process, layout)? {
+        write_json(&outputs.events, &events)?;
+    }
+
     write_account(&process, layout, outputs)
 }
 

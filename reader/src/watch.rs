@@ -68,8 +68,10 @@ fn watch_game(process: &Process, layout: &Layout, outputs: &Outputs, written: &m
     let mut moved_at: Option<Instant> = Some(started); // the account not read since
 
     while process.alive() {
-        match read_events(process, layout).and_then(|events| to_json(&events)) {
-            Ok(json) if written.events.as_ref() != Some(&json) => {
+        // None: the game hasn't loaded its events (starting, closing): keep the last written.
+        let read = read_events(process, layout);
+        match read.and_then(|events| events.map(|found| to_json(&found)).transpose()) {
+            Ok(Some(json)) if written.events.as_ref() != Some(&json) => {
                 match write_text(&outputs.events, &json) {
                     Ok(()) => log("events changed"),
                     Err(e) => eprintln!("events: {e}"),

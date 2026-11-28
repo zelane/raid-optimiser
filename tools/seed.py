@@ -14,11 +14,12 @@ from datetime import datetime
 import click
 
 from optimiser.accessories.roles import NO_SET, ChampionType, SetTable
-from optimiser.account import ArtifactSet, load_account
+from optimiser.account import load_account
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT, STORE
 from optimiser.settings import read_champion_types, read_set_table, reseed_accessories
 from optimiser.store import backup
+from optimiser.tables import ArtifactSet
 
 
 @click.command()

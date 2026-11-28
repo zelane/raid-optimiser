@@ -16,7 +16,8 @@ counts on both sides, so a champion with two masteries in row 5 needs 750 Divine
 from collections import Counter
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, MasteryType
+from optimiser.account import Account, Champion
+from optimiser.tables import MasteryType
 from webui.service.champions import game_order
 from webui.service.views import ChampionRow, champion_row
 

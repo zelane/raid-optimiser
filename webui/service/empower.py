@@ -16,7 +16,8 @@ empowered copy, which is worth more kept.
 from collections import defaultdict
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, EmpowerSubstitute
+from optimiser.account import Account, Champion
+from optimiser.tables import EmpowerSubstitute
 from webui.service.champions import RARITY_ORDER, game_order
 from webui.service.views import ChampionRow, champion_row
 

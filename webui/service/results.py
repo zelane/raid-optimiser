@@ -14,17 +14,7 @@ current gear, or why there are none.
 import time
 from dataclasses import dataclass, field
 
-from optimiser.account import (
-    Account,
-    Artifact,
-    Champion,
-    Slot,
-    Stat,
-    StatLine,
-    Stats,
-    faction_label,
-    worn_gear,
-)
+from optimiser.account import Account, Artifact, Champion, StatLine, worn_gear
 from optimiser.accuracy import Lands, Resists
 from optimiser.assume import assume
 from optimiser.battle import Battle
@@ -52,6 +42,7 @@ from optimiser.solve import (
     find_builds,
 )
 from optimiser.stats import build_stats, set_multiplier
+from optimiser.tables import Slot, Stat, Stats, faction_label
 from webui.forms.request import Equip
 from webui.service.views import (
     ChampionRow,

@@ -41,10 +41,11 @@ from optimiser.accessories.roles import (
     Mains,
     TypeKey,
 )
-from optimiser.account import Account, Champion, HeroForm, Slot, Stat
+from optimiser.account import Account, Champion
 from optimiser.damage import STAT_NAMES
 from optimiser.labels import STAT_LABELS
 from optimiser.levels import base_stats
+from optimiser.tables import HeroForm, Slot, Stat
 
 BODY = (Stat.ATK, Stat.HP, Stat.DEF)
 MAX_GRADE, MAX_LEVEL = 6, 60  # the roster it reads: 6★ champions

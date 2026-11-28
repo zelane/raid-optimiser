@@ -26,8 +26,9 @@ trials, reward lists and raid timing, and the areas' shield caps.
 from dataclasses import dataclass
 from pathlib import Path
 
-from optimiser.account import STAT_NAMES, Champion, Stat, Stats, faction_name, read_json
+from optimiser.account import Champion
 from optimiser.levels import base_stats
+from optimiser.tables import STAT_NAMES, Stat, Stats, faction_name, read_json
 
 FACTION_WARS = "Fractions"  # the area, whose regions are crypts
 CRYPT = "Fraction_"  # a crypt's region id, before its faction
@@ -51,7 +52,7 @@ class Modifier:
 @dataclass(frozen=True)
 class Restriction:
     """Which champions a stage's condition admits: each listed field must match (an empty
-    tuple admits any; factions by key, `account.faction_name`). A stage with one condition
+    tuple admits any; factions by key, `tables.faction_name`). A stage with one condition
     holds every champion to it; several are alternatives, one active at a time
     (`team_restriction`). `race` (Telarians…) isn't on the account's champions, so `admits`
     can't check it."""

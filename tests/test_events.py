@@ -6,6 +6,7 @@ points tables the page draws.
 - `test_texts_from_settings_ids`: title and points' name by id, none without settings
 - `test_tournament_ends_with_its_bracket`: start + bracket, a day past its stored end
 - `test_rule_conditions_and_turn_points`: a rule's set fields, a turn-scored fight's range
+- `test_events_not_loaded_yet`: a file read while the game was loading holds no events
 - `test_rules_add_where_they_hold`: values, any-of, stage ranges; an unknown fact fails
 - `test_turn_points_match_real_fights`: Sand Devil 25 as fought: 44 turns 43 points, 22 turns 48
 - `test_bracket_from_standing_else_levels`: the standing's bracket, else the levels' one
@@ -25,15 +26,16 @@ from optimiser.events import (
     Rule,
     Standing,
     TurnPoints,
-    holds,
-    rule_points,
     account_levels,
     bracket_for,
     decode,
     event_end,
+    holds,
+    load_events,
     milestones_for,
     parse_rule,
     parse_texts,
+    rule_points,
 )
 from webui.service.events import Names, points_tables
 
@@ -223,3 +225,10 @@ def test_rules_add_where_they_hold() -> None:
         True,
         False,
     ]
+
+
+def test_events_not_loaded_yet(tmp_path) -> None:
+    half_loaded = tmp_path / "events.json"
+    half_loaded.write_text('{"json": "", "texts": {}, "progress": [], "summons": null}')
+
+    assert load_events(half_loaded, tmp_path / "unread.json", tmp_path) is None

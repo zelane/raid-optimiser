@@ -15,7 +15,7 @@ the finder's (`service.finder`).
 
 from dataclasses import dataclass, replace
 
-from optimiser.account import LOCK_LEVELS, Account, Champion, Stat, Stats, worn_gear
+from optimiser.account import LOCK_LEVELS, Account, Champion, worn_gear
 from optimiser.battle import BUFFS, Buff, Leader, auras_reaching
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.labels import (
@@ -30,6 +30,7 @@ from optimiser.paths import STORE
 from optimiser.reserve import Rule, reservations, reserved_count, rule_key
 from optimiser.stats import build_stats
 from optimiser.store import latest_run
+from optimiser.tables import Stat, Stats
 from webui.service.results import StatCell, stat_cells
 from webui.service.runs import RunEntryView, RunView, run_history, run_view, saved_run
 from webui.service.skills import SkillLevel, form_skills
@@ -281,7 +282,7 @@ def form_views(account: Account, champion: Champion) -> list[FormView]:
 def skill_options(account: Account, champion: Champion) -> list[SkillOption]:
     options = []
 
-    for skill_id in account.tables.skills_of(champion):
+    for skill_id in champion.skills_in(account.tables):
         skill = account.tables.skills.get(skill_id)
         if skill is None:
             continue

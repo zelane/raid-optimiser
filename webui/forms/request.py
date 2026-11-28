@@ -29,13 +29,14 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 
-from optimiser.account import LOCK_LEVELS, Account, Champion, Locks, Stat, Stats
+from optimiser.account import LOCK_LEVELS, Account, Champion, Locks
 from optimiser.accuracy import Lands, Resists
 from optimiser.battle import BUFFS, Battle, Buff, Leader, auras_reaching
 from optimiser.damage import DamageGoal, Unsupported, damage_goal
 from optimiser.labels import PERCENT_STATS, STAT_LABELS
 from optimiser.reserve import Rule, reservations, rule_key
 from optimiser.solve import MAX_PIECES, GearFilter, Goal, Request
+from optimiser.tables import Stat, Stats
 from webui.forms.common import FormErrors, parse_number
 
 DEFAULT_ENEMY_DEF = 6000
@@ -227,7 +228,7 @@ def parse_damage(
     skill_field = form.get("damage_skill", "")
     skill_id = int(skill_field) if skill_field.isdigit() else None
 
-    if skill_id not in account.tables.skills_of(champion):
+    if skill_id not in champion.skills_in(account.tables):
         errors.append("choose one of the champion's skills to rank damage by")
         return None
 

@@ -16,7 +16,8 @@ The champion filter bar (`service.finder`) narrows the list; `forms.books` holds
 from collections import defaultdict
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, HeroForm, Skill, Tables
+from optimiser.account import Account, Champion
+from optimiser.tables import HeroForm, Skill, Tables
 from webui.forms.finder import FinderQuery
 from webui.service.champions import game_order
 from webui.service.finder import FilterChoices, account_factions, filter_choices, matches

@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
-from optimiser.account import Account, Artifact, Champion, Slot
+from optimiser.account import Account, Artifact, Champion
+from optimiser.tables import Slot
 
 ASSETS = Path(__file__).resolve().parents[1] / "static" / "assets"
 

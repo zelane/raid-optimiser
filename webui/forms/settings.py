@@ -33,11 +33,12 @@ from dataclasses import dataclass
 from optimiser.accessories.cleanup import ACCESSORY_SPACE
 from optimiser.accessories.roles import ACCESSORY_MAINS, TYPE_STATS, Kind, Mains
 from optimiser.accessories.rules import SET_RULE_BOUNDS, RuleBounds, rule_bounds
-from optimiser.account import LOCK_LEVELS, Account, GlyphGrade, GlyphKind, Stat, Tables
+from optimiser.account import LOCK_LEVELS, Account
 from optimiser.assume import Flag
 from optimiser.glyphs import parse_grade, parse_kind
 from optimiser.labels import MARKER_LABELS
 from optimiser.reserve import Rule, Tagged, Team, parse_rule
+from optimiser.tables import GlyphGrade, GlyphKind, Stat, Tables
 from webui.forms.common import FormErrors, parse_number
 
 MAX_WEIGHT = 10

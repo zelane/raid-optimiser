@@ -15,7 +15,8 @@ ACC and RES buffs add flat points, not a share of base, isn't read from the game
 
 from dataclasses import dataclass
 
-from optimiser.account import Account, Aura, Bonus, Champion, Stat
+from optimiser.account import Account, Champion
+from optimiser.tables import Aura, Bonus, Stat
 
 FLAT_BUFFS = (Stat.ACC, Stat.RES)  # +25 is 25 points, not 25 % of base
 FACTION_WARS = "Fractions"  # the game's area name
@@ -90,7 +91,7 @@ def auras_reaching(account: Account, champion: Champion) -> list[Leader]:
         for number, aura in enumerate(auras):
             crypt_mate = aura.area != FACTION_WARS or leader.faction == champion.faction
 
-            if aura.reaches(champion) and crypt_mate:
+            if champion.reached_by(aura) and crypt_mate:
                 leaders.setdefault((leader.type_id // 10, number), Leader(leader, number, aura))
 
     return list(leaders.values())

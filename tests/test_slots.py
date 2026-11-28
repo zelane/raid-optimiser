@@ -7,7 +7,8 @@ test_slots.py - which gear slots a champion has open (`slot_unlocked`).
 
 from dataclasses import dataclass
 
-from optimiser.account import GearTables, Slot, slot_unlocked
+from optimiser.account import slot_unlocked
+from optimiser.tables import GearTables, Slot
 
 GEAR = GearTables(
     max_level=16,

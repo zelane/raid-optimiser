@@ -26,8 +26,8 @@ least whole RES for a resisting rate against an ACC (what a rate target asks of 
 from dataclasses import dataclass
 
 from optimiser import fixed
-from optimiser.account import Stat
 from optimiser.fixed import ONE, Fixed
+from optimiser.tables import Stat
 
 RESIST_FLOOR = 0.03
 RESIST_CAP = 0.97

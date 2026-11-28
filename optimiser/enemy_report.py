@@ -14,7 +14,6 @@ enemy_report.py - the enemy store (`enemies`) in the terminal: an area's stages 
 
 import argparse
 
-from optimiser.account import Stat
 from optimiser.enemies import (
     CHIMERA_FORMS,
     Enemies,
@@ -26,6 +25,7 @@ from optimiser.enemies import (
     team_restriction,
 )
 from optimiser.paths import GAME
+from optimiser.tables import Stat
 
 SHOWN_STATS = (Stat.HP, Stat.ATK, Stat.DEF, Stat.SPD, Stat.RES, Stat.ACC, Stat.CR, Stat.CD)
 

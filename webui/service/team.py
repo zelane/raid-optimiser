@@ -21,7 +21,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from urllib.parse import urlencode
 
-from optimiser.account import Account, Champion, Relic, faction_label
+from optimiser.account import Account, Champion, Relic
+from optimiser.tables import faction_label
 from optimiser.teams.cover import Member, NeedCover
 from optimiser.teams.find import Worn
 from optimiser.teams.gear import Assumed, Gear, Loadout, worn_relic

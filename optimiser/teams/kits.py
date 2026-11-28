@@ -24,7 +24,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import cached_property
 
-from optimiser.account import Account, Champion, Placement, Skill
+from optimiser.account import Account, Champion
+from optimiser.tables import Placement, Skill
 from optimiser.teams.tags import EFFECT_LABELS, Mechanic, Side, Tag, status_kind, tag_label
 
 # Scoring (`Rating`): how far each thing a champion brings can be counted on. Reach: a buff

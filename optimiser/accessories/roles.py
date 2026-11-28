@@ -29,7 +29,7 @@ are worth 1 and target every type, and so do new types every set.
 from dataclasses import dataclass
 from enum import StrEnum
 
-from optimiser.account import Slot, Stat
+from optimiser.tables import Slot, Stat
 
 
 class Kind(StrEnum):

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from optimiser.accessories.roles import STANDARD_TYPES, Kind
-from optimiser.account import Account, Slot, Stat
+from optimiser.account import Account
 from optimiser.settings import (
     add_champion_type,
     delete_champion_type,
@@ -29,6 +29,7 @@ from optimiser.settings import (
     set_off_target,
 )
 from optimiser.store import backup
+from optimiser.tables import Slot, Stat
 
 NO_ROSTER = cast(Account, SimpleNamespace(champions={}))  # no 6★ champions: standard types only
 

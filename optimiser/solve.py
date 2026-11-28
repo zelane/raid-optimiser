@@ -43,22 +43,7 @@ from dataclasses import dataclass, field
 
 import highspy
 
-from optimiser.account import (
-    ARMOUR,
-    Account,
-    Artifact,
-    ArtifactSet,
-    Bonus,
-    Champion,
-    FixedSet,
-    Locks,
-    Slot,
-    Stat,
-    Stats,
-    Tables,
-    VariableSet,
-    slot_unlocked,
-)
+from optimiser.account import Account, Artifact, Champion, Locks, slot_unlocked
 from optimiser.accuracy import Lands, RateGoal, Resists
 from optimiser.battle import Battle
 from optimiser.damage import (
@@ -77,6 +62,17 @@ from optimiser.stats import (
     constant_stats,
     set_multiplier,
     set_stats,
+)
+from optimiser.tables import (
+    ARMOUR,
+    ArtifactSet,
+    Bonus,
+    FixedSet,
+    Slot,
+    Stat,
+    Stats,
+    Tables,
+    VariableSet,
 )
 
 MAX_PIECES = 9

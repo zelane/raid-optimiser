@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import cast
 
 from optimiser.accessories.roles import NO_SET, Group, Kind, SetFit, type_fits
-from optimiser.account import Account, Slot, Stat
+from optimiser.account import Account
 from optimiser.settings import (
     read_champion_types,
     read_rules,
@@ -23,6 +23,7 @@ from optimiser.settings import (
     save_set,
     set_off_target,
 )
+from optimiser.tables import Slot, Stat
 
 NO_ROSTER = cast(Account, SimpleNamespace(champions={}))  # no 6★ champions: standard types only
 PROTECTION, MERCILESS, MERCURIAL = 47, 59, 66
@@ -63,9 +64,7 @@ def test_fits_by_target_faction_and_main(tmp_path: Path):
     sets = replace(read_set_table(store, types), off_target=0.4)
 
     on_damage_set = type_fits(sets, types, Group(Slot.RING, Stat.ATK, MERCILESS, None))
-    off_support_set = type_fits(
-        sets, types, Group(Slot.RING, Stat.ATK, PROTECTION, "Demonspawn")
-    )
+    off_support_set = type_fits(sets, types, Group(Slot.RING, Stat.ATK, PROTECTION, "Demonspawn"))
     unsuited_main = type_fits(sets, types, Group(Slot.RING, Stat.HP, MERCILESS, None))
 
     assert on_damage_set == (1.0, 0.0)  # the Demonspawn type isn't for a faction-less piece

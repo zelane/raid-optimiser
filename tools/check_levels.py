@@ -18,8 +18,8 @@ from pathlib import Path
 
 import click
 
-from optimiser.account import STAT_NAMES
 from optimiser.levels import MULTIPLIERS_BLOB, base_stats
+from optimiser.tables import STAT_NAMES
 
 TOLERANCE = 1e-6  # the oracle's values are rounded to 6 places (crit: Fixed division)
 

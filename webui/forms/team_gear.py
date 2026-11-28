@@ -28,9 +28,10 @@ with `lock_level`, `exclude_<rule key>`), else every reserve rule applies. `run`
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from optimiser.account import Account, FixedSet, Stat
+from optimiser.account import Account
 from optimiser.reserve import Rule
 from optimiser.solve import MAX_PIECES, GearFilter
+from optimiser.tables import FixedSet, Stat
 from webui.forms.common import FormErrors
 from webui.forms.request import RATE_GOALS, exclude_field, parse_gear_filter
 from webui.forms.targets import SavedTarget, parse_saved

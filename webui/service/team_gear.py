@@ -15,7 +15,7 @@ champion's goal ranked first. No piece goes to two of them (`solve.find_team_bui
 import time
 from dataclasses import dataclass, replace
 
-from optimiser.account import Account, Champion, Stat, worn_gear
+from optimiser.account import Account, Champion, worn_gear
 from optimiser.accuracy import (
     Lands,
     Resists,
@@ -43,6 +43,7 @@ from optimiser.solve import (
     find_team_builds,
 )
 from optimiser.stats import build_stats
+from optimiser.tables import Stat
 from optimiser.teams.kits import kit_of
 from optimiser.teams.tags import Side
 from webui.forms.request import DEFAULT_ABOVE_LEVEL, RATE_GOALS, exclude_field, filter_form
@@ -313,7 +314,7 @@ def damage_skills(
     """The champion's skills whose damage can be ranked, against `defence`."""
     found = []
 
-    for skill_id in account.tables.skills_of(champion):
+    for skill_id in champion.skills_in(account.tables):
         skill = account.tables.skills.get(skill_id)
         if skill is None:
             continue

@@ -13,7 +13,7 @@ The skill books page (`service.books`) and the champion page (`service.champions
 
 from dataclasses import dataclass
 
-from optimiser.account import HeroForm, Skill, Tables
+from optimiser.tables import HeroForm, Skill, Tables
 
 SLOT_KINDS = {"Active": "A", "Passive": "P"}  # numbered in order: A1, A2 …, P1, P2 …
 

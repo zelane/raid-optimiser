@@ -14,10 +14,10 @@ rate.
 
 import pytest
 
-from optimiser.account import Stat
 from optimiser.accuracy import RESIST_FLOOR, Lands, Resists, resist_chance
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 from optimiser.solve import held_floor
+from optimiser.tables import Stat
 from webui.forms.request import parse_rate, parse_rate_minimums
 
 

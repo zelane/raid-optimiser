@@ -15,8 +15,9 @@ two (almost always its challenge, the last), and the page says so.
 
 from dataclasses import dataclass, replace
 
-from optimiser.account import Account, StageProgress, faction_name
+from optimiser.account import Account, StageProgress
 from optimiser.enemies import CRYPT, FACTION_WARS, Enemies, Region
+from optimiser.tables import faction_name
 from webui.service.teams import stage_url
 from webui.service.views import asset_url
 

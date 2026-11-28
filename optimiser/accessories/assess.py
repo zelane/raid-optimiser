@@ -22,7 +22,8 @@ import numpy as np
 from optimiser.accessories.potential import ACCESSORIES, Piece, Potential, Scorer, assess
 from optimiser.accessories.roles import ChampionType, SetTable
 from optimiser.accessories.rules import Rules
-from optimiser.account import Account, Artifact, Locks, Slot
+from optimiser.account import Account, Artifact, Locks
+from optimiser.tables import Slot
 
 
 class Where(StrEnum):

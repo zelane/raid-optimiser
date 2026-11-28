@@ -40,7 +40,8 @@ from typing import NamedTuple
 import numpy as np
 
 from optimiser.accessories.roles import ChampionType, Group, Kind, SetTable, type_fits
-from optimiser.account import Artifact, GearLine, GearTables, GlyphGrade, GlyphKind, Slot, Stat
+from optimiser.account import Artifact
+from optimiser.tables import GearLine, GearTables, GlyphGrade, GlyphKind, Slot, Stat
 
 ACCESSORIES = (Slot.RING, Slot.AMULET, Slot.BANNER)
 MAIN_STATS = {

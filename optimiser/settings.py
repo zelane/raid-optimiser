@@ -33,7 +33,7 @@ from optimiser.accessories.roles import (
 )
 from optimiser.accessories.rules import DEFAULT_RULES, Rules, SetRules, seed_set_rules
 from optimiser.accessories.scaling import seed_types
-from optimiser.account import Account, GlyphGrade, GlyphKind, Slot, Stat, Tables
+from optimiser.account import Account
 from optimiser.assume import Assumptions, Flag
 from optimiser.glyphs import grade_key, kind_key, parse_grade, parse_kind
 from optimiser.reserve import Rule, parse_rule, rule_key
@@ -58,6 +58,7 @@ from optimiser.store import (
 from optimiser.store import read_reserve_rules as read_rule_keys
 from optimiser.store import seed_set_fits as seed_fits_store
 from optimiser.store import seed_types as seed_store
+from optimiser.tables import GlyphGrade, GlyphKind, Slot, Stat, Tables
 
 OFF_TARGET_NAME = "off_target"  # the store's number for `SetTable.off_target`
 RULE_PREFIX = "accessory_rule:"  # the store's numbers for `Rules`, by field name

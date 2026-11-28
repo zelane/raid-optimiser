@@ -16,17 +16,8 @@ from collections import Counter
 from collections.abc import Iterable
 
 from optimiser import levels
-from optimiser.account import (
-    Artifact,
-    ArtifactSet,
-    Bonus,
-    Champion,
-    FixedSet,
-    Stat,
-    Stats,
-    Tables,
-    VariableSet,
-)
+from optimiser.account import Artifact, Champion
+from optimiser.tables import ArtifactSet, Bonus, FixedSet, Stat, Stats, Tables, VariableSet
 
 ADDITIVE = (Stat.CR, Stat.CD)
 
@@ -57,7 +48,7 @@ def build_stats(
 
 def base_stats(champion: Champion, tables: Tables) -> Stats:
     """The form's at the champion's rank and level, as the game scales them."""
-    return levels.base_stats(tables.form_of(champion).unscaled, champion.grade, champion.level)
+    return levels.base_stats(champion.form_in(tables).unscaled, champion.grade, champion.level)
 
 
 def constant_stats(champion: Champion, tables: Tables, battle: tuple[Bonus, ...] = ()) -> Stats:

@@ -13,10 +13,11 @@ labels.py - how stats and stat lines read, for every front end (CLI, web).
 
 import re
 
-from optimiser.account import Account, Aura, GlyphGrade, GlyphKind, Stat, StatLine, faction_label
+from optimiser.account import Account, StatLine
 from optimiser.battle import Buff
 from optimiser.reserve import GlobalPresets, Held, Reason, Rule, Tagged, Team, Worn
 from optimiser.solve import GearFilter
+from optimiser.tables import Aura, GlyphGrade, GlyphKind, Stat, faction_label
 
 STAT_LABELS = {
     Stat.HP: "HP",

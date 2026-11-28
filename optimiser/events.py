@@ -21,7 +21,7 @@ the one holding the level the other events' brackets agree on (`account_levels`)
 - `account_levels`, `bracket_for`, `milestones_for`: the account's bracket and its milestones
 - `rule_points`, `holds`: what an action earns for something, by the rules whose conditions
   hold for it (the event plans' one way of reading the rules)
-- `decode`, `parse_event`, `parse_texts`, `parse_rule`, `parse_milestones`, `parse_prize`,
+- `parse_event`, `parse_texts`, `parse_rule`, `parse_milestones`, `parse_prize`,
   `parse_standing`, `event_end`, `moment`: its steps
 """
 
@@ -30,9 +30,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 import orjson
+
+from optimiser.game_json import decode
 
 TOURNAMENT = "CommonTournament"  # an event's quest category, when it's a tournament
 POINTS = "Points"  # a rule's field: what it earns
@@ -212,7 +213,7 @@ def load_events(events: Path, schema: Path, game: Path) -> Events | None:
     it found none, or hasn't run)."""
     raw = orjson.loads(events.read_bytes()) if events.exists() else None
 
-    if not raw:
+    if not raw or not raw.get("json"):  # none read, or the game hadn't loaded them yet
         return None
 
     tables = orjson.loads(schema.read_bytes())
@@ -438,66 +439,3 @@ def event_end(dates: dict) -> datetime:
 
 def maybe_moment(milliseconds: int | None) -> datetime | None:
     return None if milliseconds is None else moment(milliseconds)
-
-
-def decode(value: Any, type_name: str, schema: dict) -> Any:
-    """`value` as the C# type `type_name`: classes' short keys named, enums by name, a text key
-    by its default text; what the schema doesn't know is kept as it is."""
-    type_name = type_name.removesuffix("?")
-    classes, enums = schema["classes"], schema["enums"]
-
-    match type_name:
-        case _ if value is None:
-            return None
-
-        case _ if type_name.startswith("Nullable<"):
-            return decode(value, type_name[len("Nullable<") : -1], schema)
-
-        case _ if type_name.endswith("[]") and isinstance(value, list):
-            return [decode(item, type_name[:-2], schema) for item in value]
-
-        case _ if type_name.startswith("List<") and isinstance(value, list):
-            return [decode(item, type_name[len("List<") : -1], schema) for item in value]
-
-        case _ if type_name.startswith("Dictionary<") and isinstance(value, dict):
-            key_type, value_type = type_arguments(type_name)
-            return {
-                decode_key(key, key_type, enums): decode(item, value_type, schema)
-                for key, item in value.items()
-            }
-
-        case "SharedLTextKey" if isinstance(value, dict):
-            return value.get("d")
-
-        case _ if (short := type_name.split(".")[-1]) in enums:
-            return enums[short].get(str(value), value)
-
-        case _ if short in classes and isinstance(value, dict):
-            fields = classes[short]
-            return {
-                fields[key]["name"]: decode(item, fields[key]["type"], schema)
-                for key, item in value.items()
-                if key in fields
-            }
-
-    return value
-
-
-def decode_key(key: str, type_name: str, enums: dict) -> str:
-    """A dictionary's key: an enum's by name, any other as the text it came as."""
-    short = type_name.split(".")[-1]
-    return enums[short].get(key, key) if short in enums else key
-
-
-def type_arguments(generic: str) -> tuple[str, str]:
-    """A two-argument generic's arguments: `Dictionary<int, List<int>>` → int, List<int>."""
-    inner = generic[generic.index("<") + 1 : -1]
-    depth = 0
-
-    for index, char in enumerate(inner):
-        depth += {"<": 1, ">": -1}.get(char, 0)
-
-        if char == "," and depth == 0:
-            return inner[:index].strip(), inner[index + 1 :].strip()
-
-    raise ValueError(f"not a two-argument generic: {generic}")

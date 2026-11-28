@@ -12,7 +12,7 @@ glyphs) and what gear is reserved (`optimiser.reserve`), kept in the store.
 from collections import Counter
 from dataclasses import dataclass
 
-from optimiser.account import Account, GlyphGrade, GlyphKind, Preset
+from optimiser.account import Account, Preset
 from optimiser.assume import FLAG_LABELS, Flag
 from optimiser.glyphs import grade_key, kind_key
 from optimiser.labels import (
@@ -33,6 +33,7 @@ from optimiser.reserve import (
     rule_key,
 )
 from optimiser.settings import plan_glyph, read_assumptions, set_flag, set_reserve_rule
+from optimiser.tables import GlyphGrade, GlyphKind
 from webui.service.current import current_reserve_rules
 
 

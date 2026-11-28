@@ -13,9 +13,10 @@ alone: a solve gets an assumed copy of the account and its request.
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
-from optimiser.account import Account, Artifact, Champion, GearLine, GearTables
+from optimiser.account import Account, Artifact, Champion
 from optimiser.glyphs import Planned, for_request, with_glyphs
 from optimiser.solve import Request
+from optimiser.tables import GearLine, GearTables
 
 LEVELS_PER_GRADE = 10  # a champion's top level is 10 per star
 

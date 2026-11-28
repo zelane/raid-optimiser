@@ -17,8 +17,9 @@ The account's real gear is left alone; solves use the glyphed copy.
 from collections.abc import Mapping
 from dataclasses import replace
 
-from optimiser.account import Account, GlyphGrade, GlyphKind, Stat, StatLine
+from optimiser.account import Account, StatLine
 from optimiser.solve import Request, directions
+from optimiser.tables import GlyphGrade, GlyphKind, Stat
 
 type Planned = Mapping[GlyphKind, GlyphGrade]
 

@@ -7,7 +7,7 @@ from its level, its effects at that level, and what an echo (Sporeburst Rod) add
 - `test_an_echo_adds_to_what_the_champion_places`: a Poisoner's count goes up by its chance
 """
 
-from optimiser.account import Placement, Skill
+from optimiser.tables import Placement, Skill
 from optimiser.teams.gear import Gear, RelicSource, at_level, echoes_of, wear
 from optimiser.teams.kits import Kit, Rating
 from optimiser.teams.tags import Side, Tag

@@ -63,7 +63,7 @@ in-game commands below; the account and the game's tables come from the game its
   `ServerTimeManager._lastServerTime`: the client's periodic requests move it. It waits for the
   game, and its recipe stops the reader on exit (the reader outlives its launcher otherwise).
   The Events page polls every 15 s. Values are the game's: ids,
-  enums by name (the faction's game name, its `account.faction_name`), Fixed rounded to 6 decimals.
+  enums by name (the faction's game name, its `tables.faction_name`), Fixed rounded to 6 decimals.
   A module per area (`heroes`, `artifacts`, `relics`, `account`) over `process` (`Block`: an
   object in one read), `il2cpp` (class layout), `collections` (List/Dictionary) and `roots`
   (`AppModel` via its type info → parent `SingleInstance<AppModel>`'s statics; pieces live in
@@ -77,7 +77,8 @@ in-game commands below; the account and the game's tables come from the game its
   (`LocalLow/Plarium/Raid_ Shadow Legends/static-data/<ver>/<hash>`, the newest file;
   MessagePack-CSharp Lz4BlockArray, string keys: `tools/static_decode.py`, `msgpack` + `lz4`,
   whole-number floats as ints and keys as text, as the old C# decoder's JSON had them) via
-  `tools/static_export.py` and `schema/schema.json` (from an IL2CPP dump,
+  `tools/static_export.py` (its parts `static_convert`, `static_tables`, `static_skills`,
+  `static_stages`) and `schema/schema.json` (from an IL2CPP dump,
   `tools/gen_schema.py`) into `data/game/{sets,hero_types,bonuses,skills,glyphs,gear,enemies,effect_sources,items,shards,levelling,loot}.json`
   (`items`: the black market's item names by id, for event prizes; `shards`: each shard type's
   affinities and odds by rarity, with their mercy; `levelling`: the XP each level takes by grade,
@@ -87,10 +88,10 @@ in-game commands below; the account and the game's tables come from the game its
   --attribute Json`: the `[Json]` keys of the events' JSON and of the interface settings JSON
   within each, which `optimiser.events` decodes the snapshot's by).
   Hero types carry their `auras` (`LeaderSkills`: stat, value, flat or not, and the area,
-  affinity, faction and rarity they're held to, null for any; `account.Aura`, read by the
+  affinity, faction and rarity they're held to, null for any; `tables.Aura`, read by the
   optimiser's battle).
   Enemy skills' block effects (`PassiveBlockEffect`) carry `blocks`: the effect kinds they stop,
-  their groups resolved through `static_export.EFFECT_KIND_GROUPS` (12, BossImmunitiesEffects,
+  their groups resolved through `static_stages.EFFECT_KIND_GROUPS` (12, BossImmunitiesEffects,
   read from the game's code: `EffectKindGroupExtensions..cctor`'s arrays in global-metadata.dat;
   recheck after a game update). Not read yet: it's every boss's immunities (the Chimera's agree
   with `chimera.tags` but for Rage, which that list lacks). Skill placements also carry
@@ -141,7 +142,7 @@ in-game commands below; the account and the game's tables come from the game its
     reliability (chance + chance books, × `CONDITIONAL` if gated) × reach (`REACH_TEAM`/`ALLY`/
     `SELF`; debuffs, mechanics and enemy-side effects in full), × `OTHER_FORM` for a
     mythical's other form. Own skill levels count (`Cast`). Each placement's `on_boss`
-    (`static_export.on_boss`: its effect and target conditions read three-valued with the
+    (`static_skills.on_boss`: its effect and target conditions read three-valued with the
     boss atoms, `BOSS_FACTS`, true) drops what never lands on a boss (Lamasu's True Fear goes
     to non-bosses; bosses get Decrease SPD), and only what depends on more is `CONDITIONAL`:
     ratings are against a boss. Secret skills (`ShowSecretSkill`, Mortu-Macaab's Peril) are
@@ -267,8 +268,9 @@ in-game commands below; the account and the game's tables come from the game its
   disassemble come from. The current dump: 11.95.0, metadata v39.
 - `tools/extract_assets.py`: portraits, set icons and piece art from the game's Unity bundles
   (UnityPy) into `webui/static/assets/`.
-- `optimiser/`: the model and solver (`account`, `stats`, `damage`, `solve`, `assume`, `glyphs`,
-  `labels`), `paths` (where the data lives) and `settings` (the store's rows as the model's
+- `optimiser/`: the model and solver (`tables`: the game's words and fixed tables; `account`:
+  what the account holds, over them; `stats`, `damage`, `solve`, `assume`, `glyphs`, `labels`;
+  `game_json`: the game's JSON named by a schema), `paths` (where the data lives) and `settings` (the store's rows as the model's
   types: the only model module besides `store` that touches the file).
 - Battle (`optimiser/battle.py`; the champion page's Battle panel, `BattlePanel.vue` over the
   team finder's `TagPicker` and `RemoveChip`, which is a button when it has no `href`): buffs and
@@ -472,13 +474,13 @@ in-game commands below; the account and the game's tables come from the game its
   side of Inertia v3's protocol, our own (`respond`: the shell `templates/inertia.html`, the
   only Jinja left, with the page in its `<script data-page>` on a first load, JSON on the
   client's visits; partial reloads; props may be callables, evaluated only when sent; 409 on a
-  stale build; `redirect`/`back`, 303). `app.inertia_page` adds what every page gets (`layout`:
+  stale build; `redirect`/`back`, 303). `responses.inertia_page` adds what every page gets (`layout`:
   `service/layout.py`'s nav and sync age; `errors`). A form that fails goes `back` with its
-  errors (`app.back_with`: a one-shot cookie, `inertia.ERRORS_COOKIE`, shown in the layout's
+  errors (`responses.back_with`: a one-shot cookie, `inertia.ERRORS_COOKIE`, shown in the layout's
   alert). A component's own requests get JSON, not a page: the finder dialog (`/finder`), the
-  target picker (`/targets`), the game commands (equip, preview, sync, sell: `app.sent`,
+  target picker (`/targets`), the game commands (equip, preview, sync, sell: `responses.sent`,
   `{error}`) and settings saved in place without a reload (accessory weights and set fits:
-  `app.saved`, as rescoring is slow); `composables/send.ts` posts them. Settings that change
+  `responses.saved`, as rescoring is slow); `composables/send.ts` posts them. Settings that change
   what a page shows post with `composables/save.ts` and reload its `page` prop. The champion
   page: `?run=<id>` names the run shown (`champions.shown_run`: else the latest), its form
   restored from it; history picks reload `run` and `picker` alone; a solve redirects to its new
@@ -502,7 +504,8 @@ in-game commands below; the account and the game's tables come from the game its
   code, so only changed pieces are rescored); `forms/` is the form boundary (forms post form data
   (`forceFormData`): `request` the solve form and build buttons, `settings` those that change the
   store, `chimera`, `common` `FormErrors`); `result.py` is the `Err`/`Result` that `extractor.py` and
-  `reader.py` return; only `app.py`, `inertia.py` and the shell know about HTTP/HTML.
+  `reader.py` return; only `app.py`, `routes/` (a router per area), `responses.py`, `inertia.py`
+  and the shell know about HTTP/HTML.
   Three stylesheets, in order. `static/theme.css`: the tokens, one theme, Vault (dark only),
   colours named by Material 3's roles (`--primary`/`--on-primary`, `--surface` then
   `--surface-container-lowest`…`-high` for depth, `--on-surface`, `--on-surface-variant` for

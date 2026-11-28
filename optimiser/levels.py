@@ -17,7 +17,7 @@ then × 15. SPD, RES and ACC are unscaled; C.RATE and C.DMG are divided by 100.
 import math
 import struct
 
-from optimiser.account import Stat, Stats
+from optimiser.tables import Stat, Stats
 
 MULTIPLIERS = (
     (1.0, 2.0),

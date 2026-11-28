@@ -14,7 +14,8 @@ books left give (`book_gains`), and its query's defaults (`parse_books_query`).
 from types import SimpleNamespace
 from typing import cast
 
-from optimiser.account import Book, Champion, HeroForm, Skill, Stats, Tables
+from optimiser.account import Champion
+from optimiser.tables import Book, HeroForm, Skill, Stats, Tables
 from webui.forms.books import ANY, parse_books_query
 from webui.forms.finder import FinderQuery
 from webui.service.books import book_gains, forms_short

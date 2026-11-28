@@ -48,7 +48,7 @@ from optimiser.accessories.roles import (
     SetTable,
 )
 from optimiser.accessories.rules import SET_RULE_BOUNDS, Rules, SetRules, rule_bounds
-from optimiser.account import Account, Champion, faction_label
+from optimiser.account import Account, Champion
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import POTENTIALS, STORE
 from optimiser.reserve import Reservations, reservations
@@ -64,6 +64,7 @@ from optimiser.settings import (
 )
 from optimiser.settings import save_rule as store_rule
 from optimiser.store import read_number, read_protected, write_number, write_protected
+from optimiser.tables import faction_label
 from webui.forms.settings import TypeEdit
 from webui.service.current import (
     current_locks,

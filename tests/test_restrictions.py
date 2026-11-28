@@ -10,8 +10,8 @@ test_restrictions.py - what a stage admits (`optimiser.enemies`).
 
 from dataclasses import dataclass
 
-from optimiser.account import faction_label
 from optimiser.enemies import Restriction, Rotating, parse_restriction, team_restriction
+from optimiser.tables import faction_label
 
 
 @dataclass(frozen=True)

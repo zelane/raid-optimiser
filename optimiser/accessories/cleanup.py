@@ -40,7 +40,7 @@ from enum import StrEnum
 from optimiser.accessories.assess import Assessed, Assessment, Where
 from optimiser.accessories.roles import NO_SET, Group, Kind
 from optimiser.accessories.rules import Rules
-from optimiser.account import Slot, Stat
+from optimiser.tables import Slot, Stat
 
 ACCESSORY_SPACE = 2200
 DEFAULT_TARGET_FREE = 100

@@ -341,7 +341,7 @@ Static array initialisers (`<PrivateImplementationDetails>` fields) show their d
 
 Portraits are named by type id with ascension 0 (`9990`); enemies' (bosses, Hydra heads, from
 `HeroAvatars_Bosses`/`HeroAvatarsHydra`) by full type id, via their type's `avatar`. Piece art `<set id>_<slot>`, set
-icons by set id. Affinity icons by lower-case affinity, faction banners by faction key (`account.faction_name`: the game's internal name, but
+icons by set id. Affinity icons by lower-case affinity, faction banners by faction key (`tables.faction_name`: the game's internal name, but
 Samurai → Shadowkin, Olympians → Argonites, which the game's tables, stage conditions and
 crypts still use; champions, pieces and relics carry the key; `faction_label` is what's
 shown (views carry it: `PieceView.faction_label`, the team views' factions): "Dark Elves", "Lizardmen"), stars `yellow`/`purple`/`red` (plain/ascended/awakened). Fusion

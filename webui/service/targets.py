@@ -21,9 +21,9 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
-from optimiser.account import Stat
 from optimiser.enemies import Area, Enemies, Placement, Stage, enemy_stats, is_boss
 from optimiser.labels import STAT_LABELS, format_stat
+from optimiser.tables import Stat
 from webui.forms.targets import TargetQuery
 from webui.service.views import asset_url
 

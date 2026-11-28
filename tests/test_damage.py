@@ -8,8 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from optimiser.account import Stat
 from optimiser.damage import LinearFormula, parse_formula
+from optimiser.tables import Stat
 
 # Run in fresh interpreters: a set's order over StrEnum members changes with the hash seed.
 ROOT = Path(__file__).resolve().parents[1]

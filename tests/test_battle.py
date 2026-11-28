@@ -13,10 +13,11 @@ from dataclasses import replace
 
 import pytest
 
-from optimiser.account import Account, Aura, Bonus, Stat
+from optimiser.account import Account
 from optimiser.battle import BUFFS, FACTION_WARS, Battle, auras_reaching
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT
 from optimiser.stats import base_stats, constant_stats, resolve
+from optimiser.tables import Aura, Bonus, Stat
 
 
 @pytest.fixture(scope="module")
@@ -51,8 +52,8 @@ def test_aura_reaches(account: Account) -> None:
     other = next(e for e in ("Magic", "Force", "Spirit", "Void") if e != champion.element)
     aura = Aura(Bonus(Stat.SPD, 0.2, False), None, champion.element, None, None)
 
-    assert aura.reaches(champion)
-    assert not aura.reaches(replace(champion, element=other))
+    assert champion.reached_by(aura)
+    assert not replace(champion, element=other).reached_by(aura)
 
 
 def test_faction_wars_auras_stay_in_the_crypt(account: Account) -> None:

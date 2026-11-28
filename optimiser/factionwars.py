@@ -17,8 +17,9 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from optimiser.account import Champion, faction_name
+from optimiser.account import Champion
 from optimiser.enemies import CRYPT, FACTION_WARS, Enemies, Stage
+from optimiser.tables import faction_name
 from optimiser.teams.needs import AnyOf, Distinct, Need
 from optimiser.teams.tags import Mechanic, Side, Tag, Target, buff, debuff
 

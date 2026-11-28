@@ -46,9 +46,9 @@ from pathlib import Path
 import click
 import UnityPy
 
-from optimiser.account import NO_FACTION, faction_name
 from optimiser.paths import GAME as TABLES
 from optimiser.paths import ROOT, SCHEMA
+from optimiser.tables import NO_FACTION, faction_name
 
 OUT = ROOT / "webui" / "static" / "assets"
 # Sprite slot suffix -> the optimiser's slot name (`Slot` member, lower case).

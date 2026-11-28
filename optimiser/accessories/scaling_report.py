@@ -28,10 +28,11 @@ from optimiser.accessories.scaling import (
     wearer_type,
     wearers,
 )
-from optimiser.account import Account, Stat, load_account
+from optimiser.account import Account, load_account
 from optimiser.damage import STAT_NAMES
 from optimiser.labels import STAT_LABELS
 from optimiser.paths import GAME, SCHEMA, SNAPSHOT
+from optimiser.tables import Stat
 
 UTILITY = ("ACC", "RES", "SPD")
 TARGET_TERMS = re.compile(r"TRG_|REL_|target|Counter|Count\(|relic|CALCULATED|HP_PERC")

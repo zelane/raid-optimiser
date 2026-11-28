@@ -17,10 +17,11 @@ their own champions the same way (`matches`) and offer the same bar (`FilterChoi
 
 from dataclasses import dataclass
 
-from optimiser.account import Account, Champion, Locks, faction_label, faction_name
+from optimiser.account import Account, Champion, Locks
 from optimiser.enemies import Restriction
 from optimiser.paths import STORE
 from optimiser.store import write_lock
+from optimiser.tables import faction_label, faction_name
 from webui.forms.finder import GRADES, RARITIES, FinderQuery
 from webui.service.champions import game_order
 from webui.service.views import ChampionRow, Choice, champion_row, slot_value

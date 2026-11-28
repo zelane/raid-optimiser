@@ -84,6 +84,13 @@ pub fn read(
 fn events(process: &Process, layout: &Layout, app: u64, user: u64) -> Result<Events, String> {
     let wrapper = layout.follow(process, user, &["UserWrapper.GlobalEvents"])?;
     let json = process.read(wrapper + layout.field("GlobalEventsWrapperReadOnly.DataJson")?)?;
+    let json = long_string(process, json, JSON_MAX)?;
+
+    // Starting up or closing, the game holds no events yet: not a read worth writing.
+    if json.is_empty() {
+        return Err("the game hasn't loaded its events".into());
+    }
+
     let path = ["UserWrapper.Quests", "QuestWrapperReadOnly.QuestData"];
     let quests = layout.follow(process, user, &path)?;
     let states = process.read(quests + layout.field("UserQuestData.OpenedStates")?)?;
@@ -95,7 +102,7 @@ fn events(process: &Process, layout: &Layout, app: u64, user: u64) -> Result<Eve
         .collect::<Result<_, String>>()?;
 
     Ok(Events {
-        json: long_string(process, json, JSON_MAX)?,
+        json,
         texts: texts(process, layout, app)?,
         progress,
         summons: summons::read(process, layout, user)
